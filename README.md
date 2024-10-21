@@ -10,3 +10,8 @@ After some time messing with lora, i camme to the opinion that i did not like th
 
 Example
 ![afbeelding](https://i.gyazo.com/576b77217f704c0a3ab0fb2512713a48.png)
+
+To Do
+* Add Buttons so we can do Request Info, Request Position, Trace Route
+* Add Config options (tough not sure yet how...)
+* Add Cashe for chat, so if you close it you get least last x lines back
