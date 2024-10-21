@@ -1,0 +1,6 @@
+config.ini
+LoraDB.pkl
+LoraLog.spec
+build/
+dist/
+*.spec
