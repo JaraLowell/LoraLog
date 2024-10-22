@@ -95,7 +95,7 @@ def connect_meshtastic(force_connect=False):
         return meshtastic_client
     meshtastic_client = None
     # Initialize Meshtastic interface
-    retry_limit = 10
+    retry_limit = 3
     attempts = 1
     successful = False
     target_host = config.get('meshtastic', 'host')
@@ -115,8 +115,8 @@ def connect_meshtastic(force_connect=False):
         except Exception as e:
             attempts += 1
             if attempts <= retry_limit:
-                print("Attempt #{attempts-1} failed. Retrying in {attempts} secs... {e}")
-                time.sleep(attempts * 3)
+                print(f"Attempt #{attempts-1} failed. Retrying in 5 secs... {e}")
+                time.sleep(1)
             else:
                 print("Could not connect: {e}")
                 return None
@@ -623,10 +623,11 @@ if __name__ == "__main__":
     print("Loading meshtastic plugin...")
 
     def on_closing():
-        meshtastic_client.close()
-        with open(LoraDBPath, 'wb') as f:
-            pickle.dump(LoraDB, f)
-        print('Saved Databases')
+        if meshtastic_client is not None:
+            meshtastic_client.close()
+            with open(LoraDBPath, 'wb') as f:
+                pickle.dump(LoraDB, f)
+            print('Saved Databases')
         root.quit()
         sys.exit()
 
@@ -902,9 +903,34 @@ if __name__ == "__main__":
     map.set_position(48.860381, 2.338594)
     map.set_tile_server(config.get('meshtastic', 'map_tileserver'))
     map.set_zoom(5)
-    
-    root.after(2000, update_active_nodes)  # Schedule the next update in 30 seconds
-    root.meshtastic_interface = connect_meshtastic()
+
+    def start_mesh():
+        global overlay, root
+        if overlay is not None:
+            overlay.destroy()
+        # Maybe add this to a connect button later via a overlay window and button as no window is shown duuring connect
+        root.meshtastic_interface = connect_meshtastic()
+        if root.meshtastic_interface is None:
+            print("Failed to connect to meshtastic")
+            insert_colored_text(text_box1, "\n*** Failed to connect to meshtastic did you edit the config.ini    ***", "#02bae8")
+            insert_colored_text(text_box1, "\n*** and wrote down the correct ip for tcp or commport for serial ? ***", "#02bae8")
+        else:
+            root.after(2000, update_active_nodes)  # Schedule the next update in 30 seconds
+
+    overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
+    overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
+    info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=51, height=8)
+    info_label.pack(pady=2)
+    insert_colored_text(info_label, '\nConnect to Meshtastic\n\n', "#d1d1d1", center=True)
+    insert_colored_text(info_label, 'Please connect to your Meshtastic device\n', "#d1d1d1", center=True)
+    insert_colored_text(info_label, 'and press the Connect button\n\n', "#d1d1d1", center=True)
+    connto = config.get('meshtastic', 'interface')
+    if connto == 'serial':
+        insert_colored_text(info_label, 'Connect to Serial Port : ' + config.get('meshtastic', 'serial_port') + '\n', "#02bae8", center=True)
+    else:
+        insert_colored_text(info_label, 'Connect to IP : ' + config.get('meshtastic', 'host') + '\n', "#02bae8", center=True)
+    button = tk.Button(overlay, image=btn_img, command=start_mesh, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Connect", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+    button.pack(padx=8)
 
     try:
         root.mainloop()

@@ -1,9 +1,5 @@
-config.ini
 LoraLog.spec
 build/
 dist/
 *.spec
 *.psd
-LoraDB.pkl
-config.ini
-LoraDB.pkl
