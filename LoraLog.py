@@ -13,7 +13,8 @@ import configparser
 import pickle
 import html
 import pygame
-# import yaml
+import threading
+import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -726,25 +727,59 @@ if __name__ == "__main__":
     map = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#121212')
     map.grid(row=0, column=0, sticky='nsew')
 
-    # def sendcommmand(dest, command):
-    # interface.sendText(destinationId=, wantResponse=True, channelIndex=0, text=)
-    # interface.sendTraceRoute(destinationId=, wantResponse=True, hopLimit=7, channelIndex=0)
-    # interface.sendTelemetry(destinationId=, wantResponse=True, channelIndex=0)
-    # interface.sendPosition(destinationId=, wantResponse=True, channelIndex=0)
-    # requestPosition ?
-    # requestUserInfo ?
-    # >> meshtastic_client.sendPosition(destinationId=dest, wantResponse=True, channelIndex=0)
+    # Create a new thread for node requests
+    stop_event = threading.Event()
+
+    def on_request(response):
+        print(yaml.dump(response))  # Print the response
+
+    def send_position(nodeid):
+        try:
+            meshtastic_client.onResponsePosition = on_request
+            meshtastic_client.sendPosition(destinationId=nodeid, wantResponse=True, channelIndex=0)
+            while not stop_event.is_set():
+                time.sleep(0.25)
+            print(f"Exit Position Thread: {nodeid}")
+        except Exception as e:
+            print(f"Error sending Position: {e}")
+
+    def send_telemetry(nodeid):
+        try:
+            meshtastic_client.onResponseTelemetry = on_request
+            meshtastic_client.sendTelemetry(destinationId=nodeid, wantResponse=True, channelIndex=0)
+            while not stop_event.is_set():
+                time.sleep(0.25)
+            print(f"Exit Telemetry Thread: {nodeid}")
+        except Exception as e:
+            print(f"Error sending Telemetry: {e}")
+
+    def send_trace(nodeid):
+        try:
+            meshtastic_client.onResponseTraceRoute = on_request
+            meshtastic_client.sendTraceRoute(dest=nodeid, hopLimit=7, channelIndex=0)
+            while not stop_event.is_set():
+                time.sleep(0.25)
+            print(f"Exit Traceroute Thread: {nodeid}")
+        except Exception as e:
+            print(f"Error sending Traceroute: {e}")
+
+    # Hadnle the buttons
     def buttonpress(info, nodeid):
         global ok2Send
         if ok2Send == 0:
-            print("Button " + str(info) + " node " + str(nodeid))
-            ok2Send = 15
+            stop_event.clear()
+            print("Button " + str(info) + " node !" + str(nodeid))
+            ok2Send = 18
+            node_id = '!' + str(nodeid)
             if info == 'ReqInfo':
-                meshtastic_client.sendTelemetry(destinationId='!' + str(nodeid), wantResponse=True, channelIndex=0)
+                telemetry_thread = threading.Thread(target=send_telemetry, args=(node_id,))
+                telemetry_thread.start()
             elif info == 'ReqPos':
-                meshtastic_client.sendPosition(destinationId='!' + str(nodeid), wantResponse=True, channelIndex=0)
+                position_thread = threading.Thread(target=send_position, args=(node_id,))
+                position_thread.start()
             elif info == 'ReqTrace':
-                meshtastic_client.sendTraceRoute(dest='!' + str(nodeid), hopLimit=7, channelIndex=0)
+                trace_thread = threading.Thread(target=send_trace, args=(node_id,))
+                trace_thread.start()
         else:
             print('please wait a before re requesting (30sec)')
 
@@ -836,7 +871,11 @@ if __name__ == "__main__":
     # Function to update the middle frame with the last 30 active nodes
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send
-        if ok2Send != 0: ok2Send -= 1
+        if ok2Send != 0:
+            ok2Send -= 1
+            if ok2Send <= 0: ok2Send = 0
+            if ok2Send <= 4: stop_event.set()
+
         current_view = text_box_middle.yview()
         # Sort the nodes by last seen time
         sorted_nodes = sorted(LoraDB.items(), key=lambda item: item[1][0], reverse=True)[:30]
