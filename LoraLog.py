@@ -207,7 +207,7 @@ def on_meshtastic_message(packet, interface, loop=None):
     ischat = False
     tnow = int(time.time())
     text_from = ''
-    if 'fromId' in packet:
+    if 'fromId' in packet and packet['fromId'] is not None:
         text_from = packet.get('fromId', '')[1:]
     if text_from == '':
         text_from = idToHex(packet["from"])[1:]
