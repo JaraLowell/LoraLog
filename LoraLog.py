@@ -362,7 +362,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if fromraw not in MapMarkers and fromraw in LoraDB:
                     if LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0:
                         MapMarkers[fromraw] = [None, True, tnow, None]
-                        MapMarkers[fromraw][0] = map.set_marker(round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6), text=html.unescape(LoraDB[fromraw][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=fromraw, command = click_command)
+                        MapMarkers[fromraw][0] = mapview.set_marker(round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6), text=html.unescape(LoraDB[fromraw][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                 if fromraw in MapMarkers:
                     if len(MapMarkers[fromraw]) > 3 and MapMarkers[fromraw][3] is not None:
                         MapMarkers[fromraw][3].delete()
@@ -378,7 +378,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                             if nodeid not in MapMarkers:
                                 if LoraDB[nodeid][3] != -8.0 and LoraDB[nodeid][4] != -8.0:
                                     MapMarkers[nodeid] = [None, True, tnow, None]
-                                    MapMarkers[nodeid][0] = map.set_marker(round(LoraDB[nodeid][3],6), round(LoraDB[nodeid][4],6), text=html.unescape(LoraDB[nodeid][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=nodeid, command = click_command)
+                                    MapMarkers[nodeid][0] = mapview.set_marker(round(LoraDB[nodeid][3],6), round(LoraDB[nodeid][4],6), text=html.unescape(LoraDB[nodeid][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=nodeid, command = click_command)
                             else:
                                 MapMarkers[nodeid][2] = tnow
                             # Lets add to paths ass well if we are on map
@@ -399,7 +399,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                         try:
                             # How can MapMarkers[fromraw][3] cause a IndexError: list index out of range
                             if len(MapMarkers[fromraw]) > 3 and MapMarkers[fromraw][3] is None:
-                                MapMarkers[fromraw][3] = map.set_path(listmaps, color="#006642", width=2)
+                                MapMarkers[fromraw][3] = mapview.set_path(listmaps, color="#006642", width=2)
                         except Exception as e:
                             print(repr(e))
                 else:
@@ -409,39 +409,50 @@ def on_meshtastic_message(packet, interface, loop=None):
                 payload = data.get('payload', b'')
                 text_raws += '\n' + (' ' * 11) + 'Payload: ' + str(payload.decode())
             elif data["portnum"] == "TRACEROUTE_APP":
-                # routeDiscovery = mesh_pb2.RouteDiscovery()
-                # routeDiscovery.ParseFromString(data['payload'])
-                # asDict = json_format.MessageToDict(routeDiscovery)
-                '''
-                Route traced towards destination:
-                !7c5ca87c --> !7c5a59c4 (?dB) --> !7c5a40c4 (?dB) --> !3364d5b4 (5.75dB)
-                Route traced back to us:
-                !3364d5b4 --> !7c5a59c4 (7.0dB) --> !7c5ca87c (7.0dB)
+                TraceTo = idToHex(packet['to'])
+                TraceFrom = idToHex(packet['from'])
+                if TraceTo[1:] in LoraDB: TraceTo = LoraDB[TraceTo[1:]][1]
+                if TraceFrom[1:] in LoraDB: TraceFrom = LoraDB[TraceFrom[1:]][1]
 
-                data['traceroute']:
-                route:
-                                 add MyLora        
-                - 2086296004 --> idToHex(packet["from"])
-                - 2086289604 --> idToHex(packet["from"])
-                                 add fromraw
-                routeBack:
-                                 add fromraw
-                - 2086296004 --> idToHex(packet["from"])
-                                 add MyLora
-
-                snrBack:
-                - 28         -->  if not -128 --> {value / 4:.2f} dB
-                - 28         -->  if not -128 --> {value / 4:.2f} dB
-                snrTowards:
-                - -128
-                - -128
-                - 23         -->  if not -128 --> {value / 4:.2f} dB
-                '''
-                print(yaml.dump(packet))
-                text_raws = 'Working on it !'
+                route = packet['decoded']['traceroute'].get('route', [])
+                snr = packet['decoded']['traceroute'].get('snrTowards', [])
+                routeBack = packet['decoded']['traceroute'].get('routeBack', [])
+                snrBack = packet['decoded']['traceroute'].get('snrBack', [])
+                text_raws = 'Node Traceroute\n' + (' ' * 11) + 'From : ' + TraceTo + ' --> '
+                index = 0
+                if routeBack:
+                    for nodeuuid in routeBack:
+                        nodeidt = idToHex(nodeuuid)[1:]
+                        if nodeidt in LoraDB:
+                            text_raws += LoraDB[nodeidt][1]
+                        else:
+                            text_raws += '!' + nodeidt
+                        if snrBack and snrBack[index] != -128 and snrBack[index] != 0:
+                            text_raws += f" ({snrBack[index] / 4:.2f}dB)"
+                        text_raws += ' --> '
+                        index += 1
+                text_raws += TraceFrom
+                if snrBack and snrBack[index] != -128 and snrBack[index] != 0:
+                    text_raws += f" ({snrBack[index] / 4:.2f}dB)"
+                text_raws += '\n' + (' ' * 11) + 'To   : ' + TraceFrom + ' --> '
+                index = 0
+                if route:
+                    for nodeuuid in route:
+                        nodeidt = idToHex(nodeuuid)[1:]
+                        if nodeidt in LoraDB:
+                            text_raws += LoraDB[nodeidt][1]
+                        else:
+                            text_raws += '!' + nodeidt
+                        if snr and snr[index] != -128 and snr[index] != 0:
+                            text_raws += f" ({snr[index] / 4:.2f}dB)"
+                        text_raws += ' --> '
+                        index += 1
+                text_raws += TraceTo
+                if snr and snr[index] != -128 and snr[index] != 0:
+                    text_raws += f" ({snr[index] / 4:.2f}dB)"
             else:
+                # Unknown Packet
                 text_raws = 'Node ' + (data["portnum"].split('_APP', 1)[0]).title()
-                # print(yaml.dump(packet))
 
             if "snr" in packet and packet['snr'] is not None:
                 LoraDB[fromraw][11] = str(packet['snr']) + 'dB'
@@ -460,11 +471,11 @@ def on_meshtastic_message(packet, interface, loop=None):
                     MapMarkers[fromraw][0].change_icon(tk_direct)
             elif LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0 and viaMqtt == True:
                 MapMarkers[fromraw] = [None, True, tnow, None]
-                MapMarkers[fromraw][0] = map.set_marker(round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6), text=html.unescape(LoraDB[fromraw][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=fromraw, command = click_command)
+                MapMarkers[fromraw][0] = mapview.set_marker(round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6), text=html.unescape(LoraDB[fromraw][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                 MapMarkers[fromraw][0].text_color = '#02bae8'
             elif LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0 and viaMqtt == False:
                 MapMarkers[fromraw] = [None, False, tnow, None]
-                MapMarkers[fromraw][0] = map.set_marker(round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6), text=html.unescape(LoraDB[fromraw][1]), icon = tk_direct, text_color = '#02bae8', font = ('Fixedsys', 8), data=fromraw, command = click_command)
+                MapMarkers[fromraw][0] = mapview.set_marker(round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6), text=html.unescape(LoraDB[fromraw][1]), icon = tk_direct, text_color = '#02bae8', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                 MapMarkers[fromraw][0].text_color = '#02bae8'
 
             # Cleanup and get ready to print
@@ -557,9 +568,9 @@ def updatesnodes():
                     if nodeID == MyLora:
                         if MyLora not in MapMarkers:
                             MapMarkers[MyLora] = [None, False, nodeLast, None]
-                            MapMarkers[MyLora][0] = map.set_marker(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6), text=html.unescape(LoraDB[MyLora][1]), icon = tk_icon, text_color = '#00c983', font = ('Fixedsys', 8), data=MyLora, command = click_command)
-                            map.set_position(round(LoraDB[nodeID][3],6), round(LoraDB[nodeID][4],6))
-                            map.set_zoom(11)
+                            MapMarkers[MyLora][0] = mapview.set_marker(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6), text=html.unescape(LoraDB[MyLora][1]), icon = tk_icon, text_color = '#00c983', font = ('Fixedsys', 8), data=MyLora, command = click_command)
+                            mapview.set_position(round(LoraDB[nodeID][3],6), round(LoraDB[nodeID][4],6))
+                            mapview.set_zoom(11)
                             print("My Lora lat/long set to " + str(round(LoraDB[nodeID][3],6)) + " " + str(round(LoraDB[nodeID][4],6)))
 
                 if "viaMqtt" in info: LoraDB[nodeID][10] = ' via mqtt'
@@ -755,8 +766,8 @@ if __name__ == "__main__":
     frame_right.grid_rowconfigure(0, weight=1)
     frame_right.grid_columnconfigure(0, weight=1)
 
-    map = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#121212')
-    map.grid(row=0, column=0, sticky='nsew')
+    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#121212')
+    mapview.grid(row=0, column=0, sticky='nsew')
 
     # Create a new thread for node requests
     stop_event = threading.Event()
@@ -802,10 +813,6 @@ if __name__ == "__main__":
     overlay = None
     def click_command(marker):
         global LoraDB, MyLora, overlay
-        # Info we get from marker click
-        # print(marker.text)
-        # print(marker.data)
-
         # Destroy the existing overlay if it exists
         playsound('data/Button.mp3')
         if overlay is not None:
@@ -813,9 +820,6 @@ if __name__ == "__main__":
 
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
-
-        # info_label = tk.Label(overlay, text=text_loc, bg='#242424', fg='#d1d1d1', font=('Fixedsys', 12))
-        # info_label.pack(pady=2)
 
         info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=51, height=12)
         info_label.pack(pady=2)
@@ -925,14 +929,14 @@ if __name__ == "__main__":
                             MapMarkers[node_id][3].delete()
                         MapMarkers[node_id][0].delete()
                         MapMarkers[node_id][0] = None
-                        MapMarkers[node_id][0] = map.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                        MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
                         MapMarkers[node_id][0].text_color = '#6d6d6d'
                 else:
                     if 'Meshtastic' in LoraDB[node_id][1]:
                         LoraDB[node_id][1] = (LoraDB[node_id][1])[-4:]
                     if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
                         MapMarkers[node_id] = [None, True, tnow, None]
-                        MapMarkers[node_id][0] = map.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                        MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
                         MapMarkers[node_id][0].text_color = '#6d6d6d'
             elif tnow - node_time < map_delete or node_id == MyLora:
                 node_name = html.unescape(node_info[1]).ljust(9)
@@ -942,39 +946,34 @@ if __name__ == "__main__":
                 else:
                     node_dist = ' '.ljust(9)
                 node_sig = LoraDB[node_id][11].rjust(10)
-                # node_hop = ''
-                # if LoraDB[node_id][12] > 0:
-                #     node_hop = (str(LoraDB[node_id][12]) + ' Hops Away')
                 if MyLora != node_id:
                     if node_info[10] == ' via mqtt':
                         insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#3d3d3d")
                         insert_colored_text(text_box_middle, f" {node_name}{node_wtime}\n", "#c9a500")
                         insert_colored_text(text_box_middle, f" {node_dist}\n", "#9d9d9d")
-                        # insert_colored_text(text_box_middle, f" {node_hop}\n", "#9d9d9d")
                         if node_id not in MapMarkers:
                             if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
                                 MapMarkers[node_id] = [None, True, tnow, None]
-                                MapMarkers[node_id][0] = map.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                                MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=node_id, command = click_command)
                                 MapMarkers[node_id][0].text_color = '#02bae8'
                         elif MapMarkers[node_id][0].text_color != '#02bae8':
                             MapMarkers[node_id][0].delete()
                             MapMarkers[node_id][0] = None
-                            MapMarkers[node_id][0] = map.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                            MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=node_id, command = click_command)
                             MapMarkers[node_id][0].text_color = '#02bae8'
                     else:
                         insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#3d3d3d")
                         insert_colored_text(text_box_middle, f" {node_name}{node_wtime}\n", "#00c983")
                         insert_colored_text(text_box_middle, f" {node_dist}{node_sig}\n", "#9d9d9d")
-                        # insert_colored_text(text_box_middle, f" {node_hop}\n", "#9d9d9d")
                         if node_id not in MapMarkers:
                             if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
                                 MapMarkers[node_id] = [None, False, tnow, None]
-                                MapMarkers[node_id][0] = map.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_direct, text_color = '#02bae8', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                                MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_direct, text_color = '#02bae8', font = ('Fixedsys', 8), data=node_id, command = click_command)
                                 MapMarkers[node_id][0].text_color = '#02bae8'
                         elif MapMarkers[node_id][0].text_color != '#02bae8':
                             MapMarkers[node_id][0].delete()
                             MapMarkers[node_id][0] = None
-                            MapMarkers[node_id][0] = map.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_direct, text_color = '#02bae8', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                            MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_direct, text_color = '#02bae8', font = ('Fixedsys', 8), data=node_id, command = click_command)
                             MapMarkers[node_id][0].text_color = '#02bae8'
 
         text_box_middle.yview_moveto(current_view[0])
@@ -988,9 +987,9 @@ if __name__ == "__main__":
         root.after(2000, update_active_nodes)    
     ### end
 
-    map.set_position(48.860381, 2.338594)
-    map.set_tile_server(config.get('meshtastic', 'map_tileserver'))
-    map.set_zoom(5)
+    mapview.set_position(48.860381, 2.338594)
+    mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'))
+    mapview.set_zoom(5)
 
     def start_mesh():
         global overlay, root
