@@ -107,7 +107,7 @@ def connect_meshtastic(force_connect=False):
     if config.get('meshtastic', 'interface') != 'tcp':
         cnto = comport
     print("Connecting to meshtastic on " + cnto + "...")
-    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connecting to meshtastic on " + cnto + "...\n", "#02bae8")
+    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connecting to meshtastic on " + cnto + "...\n", "#00c983")
     while not successful and attempts <= retry_limit:
         try:
             if config.get('meshtastic', 'interface') == 'tcp':
@@ -126,7 +126,7 @@ def connect_meshtastic(force_connect=False):
 
     nodeInfo = meshtastic_client.getMyNodeInfo()
     print("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
-    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#02bae8")
+    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
 
     MyLora = (nodeInfo['user']['id'])[1:]
     root.wm_title("Meshtastic Lora Logger - " + html.unescape(LoraDB[MyLora][1]))
@@ -151,7 +151,7 @@ def connect_meshtastic(force_connect=False):
                 mylorachan[channel.index] = modem_preset_string
 
             if channel.index == 0:
-                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n", "#02bae8")
+                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n\n", "#00c983")
                 padding_frame.config(text="Send a message to channel " + mylorachan[0])
 
     updatesnodes()
@@ -408,6 +408,37 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_raws = 'Node RangeTest'
                 payload = data.get('payload', b'')
                 text_raws += '\n' + (' ' * 11) + 'Payload: ' + str(payload.decode())
+            elif data["portnum"] == "TRACEROUTE_APP":
+                # routeDiscovery = mesh_pb2.RouteDiscovery()
+                # routeDiscovery.ParseFromString(data['payload'])
+                # asDict = json_format.MessageToDict(routeDiscovery)
+                '''
+                Route traced towards destination:
+                !7c5ca87c --> !7c5a59c4 (?dB) --> !7c5a40c4 (?dB) --> !3364d5b4 (5.75dB)
+                Route traced back to us:
+                !3364d5b4 --> !7c5a59c4 (7.0dB) --> !7c5ca87c (7.0dB)
+
+                data['traceroute']:
+                route:
+                                 add MyLora        
+                - 2086296004 --> idToHex(packet["from"])
+                - 2086289604 --> idToHex(packet["from"])
+                                 add fromraw
+                routeBack:
+                                 add fromraw
+                - 2086296004 --> idToHex(packet["from"])
+                                 add MyLora
+
+                snrBack:
+                - 28         -->  if not -128 --> {value / 4:.2f} dB
+                - 28         -->  if not -128 --> {value / 4:.2f} dB
+                snrTowards:
+                - -128
+                - -128
+                - 23         -->  if not -128 --> {value / 4:.2f} dB
+                '''
+                print(yaml.dump(packet))
+                text_raws = 'Working on it !'
             else:
                 text_raws = 'Node ' + (data["portnum"].split('_APP', 1)[0]).title()
                 # print(yaml.dump(packet))
@@ -730,36 +761,21 @@ if __name__ == "__main__":
     # Create a new thread for node requests
     stop_event = threading.Event()
 
-    def on_request(response):
-        print(yaml.dump(response))  # Print the response
-
     def send_position(nodeid):
         try:
-            meshtastic_client.onResponsePosition = on_request
             meshtastic_client.sendPosition(destinationId=nodeid, wantResponse=True, channelIndex=0)
-            while not stop_event.is_set():
-                time.sleep(0.25)
-            print(f"Exit Position Thread: {nodeid}")
         except Exception as e:
             print(f"Error sending Position: {e}")
 
     def send_telemetry(nodeid):
         try:
-            meshtastic_client.onResponseTelemetry = on_request
             meshtastic_client.sendTelemetry(destinationId=nodeid, wantResponse=True, channelIndex=0)
-            while not stop_event.is_set():
-                time.sleep(0.25)
-            print(f"Exit Telemetry Thread: {nodeid}")
         except Exception as e:
             print(f"Error sending Telemetry: {e}")
 
     def send_trace(nodeid):
         try:
-            meshtastic_client.onResponseTraceRoute = on_request
             meshtastic_client.sendTraceRoute(dest=nodeid, hopLimit=7, channelIndex=0)
-            while not stop_event.is_set():
-                time.sleep(0.25)
-            print(f"Exit Traceroute Thread: {nodeid}")
         except Exception as e:
             print(f"Error sending Traceroute: {e}")
 
@@ -873,8 +889,7 @@ if __name__ == "__main__":
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send
         if ok2Send != 0:
             ok2Send -= 1
-            if ok2Send <= 0: ok2Send = 0
-            if ok2Send <= 4: stop_event.set()
+            if ok2Send < 0: ok2Send = 0
 
         current_view = text_box_middle.yview()
         # Sort the nodes by last seen time
