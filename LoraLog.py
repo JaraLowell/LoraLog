@@ -6,6 +6,7 @@ import sys
 import asyncio
 import gc
 import math
+import meshtastic.remote_hardware
 import meshtastic.version
 from unidecode import unidecode
 import configparser
@@ -50,7 +51,7 @@ LoraDB    = {}
 LoraDBPath = 'LoraDB.pkl'
 
 MapMarkers = {}
-
+ok2Send = 0
 MyLora = ''
 MyLoraText1 = ''
 MyLoraText2 = ''
@@ -155,16 +156,26 @@ def connect_meshtastic(force_connect=False):
     updatesnodes()
 
     pub.subscribe(on_meshtastic_message, "meshtastic.receive", loop=asyncio.get_event_loop())
-    # pub.subscribe(on_meshtastic_node, "meshtastic.node")
     pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
     pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
+
+    '''
+    mmm > ?
+    meshtastic_client.onResponsePosition = lambda position: print(f"Received position response: {position}")
+    meshtastic_client.onResponseTraceRoute = lambda trace: print(f"Received trace route response: {trace}")
+    meshtastic_client.onResponseTelemetry = lambda telemetry: print(f"Received telemetry response: {telemetry}")
+    '''
+    # meshtastic_client.onResponseTraceRoute = on_request
+    # meshtastic_client.onResponsePosition = on_request
+    # meshtastic_client.onResponseTelemetry = on_request
 
     return meshtastic_client
 
 def on_lost_meshtastic_connection(interface):
     print("Lost connection. Reconnecting...")
-    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Lost connection. Reconnecting...\n", "#c24400")
-    connect_meshtastic(force_connect=True)
+    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Lost connection to node...\n", "#c24400")
+    root.meshtastic_interface = None
+    root.meshtastic_interface = connect_meshtastic(force_connect=True)
 
 def on_meshtastic_connection(interface, topic=pub.AUTO_TOPIC):
     # called when we (re)connect to the radio
@@ -398,8 +409,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_raws += '\n' + (' ' * 11) + 'Payload: ' + str(payload.decode())
             else:
                 text_raws = 'Node ' + (data["portnum"].split('_APP', 1)[0]).title()
-
-            # Cleanup and get ready to print
+                # print(yaml.dump(packet))
 
             if "snr" in packet and packet['snr'] is not None:
                 LoraDB[fromraw][11] = str(packet['snr']) + 'dB'
@@ -425,9 +435,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                 MapMarkers[fromraw][0] = map.set_marker(round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6), text=html.unescape(LoraDB[fromraw][1]), icon = tk_direct, text_color = '#02bae8', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                 MapMarkers[fromraw][0].text_color = '#02bae8'
 
+            # Cleanup and get ready to print
             text_from = html.unescape(text_from)
             text_raws = html.unescape(text_raws)
-
             if text_raws != '' and MyLora != fromraw:
                 insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1")
                 if ischat == True:
@@ -715,10 +725,29 @@ if __name__ == "__main__":
 
     map = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#121212')
     map.grid(row=0, column=0, sticky='nsew')
-    '''	
-    btn1_img = ImageTk.PhotoImage(Image.open("data\button.png"))
-    tk.Button(button_frame, image=btn_img, command=lambda: print("Button 1 clicked"), borderwidth=0)
-    '''	
+
+    # def sendcommmand(dest, command):
+    # interface.sendText(destinationId=, wantResponse=True, channelIndex=0, text=)
+    # interface.sendTraceRoute(destinationId=, wantResponse=True, hopLimit=7, channelIndex=0)
+    # interface.sendTelemetry(destinationId=, wantResponse=True, channelIndex=0)
+    # interface.sendPosition(destinationId=, wantResponse=True, channelIndex=0)
+    # requestPosition ?
+    # requestUserInfo ?
+    # >> meshtastic_client.sendPosition(destinationId=dest, wantResponse=True, channelIndex=0)
+    def buttonpress(info, nodeid):
+        global ok2Send
+        if ok2Send == 0:
+            print("Button " + str(info) + " node " + str(nodeid))
+            ok2Send = 15
+            if info == 'ReqInfo':
+                meshtastic_client.sendTelemetry(destinationId='!' + str(nodeid), wantResponse=True, channelIndex=0)
+            elif info == 'ReqPos':
+                meshtastic_client.sendPosition(destinationId='!' + str(nodeid), wantResponse=True, channelIndex=0)
+            elif info == 'ReqTrace':
+                meshtastic_client.sendTraceRoute(dest='!' + str(nodeid), hopLimit=7, channelIndex=0)
+        else:
+            print('please wait a before re requesting (30sec)')
+
     overlay = None
     def click_command(marker):
         global LoraDB, MyLora, overlay
@@ -775,22 +804,13 @@ if __name__ == "__main__":
         button_frame.pack(pady=2)
 
         # Add buttons
-        button1 = tk.Button(button_frame, image=btn_img, command=lambda: print("Button 1 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Info", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button1 = tk.Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqInfo', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Info", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button1.pack(side=tk.LEFT, padx=1)
 
-        button2 = tk.Button(button_frame, image=btn_img, command=lambda: print("Button 2 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Pos", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button2 = tk.Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqPos', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Pos", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button2.pack(side=tk.LEFT, padx=1)
 
-        # def sendcommmand(dest, command):
-        # interface.sendText(destinationId=, wantResponse=True, channelIndex=0, text=)
-        # interface.sendTraceRoute(destinationId=, wantResponse=True, hopLimit=7, channelIndex=0)
-        # interface.sendTelemetry(destinationId=, wantResponse=True, channelIndex=0)
-        # interface.sendPosition(destinationId=, wantResponse=True, channelIndex=0)
-        # requestPosition ?
-        # requestUserInfo ?
-
-
-        button3 = tk.Button(button_frame, image=btn_img, command=lambda: print("Button 3 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Trace Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button3 = tk.Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqTrace', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Trace Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button3.pack(side=tk.LEFT, padx=1)
 
         button_frame2 = Frame(overlay, bg='#242424')
@@ -815,7 +835,8 @@ if __name__ == "__main__":
 
     # Function to update the middle frame with the last 30 active nodes
     def update_active_nodes():
-        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB
+        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send
+        if ok2Send != 0: ok2Send -= 1
         current_view = text_box_middle.yview()
         # Sort the nodes by last seen time
         sorted_nodes = sorted(LoraDB.items(), key=lambda item: item[1][0], reverse=True)[:30]
