@@ -6,6 +6,7 @@ import sys
 import asyncio
 import gc
 import math
+import meshtastic.version
 from unidecode import unidecode
 import configparser
 import pickle
@@ -104,7 +105,7 @@ def connect_meshtastic(force_connect=False):
     if config.get('meshtastic', 'interface') != 'tcp':
         cnto = comport
     print("Connecting to meshtastic on " + cnto + "...")
-    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connecting to meshtastic on " + cnto + "...\n", "#c24400")
+    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connecting to meshtastic on " + cnto + "...\n", "#02bae8")
     while not successful and attempts <= retry_limit:
         try:
             if config.get('meshtastic', 'interface') == 'tcp':
@@ -123,7 +124,7 @@ def connect_meshtastic(force_connect=False):
 
     nodeInfo = meshtastic_client.getMyNodeInfo()
     print("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
-    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#c24400")
+    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#02bae8")
 
     MyLora = (nodeInfo['user']['id'])[1:]
     root.wm_title("Meshtastic Lora Logger - " + html.unescape(LoraDB[MyLora][1]))
@@ -148,12 +149,13 @@ def connect_meshtastic(force_connect=False):
                 mylorachan[channel.index] = modem_preset_string
 
             if channel.index == 0:
-                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n", "#c24400")
+                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n", "#02bae8")
                 padding_frame.config(text="Send a message to channel " + mylorachan[0])
 
     updatesnodes()
 
     pub.subscribe(on_meshtastic_message, "meshtastic.receive", loop=asyncio.get_event_loop())
+    # pub.subscribe(on_meshtastic_node, "meshtastic.node")
     pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
     pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
 
@@ -323,7 +325,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                         MapMarkers[fromraw][0].set_position(round(position.get('latitude', 0.0000),6), round(position.get('longitude', 0.000),6))
                         MapMarkers[fromraw][0].set_text(LoraDB[fromraw][1])
                 text_raws = text_msgs
-                logLora(packet["fromId"][1:], ['POSITION_APP', position.get('latitude', -8.0), position.get('longitude', -8.0), position.get('altitude', 0)])
+                logLora(fromraw, ['POSITION_APP', position.get('latitude', -8.0), position.get('longitude', -8.0), position.get('altitude', 0)])
             elif data["portnum"] == "NODEINFO_APP":
                 node_info = packet['decoded'].get('user', {})
                 if node_info:
@@ -331,7 +333,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                     lora_ln = str(node_info.get('longName', 'N/A').encode('ascii', 'xmlcharrefreplace'), 'ascii')
                     lora_mc = node_info.get('macaddr', 'N/A')
                     lora_mo = node_info.get('hwModel', 'N/A')
-                    logLora(packet["fromId"][1:], ['NODEINFO_APP', lora_sn, lora_ln, lora_mc, lora_mo])
+                    logLora(fromraw, ['NODEINFO_APP', lora_sn, lora_ln, lora_mc, lora_mo])
                     if fromraw in MapMarkers:
                         MapMarkers[fromraw][0].set_text(html.unescape(lora_sn))
                     text_raws = "Node Info using hardware " + lora_mo
@@ -386,7 +388,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                             # How can MapMarkers[fromraw][3] cause a IndexError: list index out of range
                             if len(MapMarkers[fromraw]) > 3 and MapMarkers[fromraw][3] is None:
                                 MapMarkers[fromraw][3] = map.set_path(listmaps, color="#006642", width=2)
-                                playsound('data/Button.mp3')
                         except Exception as e:
                             print(repr(e))
                 else:
@@ -399,8 +400,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_raws = 'Node ' + (data["portnum"].split('_APP', 1)[0]).title()
 
             # Cleanup and get ready to print
-            if data["portnum"] != "POSITION_APP" and data["portnum"] != "TEXT_MESSAGE_APP":
-                logLora(packet["fromId"][1:],['UPDATETIME'])
 
             if "snr" in packet and packet['snr'] is not None:
                 LoraDB[fromraw][11] = str(packet['snr']) + 'dB'
@@ -692,7 +691,11 @@ if __name__ == "__main__":
 
     # Create three text boxes with padding color
     text_box1 = create_text(frame, 0, 0, 30, 100)
-    insert_colored_text(text_box1, "Meshtastic Lora Logger v 1.33 By Jara Lowell\n", "#02bae8")
+    # Todo: Add a logo
+    insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/\n", "#02bae8")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.34 By Jara Lowell\n", "#02bae8")
+    insert_colored_text(text_box1, " Meshtastic Lybrary : v" + meshtastic.version.get_active_version() + '\n\n', "#02bae8")
+
     text_box2 = create_text(frame, 1, 0, 10, 100)
     text_box3 = create_text(frame, 2, 0, 10, 100)
 
@@ -724,6 +727,7 @@ if __name__ == "__main__":
         # print(marker.data)
 
         # Destroy the existing overlay if it exists
+        playsound('data/Button.mp3')
         if overlay is not None:
             overlay.destroy()
 
@@ -776,6 +780,15 @@ if __name__ == "__main__":
 
         button2 = tk.Button(button_frame, image=btn_img, command=lambda: print("Button 2 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Pos", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button2.pack(side=tk.LEFT, padx=1)
+
+        # def sendcommmand(dest, command):
+        # interface.sendText(destinationId=, wantResponse=True, channelIndex=0, text=)
+        # interface.sendTraceRoute(destinationId=, wantResponse=True, hopLimit=7, channelIndex=0)
+        # interface.sendTelemetry(destinationId=, wantResponse=True, channelIndex=0)
+        # interface.sendPosition(destinationId=, wantResponse=True, channelIndex=0)
+        # requestPosition ?
+        # requestUserInfo ?
+
 
         button3 = tk.Button(button_frame, image=btn_img, command=lambda: print("Button 3 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Trace Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button3.pack(side=tk.LEFT, padx=1)
@@ -906,6 +919,7 @@ if __name__ == "__main__":
 
     def start_mesh():
         global overlay, root
+        playsound('data/Button.mp3')
         if overlay is not None:
             overlay.destroy()
         # Maybe add this to a connect button later via a overlay window and button as no window is shown duuring connect
