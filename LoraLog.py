@@ -662,10 +662,11 @@ if __name__ == "__main__":
     root.protocol('WM_DELETE_WINDOW', on_closing)
 
     # Map MArker Images
-    tk_icon = ImageTk.PhotoImage(Image.open("data\marker.png"))
-    tk_direct = ImageTk.PhotoImage(Image.open("data\marker-green.png"))
-    tk_mqtt = ImageTk.PhotoImage(Image.open("data\marker-orange.png"))
-    tk_old = ImageTk.PhotoImage(Image.open("data\marker-grey.png"))
+    tk_icon = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker.png'))
+    tk_direct = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker-green.png'))
+    tk_mqtt = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker-orange.png'))
+    tk_old = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker-grey.png'))
+    btn_img = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'ui_button.png'))
 
     my_msg = tk.StringVar()  # For the messages to be sent.
     my_msg.set("")
@@ -711,8 +712,8 @@ if __name__ == "__main__":
     map = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#121212')
     map.grid(row=0, column=0, sticky='nsew')
     '''	
-    btn1_img = ImageTk.PhotoImage(Image.open("data\button1.png"))
-    tk.Button(button_frame, image=btn1_img, command=lambda: print("Button 1 clicked"), borderwidth=0)
+    btn1_img = ImageTk.PhotoImage(Image.open("data\button.png"))
+    tk.Button(button_frame, image=btn_img, command=lambda: print("Button 1 clicked"), borderwidth=0)
     '''	
     overlay = None
     def click_command(marker):
@@ -769,17 +770,26 @@ if __name__ == "__main__":
         button_frame.pack(pady=2)
 
         # Add buttons
-        button1 = tk.Button(button_frame, text="Button 1", command=lambda: print("Button 1 clicked"), bg='#242424', fg='#d1d1d1', font=('Fixedsys', 10))
-        button1.pack(side=tk.LEFT, padx=5)
+        button1 = tk.Button(button_frame, image=btn_img, command=lambda: print("Button 1 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Info", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button1.pack(side=tk.LEFT, padx=1)
 
-        button2 = tk.Button(button_frame, text="Button 2", command=lambda: print("Button 2 clicked"), bg='#242424', fg='#d1d1d1', font=('Fixedsys', 10))
-        button2.pack(side=tk.LEFT, padx=5)
+        button2 = tk.Button(button_frame, image=btn_img, command=lambda: print("Button 2 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Pos", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button2.pack(side=tk.LEFT, padx=1)
 
-        button3 = tk.Button(button_frame, text="Button 3", command=lambda: print("Button 3 clicked"), bg='#242424', fg='#d1d1d1', font=('Fixedsys', 10))
-        button3.pack(side=tk.LEFT, padx=5)
+        button3 = tk.Button(button_frame, image=btn_img, command=lambda: print("Button 3 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Trace Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button3.pack(side=tk.LEFT, padx=1)
 
-        close_button = tk.Button(overlay, text="Close", command=overlay.destroy, bg='#242424', fg='#d1d1d1', font=('Fixedsys', 10))
-        close_button.pack(pady=5)
+        button_frame2 = Frame(overlay, bg='#242424')
+        button_frame2.pack(pady=2)
+
+        button4 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 4 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Delete Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button4.pack(side=tk.LEFT, padx=1)
+
+        button5 = tk.Button(button_frame2, image=btn_img, command=overlay.destroy, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button5.pack(side=tk.LEFT, padx=1)
+
+        button6 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 6 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Msg", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button6.pack(side=tk.LEFT, padx=1)
 
     frame_middle = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, padx=0, pady=0)
     frame_middle.grid(row=0, column=2, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')

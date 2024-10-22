@@ -4,3 +4,5 @@ LoraLog.spec
 build/
 dist/
 *.spec
+*.psd
+
