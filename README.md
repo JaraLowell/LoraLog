@@ -12,6 +12,7 @@ Example
 ![afbeelding](https://i.gyazo.com/576b77217f704c0a3ab0fb2512713a48.png)
 
 To Do
-* Add Buttons so we can do Request Info, Request Position, Trace Route
+* Add Node 2 Node Chat
+* Add MMaybe some graphs per node; not sure if it needed but can look in to at some point
 * Add Config options (tough not sure yet how...)
 * Add Cashe for chat, so if you close it you get least last x lines back
