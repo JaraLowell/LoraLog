@@ -14,7 +14,7 @@ import pickle
 import html
 import pygame
 import threading
-import yaml
+# import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -434,7 +434,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_raws += TraceFrom
                 if snrBack and snrBack[index] != -128 and snrBack[index] != 0:
                     text_raws += f" ({snrBack[index] / 4:.2f}dB)"
-                text_raws += '\n' + (' ' * 11) + 'To   : ' + TraceFrom + ' --> '
+                text_raws += '\n' + (' ' * 11) + 'Back : ' + TraceFrom + ' --> '
                 index = 0
                 if route:
                     for nodeuuid in route:
@@ -793,22 +793,30 @@ if __name__ == "__main__":
     # Hadnle the buttons
     def buttonpress(info, nodeid):
         global ok2Send
+        text_from = LoraDB[MyLora][1] + " (" + LoraDB[MyLora][2] + ")"
         if ok2Send == 0:
             stop_event.clear()
             print("Button " + str(info) + " node !" + str(nodeid))
-            ok2Send = 18
+            ok2Send = 15
             node_id = '!' + str(nodeid)
             if info == 'ReqInfo':
+                insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
+                insert_colored_text(text_box2, (' ' * 11) + "Node Telemetry sending Telemetry request\n", "#02bae8")
                 telemetry_thread = threading.Thread(target=send_telemetry, args=(node_id,))
                 telemetry_thread.start()
             elif info == 'ReqPos':
+                insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
+                insert_colored_text(text_box2, (' ' * 11) + "Node Position sending Position request\n", "#02bae8")
                 position_thread = threading.Thread(target=send_position, args=(node_id,))
                 position_thread.start()
             elif info == 'ReqTrace':
+                insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
+                insert_colored_text(text_box2, (' ' * 11) + "Node TraceRoute sending Trace Route request\n", "#02bae8")
                 trace_thread = threading.Thread(target=send_trace, args=(node_id,))
                 trace_thread.start()
         else:
-            print('please wait a before re requesting (30sec)')
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
+            insert_colored_text(text_box2, (' ' * 11) + "Please wait before the next request, 30 secconds inbetween requests\n", "#02bae8")
 
     overlay = None
     def click_command(marker):
@@ -871,13 +879,13 @@ if __name__ == "__main__":
         button_frame2 = Frame(overlay, bg='#242424')
         button_frame2.pack(pady=2)
 
-        button4 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 4 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Delete Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button4 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 4 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text=" ", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button4.pack(side=tk.LEFT, padx=1)
 
         button5 = tk.Button(button_frame2, image=btn_img, command=overlay.destroy, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button5.pack(side=tk.LEFT, padx=1)
 
-        button6 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 6 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Msg", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button6 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 6 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text=" ", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button6.pack(side=tk.LEFT, padx=1)
 
     frame_middle = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, padx=0, pady=0)
