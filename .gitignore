@@ -4,3 +4,4 @@ dist/
 *.spec
 *.psd
 MoveDB.pkl
+LoraDB.pkl
