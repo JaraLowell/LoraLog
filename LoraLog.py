@@ -132,7 +132,7 @@ def connect_meshtastic(force_connect=False):
     if config.get('meshtastic', 'interface') != 'tcp':
         cnto = comport
     print("Connecting to meshtastic on " + cnto + "...")
-    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connecting to meshtastic on " + cnto + "...\n", "#00c983")
+    insert_colored_text(text_box1, "\n Connecting to meshtastic on " + cnto + "...\n", "#00c983")
     while not successful and attempts <= retry_limit:
         try:
             if config.get('meshtastic', 'interface') == 'tcp':
@@ -151,7 +151,7 @@ def connect_meshtastic(force_connect=False):
 
     nodeInfo = meshtastic_client.getMyNodeInfo()
     print("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
-    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
+    insert_colored_text(text_box1, " Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
 
     MyLora = (nodeInfo['user']['id'])[1:]
     root.wm_title("Meshtastic Lora Logger - " + html.unescape(LoraDB[MyLora][1]))
@@ -176,7 +176,7 @@ def connect_meshtastic(force_connect=False):
                 mylorachan[channel.index] = modem_preset_string
 
             if channel.index == 0:
-                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n\n", "#00c983")
+                insert_colored_text(text_box1, " Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n", "#00c983")
                 padding_frame.config(text="Send a message to channel " + mylorachan[0])
 
     updatesnodes()
@@ -208,7 +208,8 @@ def logLora(nodeID, info):
         LoraDB[nodeID][0] = tnow # time last seen
     else:
         LoraDB[nodeID] = [tnow, '', '', -8.0, -8.0, 0, '', '', tnow, '', '', '',-1]
-        insert_colored_text(text_box3, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + nodeID + "]\n", "#c24400")
+        text_box3.image_create("end", image=hr_img)
+        insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + nodeID + "]\n", "#c24400")
 
     if info[0] == 'NODEINFO_APP':
         tmp = str(info[1].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "") # short name
@@ -254,7 +255,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                     text_from = LoraDB[text_from][1] + " (" + LoraDB[text_from][2] + ")"
             else:
                 LoraDB[text_from] = [tnow, '', '', -8.0, -8.0, 0, '', '', tnow, '', '', '', -1]
-                insert_colored_text(text_box3, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + text_from + "]\n", "#c24400")
+                text_box3.image_create("end", image=hr_img)
+                insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + text_from + "]\n", "#c24400")
                 playsound('data/NewNode.mp3')
 
             if "viaMqtt" in packet:
@@ -506,9 +508,11 @@ def on_meshtastic_message(packet, interface, loop=None):
             text_from = html.unescape(text_from)
             text_raws = html.unescape(text_raws)
             if text_raws != '' and MyLora != fromraw:
-                insert_colored_text(text_box1, '\n[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1")
+                text_box1.image_create("end", image=hr_img)
+                insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1")
                 if ischat == True:
-                    insert_colored_text(text_box3, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1")
+                    text_box3.image_create("end", image=hr_img)
+                    insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1")
                 if viaMqtt == True:
                     insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
                     if ischat == True:
@@ -527,13 +531,16 @@ def on_meshtastic_message(packet, interface, loop=None):
                     if ischat == True:
                         insert_colored_text(text_box3, (' ' * 11) + '[' + text_chns +'] ' + text_raws + '\n', "#02bae8")
             elif text_raws != '' and MyLora == fromraw:
-                insert_colored_text(text_box2, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1")
+                text_box2.image_create("end", image=hr_img)
+                insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
             else:
-                insert_colored_text(text_box1, '\n[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1")
+                text_box1.image_create("end", image=hr_img)
+                insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1")
         else:
             print("No fromId in packet")
-            insert_colored_text(text_box1, '\n[' + time.strftime("%H:%M:%S", time.localtime()) + '] No fromId in packet\n', "#c24400")
+            text_box1.image_create("end", image=hr_img)
+            insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] No fromId in packet\n', "#c24400")
     else:
         if text_from != '':
             if text_from in LoraDB:
@@ -541,7 +548,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_from = LoraDB[text_from][1] + " (" + LoraDB[text_from][2] + ") [!" + text_from + "]"
             else:
                 text_from = "Unknown Node [!" + text_from + "]"
-        insert_colored_text(text_box1, '\n[' + time.strftime("%H:%M:%S", time.localtime()) + '] Encrypted packet from ' + text_from + '\n', "#c24400")
+        text_box1.image_create("end", image=hr_img)                
+        insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] Encrypted packet from ' + text_from + '\n', "#c24400")
 
 def updatesnodes():
     global LoraDB, MyLora, MapMarkers
@@ -561,7 +569,8 @@ def updatesnodes():
 
                 if nodeID not in LoraDB:
                     LoraDB[nodeID] = [nodeLast, '', '', -8.0, -8.0, 0, '', '', tnow, '', '', '',-1]
-                    insert_colored_text(text_box3, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + nodeID + "]\n", "#c24400")
+                    text_box3.image_create("end", image=hr_img)
+                    insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + nodeID + "]\n", "#c24400")
 
                 # New node?
                 if "shortName" in tmp and "longName" in tmp:
@@ -730,7 +739,8 @@ if __name__ == "__main__":
         if text2send != '':
             meshtastic_client.sendText(text2send)
             text_from = LoraDB[MyLora][1] + " (" + LoraDB[MyLora][2] + ")"
-            insert_colored_text(text_box3, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
+            text_box3.image_create("end", image=hr_img)
+            insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
             insert_colored_text(text_box3, (' ' * 11) + '[' + str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii') +'] ' + text2send + '\n', "#02bae8")
             my_msg.set("")
             playsound('data/NewChat.mp3')
@@ -747,6 +757,7 @@ if __name__ == "__main__":
     tk_mqtt = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker-orange.png'))
     tk_old = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker-grey.png'))
     btn_img = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'ui_button.png'))
+    hr_img = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'hr.png'))
 
     my_msg = tk.StringVar()  # For the messages to be sent.
     my_msg.set("")
@@ -775,6 +786,7 @@ if __name__ == "__main__":
     insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/\n", "#02bae8")
     insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.34 By Jara Lowell\n", "#02bae8")
     insert_colored_text(text_box1, " Meshtastic Lybrary : v" + meshtastic.version.get_active_version() + '\n\n', "#02bae8")
+    text_box1.image_create("end", image=hr_img)
 
     text_box2 = create_text(frame, 1, 0, 10, 100)
     text_box3 = create_text(frame, 2, 0, 10, 100)
@@ -827,22 +839,26 @@ if __name__ == "__main__":
             ok2Send = 15
             node_id = '!' + str(nodeid)
             if info == 'ReqInfo':
-                insert_colored_text(text_box2, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
+                text_box2.image_create("end", image=hr_img)
+                insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Telemetry sending Telemetry request\n", "#02bae8")
                 telemetry_thread = threading.Thread(target=send_telemetry, args=(node_id,))
                 telemetry_thread.start()
             elif info == 'ReqPos':
-                insert_colored_text(text_box2, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
+                text_box2.image_create("end", image=hr_img)
+                insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Position sending Position request\n", "#02bae8")
                 position_thread = threading.Thread(target=send_position, args=(node_id,))
                 position_thread.start()
             elif info == 'ReqTrace':
-                insert_colored_text(text_box2, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
+                text_box2.image_create("end", image=hr_img)
+                insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node TraceRoute sending Trace Route request\n", "#02bae8")
                 trace_thread = threading.Thread(target=send_trace, args=(node_id,))
                 trace_thread.start()
         else:
-            insert_colored_text(text_box2, "\n[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
+            text_box2.image_create("end", image=hr_img)
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
             insert_colored_text(text_box2, (' ' * 11) + "Please wait before the next request, 30 secconds inbetween requests\n", "#02bae8")
 
     overlay = None
@@ -858,7 +874,7 @@ if __name__ == "__main__":
 
         info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=51, height=12)
         info_label.pack(pady=2)
-        insert_colored_text(info_label, "\n⬢ ", "#" + marker.data[:6],  center=True)
+        insert_colored_text(info_label, "\n⬢ ", "#" + marker.data[-6:],  center=True)
         # text_loc += html.unescape(LoraDB[marker.data][1]).ljust(10)
         if LoraDB[marker.data][2] != '':
             text_loc = html.unescape(LoraDB[marker.data][2]) + '\n'
