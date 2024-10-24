@@ -12,7 +12,7 @@ import pickle
 import html
 from pygame import mixer
 import threading
-import yaml
+# import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -721,7 +721,6 @@ def calc_gc(end_lat, end_long, start_lat, start_long):
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.ticker import LinearLocator
 
 def plot_metrics_log(metrics_log, node_id, frame , width=512, height=248):
     plt.rcParams["font.size"] = 7
@@ -733,7 +732,7 @@ def plot_metrics_log(metrics_log, node_id, frame , width=512, height=248):
     airutiltxs = [entry['airutiltx'] for entry in metrics]
 
     fig, axs = plt.subplots(2, 2, figsize=(width/100, height/100))
-    fig.patch.set_facecolor('#242424')  # Set background color
+    fig.patch.set_facecolor('#242424')
 
     # Plot battery levels
     axs[0, 0].plot(times, battery_levels, label='Battery Level', color='#02bae8')
@@ -760,7 +759,7 @@ def plot_metrics_log(metrics_log, node_id, frame , width=512, height=248):
     axs[1, 1].set_ylabel(None)
     axs[1, 1].grid(True, color='#444444')
     for ax in axs.flat:
-        ax.set_facecolor('#242424')  # Set plot area background color
+        ax.set_facecolor('#242424')
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
         ax.xaxis.set_major_locator(mdates.HourLocator())
         ax.title.set_color('white')
@@ -781,12 +780,11 @@ def plot_environment_log(metrics_log, node_id, frame , width=512, height=248):
     pressures = [round(entry['pressure'],1) for entry in metrics]
 
     fig, ax1 = plt.subplots(figsize=(width/100, height/100))
-    fig.patch.set_facecolor('#242424')  # Set background color
+    fig.patch.set_facecolor('#242424')
 
-    ax1.set_facecolor('#242424')  # Set plot area background color
+    ax1.set_facecolor('#242424')
     ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
     ax1.xaxis.set_major_locator(mdates.HourLocator())
-    # ax1.set_ylabel('Temperature (°C) / Humidity (%)', color='white')  # Set y-axis label color to white
     ax1.plot(times, temperatures, 'r-', label='Temperature (°C)')
     ax1.plot(times, humidities, '#02bae8', label='Humidity (%)')
     ax1.tick_params(axis='y', labelcolor='white', colors='white')
@@ -795,10 +793,9 @@ def plot_environment_log(metrics_log, node_id, frame , width=512, height=248):
     ax1.set(frame_on=False)
 
     ax2 = ax1.twinx()
-    ax2.set_facecolor('#242424')  # Set plot area background color
-    # ax2.set_ylabel('Pressure (hPa)', color='white')  # Set y-axis label color to white
+    ax2.set_facecolor('#242424')
     ax2.plot(times, pressures, '#00c983', label='Pressure (hPa)')
-    ax2.tick_params(axis='y', labelcolor='white', colors='white')  # Set y-axis tick labels to white
+    ax2.tick_params(axis='y', labelcolor='white', colors='white')
     ax2.grid(True, color='#242424ff')
     ax2.set(frame_on=False)
 
@@ -812,7 +809,7 @@ def plot_movment_curve(movement_log, node_id, frame, width=512, height=128):
     plt.rcParams["font.size"] = 7
 
     positions = get_data_for_node(movement_log, node_id)
-    print(yaml.dump(positions))
+
     times = [entry['time'] for entry in positions]
     altitudes = [entry['altitude'] for entry in positions]
     dates = [datetime.fromtimestamp(time) for time in times]
@@ -921,7 +918,7 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 30, 100)
     # Todo: Add a logo
     insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/\n", "#02bae8")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.34 By Jara Lowell\n", "#02bae8")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.35 By Jara Lowell\n", "#02bae8")
     insert_colored_text(text_box1, " Meshtastic Lybrary : v" + meshtastic.version.get_active_version() + '\n\n', "#02bae8")
     text_box1.image_create("end", image=hr_img)
 
