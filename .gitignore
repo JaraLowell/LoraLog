@@ -4,5 +4,3 @@ dist/
 DataBase/
 *.spec
 *.psd
-MoveDB.pkl
-LoraDB.pkl
