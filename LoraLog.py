@@ -343,30 +343,30 @@ def on_meshtastic_message(packet, interface, loop=None):
                     text_raws = 'Node Chat Encrypted'
             elif data["portnum"] == "POSITION_APP":
                 position = data["position"]
+                nodelat = round(position.get('latitude', -8.0),6)
+                nodelon = round(position.get('longitude', -8.0),6)
                 text_msgs = 'Node Position '
-                text_msgs += 'latitude ' + str(round(position.get('latitude', 0.0000),4)) + ' '
-                text_msgs += 'longitude ' + str(round(position.get('longitude', 0.000),4)) + ' '
+                text_msgs += 'latitude ' + str(round(nodelat,4)) + ' '
+                text_msgs += 'longitude ' + str(round(nodelon,4)) + ' '
                 text_msgs += 'altitude ' + str(position.get('altitude', 0)) + ' meter'
                 if "satsInView" in position:
                     text_msgs += ' (' + str(position.get('satsInView', 0)) + ' satelites)'
-                if('latitude' in position and 'longitude' in position and LoraDB[MyLora][3] != -8.0 and LoraDB[MyLora][3] != -8.0 and MyLora != fromraw):
-                    text_msgs += "\n" + (' ' * 11) + "Distance: ±" + calc_gc(round(position.get('latitude', 0.0000),6), round(position.get('longitude', 0.000),6), LoraDB[MyLora][3], LoraDB[MyLora][4])
+                if nodelat != -8.0 and nodelon != -8.0:
+                    logLora(fromraw, ['POSITION_APP', nodelat, nodelon, position.get('altitude', 0)])
+                    if MyLora != fromraw and LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0:
+                        text_msgs += "\n" + (' ' * 11) + "Distance: ±" + calc_gc(nodelat, nodelon, LoraDB[MyLora][3], LoraDB[MyLora][4])
                     if fromraw in MapMarkers:
-                        MapMarkers[fromraw][0].set_position(round(position.get('latitude', 0.0000),6), round(position.get('longitude', 0.000),6))
+                        MapMarkers[fromraw][0].set_position(nodelat, nodelon)
                         MapMarkers[fromraw][0].set_text(LoraDB[fromraw][1])
+                    last_position = get_last_position(movement_log, fromraw)
+                    if last_position and 'latitude' in position and 'longitude' in position:
+                        if last_position['latitude'] != nodelat or last_position['longitude'] != nodelon:
+                            movement_log.append({'nodeID': fromraw, 'time': tnow, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
+                            if fromraw in MapMarkers:
+                                MapMarkers[fromraw][5] = 0
+                    if not last_position and 'latitude' in position and 'longitude' in position:
+                        movement_log.append({'nodeID': fromraw, 'time': tnow, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                 text_raws = text_msgs
-                logLora(fromraw, ['POSITION_APP', position.get('latitude', -8.0), position.get('longitude', -8.0), position.get('altitude', 0)])
-
-                # Only log movement if the position has changed
-                last_position = get_last_position(movement_log, fromraw)
-                if last_position and 'latitude' in position and 'longitude' in position:
-                    # if movment to mush we might have to round(position.get('longitude', 0.000),6) or 5 for now test full
-                    if last_position['latitude'] != position['latitude'] or last_position['longitude'] != position['longitude']:
-                        movement_log.append({'nodeID': fromraw, 'time': tnow, 'latitude': position['latitude'], 'longitude': position['longitude'], 'altitude': position.get('altitude', 0)})
-                        if fromraw in MapMarkers:
-                            MapMarkers[fromraw][5] = True
-                if not last_position and 'latitude' in position and 'longitude' in position:
-                    movement_log.append({'nodeID': fromraw, 'time': tnow, 'latitude': position['latitude'], 'longitude': position['longitude'], 'altitude': position.get('altitude', 0)})
             elif data["portnum"] == "NODEINFO_APP":
                 node_info = packet['decoded'].get('user', {})
                 if node_info:
@@ -1048,9 +1048,11 @@ if __name__ == "__main__":
 
             # Draw the movmment trail if MapMarkers[node_id][5] == True
             if node_id in MapMarkers:
-                last_position = get_first_position(movement_log, node_id)
+                last_position = get_last_position(movement_log, node_id)
                 if last_position:
-                    if MapMarkers[node_id][5] != last_position['time']:
+                    first_position = get_first_position(movement_log, node_id)
+                    checktime = first_position['time'] + last_position['time']
+                    if MapMarkers[node_id][5] != checktime:
                         if MapMarkers[node_id][4] != None:
                             MapMarkers[node_id][4].delete()
                             MapMarkers[node_id][4] = None
@@ -1063,8 +1065,8 @@ if __name__ == "__main__":
                                 pos = (position['latitude'], position['longitude'])
                                 drawline.append(pos)
                             MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
-                            MapMarkers[node_id][5] = last_position['time']
-                            print(f"Drawing trail for {node_id}")
+                            MapMarkers[node_id][5] = checktime
+                            print(f"Drawing trail for {LoraDB[node_id][1]}")
 
         text_box_middle.yview_moveto(current_view[0])
         if tnow > tlast + 900:
