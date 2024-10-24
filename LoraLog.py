@@ -65,7 +65,7 @@ def insert_colored_text(text_widget, text, color, center=False):
 
 #------------------------------------------------------------- Movment Tracker --------------------------------------------------------------------------
 movement_log    = [] # movement_log = [{'nodeID': '1', 'time': 1698163200, 'latitude': 10.0, 'longitude': 20.0, 'altitude': 1000}, ...]
-metrics_log     = [] # metrics_log  = [{'nodeID': '1', 'time': 1698163200, 'batteryLevel': 100, 'voltage': 3.7, 'utilization': 0.0, 'airutiltx': 0.0}, ...]
+metrics_log     = [] # metrics_log  = [{'nodeID': '1', 'time': 1698163200, 'battery': 100, 'voltage': 3.7, 'utilization': 0.0, 'airutiltx': 0.0}, ...]
 environment_log = [] # environment  = [{'nodeID': '1', 'time': 1698163200, 'temperature': 1.0, 'humidity': 20.0, 'pressure': 1010.0}, ...]
 LoraDB          = {} # LoraDB       = {'nodeID': [timenow, ShortName, LongName, latitude, longitude, altitude, macaddr, hardware, timefirst, rightbarstats, mmqtt, snr, hops], ...}
 
@@ -105,7 +105,7 @@ def get_data_for_node(database, nodeID):
     positions = [entry for entry in database if entry['nodeID'] == nodeID]
     return positions
 
-def remove_old_nodedata(database, minutes=360):
+def remove_old_nodedata(database, minutes=720):
     current_time = time.time()
     cutoff_time = current_time - minutes
     database[:] = [entry for entry in database if not (entry['time'] < cutoff_time)]
@@ -314,6 +314,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_raws += '\n' + (' ' * 11) + 'Uptime ' + ez_date(device_metrics.get('uptimeSeconds', 0))
                         if MyLora == fromraw:
                             MyLoraText1 = (' ChUtil').ljust(13) + str(round(device_metrics.get('channelUtilization', 0.00),2)).rjust(6) + '%\n' + (' AirUtilTX').ljust(13) + str(round(device_metrics.get('airUtilTx', 0.00),2)).rjust(6) + '%\n' + (' Power').ljust(13) + str(round(device_metrics.get('voltage', 0.00),2)).rjust(6) + 'v\n' + (' Battery').ljust(13) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
+                        if 'batteryLevel' in device_metrics or 'voltage' in device_metrics or 'channelUtilization' in device_metrics or 'airUtilTx' in device_metrics:
+                            metrics_log.append({'nodeID': fromraw, 'time': tnow, 'battery': device_metrics.get('batteryLevel', 0), 'voltage': round(device_metrics.get('voltage', 0.00),2), 'utilization': round(device_metrics.get('channelUtilization', 0.00),2), 'airutiltx': round(device_metrics.get('airUtilTx', 0.00),2)})
                     power_metrics = telemetry.get('powerMetrics', {})
                     if power_metrics:
                         text_raws += '\n' + (' ' * 11) + 'CH1 Voltage: ' + str(round(power_metrics.get('ch1_voltage', 'N/A'),2)) + 'v'
@@ -325,6 +327,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_raws += '\n' + (' ' * 11) + 'Temperature: ' + str(round(environment_metrics.get('temperature', 0.0),1)) + '°C'
                         text_raws += ' Humidity: ' + str(round(environment_metrics.get('relativeHumidity', 0.0),1)) + '%'
                         text_raws += ' Pressure: ' + str(round(environment_metrics.get('barometricPressure', 0.00),2)) + 'hPa'
+                        if 'temperature' in environment_metrics or 'relativeHumidity' in environment_metrics or 'barometricPressure' in environment_metrics:
+                            environment_log.append({'nodeID': fromraw, 'time': tnow, 'temperature': round(environment_metrics.get('temperature', 0.0),2), 'humidity': round(environment_metrics.get('relativeHumidity', 0.0),2), 'pressure': round(environment_metrics.get('barometricPressure', 0.00),2)})
                     localstats_metrics = telemetry.get('localStats', {})
                     if localstats_metrics:
                         text_raws += '\n' + (' ' * 11) + 'PacketsTx: ' + str(localstats_metrics.get('numPacketsTx', 0))
@@ -1006,8 +1010,6 @@ if __name__ == "__main__":
 
         current_view = text_box_middle.yview()
 
-        remove_old_nodedata(movement_log, minutes = 360) # delete after 6 hours
-
         # Sort the nodes by last seen time
         sorted_nodes = sorted(LoraDB.items(), key=lambda item: item[1][0], reverse=True)[:30]
         text_box_middle.delete("1.0", tk.END)
@@ -1116,8 +1118,11 @@ if __name__ == "__main__":
 
         text_box_middle.yview_moveto(current_view[0])
         if tnow > tlast + 900:
-            updatesnodes()
             tlast = tnow
+            updatesnodes()
+            remove_old_nodedata(movement_log, minutes = 720) # delete after 12 hours
+            remove_old_nodedata(metrics_log, minutes = 4320) # delete after 3 days
+            remove_old_nodedata(environment_log, minutes = 4320) # delete after 3 days
             safedatabase()
             print('Saved Databases')
             gc.collect()
