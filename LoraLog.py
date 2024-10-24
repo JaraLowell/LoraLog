@@ -45,22 +45,13 @@ def has_pairs(lst):
 config = configparser.ConfigParser()
 config.read('./config.ini')
 
-LoraDB    = {}
-LoraDBPath = 'LoraDB.pkl'
-
 MapMarkers = {}
 ok2Send = 0
 MyLora = ''
 MyLoraText1 = ''
 MyLoraText2 = ''
-MyPath = os.getcwd() + os.path.sep + 'txtfiles' + os.path.sep
 mylorachan = {}
-movement_log = []
 tlast = int(time.time())
-
-if os.path.exists(LoraDBPath):
-    with open(LoraDBPath, 'rb') as f:
-        LoraDB = pickle.load(f)
 
 # Function to insert colored text
 def insert_colored_text(text_widget, text, color, center=False):
@@ -73,36 +64,67 @@ def insert_colored_text(text_widget, text, color, center=False):
         text_widget.see(tk.END)
 
 #------------------------------------------------------------- Movment Tracker --------------------------------------------------------------------------
-movement_log = []
+movement_log    = [] # movement_log = [{'nodeID': '1', 'time': 1698163200, 'latitude': 10.0, 'longitude': 20.0, 'altitude': 1000}, ...]
+metrics_log     = [] # metrics_log  = [{'nodeID': '1', 'time': 1698163200, 'batteryLevel': 100, 'voltage': 3.7, 'utilization': 0.0, 'airutiltx': 0.0}, ...]
+environment_log = [] # environment  = [{'nodeID': '1', 'time': 1698163200, 'temperature': 1.0, 'humidity': 20.0, 'pressure': 1010.0}, ...]
+LoraDB          = {} # LoraDB       = {'nodeID': [timenow, ShortName, LongName, latitude, longitude, altitude, macaddr, hardware, timefirst, rightbarstats, mmqtt, snr, hops], ...}
 
-MoveDBPath = 'MoveDB.pkl'
+LoraDBPath = 'DataBase' + os.path.sep + 'LoraDB.pkl'
+if os.path.exists(LoraDBPath):
+    with open(LoraDBPath, 'rb') as f:
+        LoraDB = pickle.load(f)
+
+MoveDBPath = 'DataBase' + os.path.sep + 'MoveDB.pkl'
 if os.path.exists(MoveDBPath):
     with open(MoveDBPath, 'rb') as f:
         movement_log = pickle.load(f)
 
-def get_last_position(movement_log, nodeID):
-    for entry in reversed(movement_log):
+MetricsPath = 'DataBase' + os.path.sep + 'MetricsDB.pkl'
+if os.path.exists(MetricsPath):
+    with open(MetricsPath, 'rb') as f:
+        metrics_log = pickle.load(f)
+
+EnviPath = 'DataBase' + os.path.sep + 'EnviDB.pkl'
+if os.path.exists(EnviPath):
+    with open(EnviPath, 'rb') as f:
+        environment_log = pickle.load(f)
+
+def get_last_position(database, nodeID):
+    for entry in reversed(database):
         if entry['nodeID'] == nodeID:
             return entry
     return None
 
-def get_first_position(movement_log, nodeID):
-    for entry in movement_log:
+def get_first_position(database, nodeID):
+    for entry in database:
         if entry['nodeID'] == nodeID:
             return entry
     return None
 
-def get_positions_for_node(movement_log, nodeID):
-    positions = [entry for entry in movement_log if entry['nodeID'] == nodeID]
+def get_data_for_node(database, nodeID):
+    positions = [entry for entry in database if entry['nodeID'] == nodeID]
     return positions
 
-def remove_old_positions(movement_log, minutes=2700):
+def remove_old_nodedata(database, minutes=360):
     current_time = time.time()
     cutoff_time = current_time - minutes
-    movement_log[:] = [entry for entry in movement_log if not (entry['time'] < cutoff_time)]
+    database[:] = [entry for entry in database if not (entry['time'] < cutoff_time)]
 
-def node_id_exists(movement_log, nodeID):
-    return any(entry['nodeID'] == nodeID for entry in movement_log)
+def node_id_exists(database, nodeID):
+    return any(entry['nodeID'] == nodeID for entry in database)
+
+def safedatabase():
+    global LoraDB, LoraDBPath, movement_log, MoveDBPath, metrics_log, MetricsPath, environment_log, EnviPath
+    if not os.path.exists('DataBase'):
+        os.makedirs('DataBase')
+    with open(LoraDBPath, 'wb') as f:
+        pickle.dump(LoraDB, f)
+    with open(MoveDBPath, 'wb') as f:
+        pickle.dump(movement_log, f)
+    with open(MetricsPath, 'wb') as f:
+        pickle.dump(metrics_log, f)
+    with open(EnviPath, 'wb') as f:
+        pickle.dump(environment_log, f)
 
 #----------------------------------------------------------- Meshtastic Lora Con ------------------------------------------------------------------------
 meshtastic_client = None
@@ -704,10 +726,10 @@ def is_hour_between(start, end):
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-def plot_balloon_curve(movement_log, node_id, frame, width=412, height=183):
-    plt.rcParams["font.size"] = 8
+def plot_movment_curve(movement_log, node_id, frame, width=412, height=183):
+    plt.rcParams["font.size"] = 7
 
-    positions = get_positions_for_node(movement_log, node_id)
+    positions = get_data_for_node(movement_log, node_id)
     times = [entry['time'] for entry in positions]
     altitudes = [entry['altitude'] for entry in positions]
     dates = [datetime.fromtimestamp(time) for time in times]
@@ -723,7 +745,7 @@ def plot_balloon_curve(movement_log, node_id, frame, width=412, height=183):
     ax.tick_params(axis='x', colors='white')
     ax.tick_params(axis='y', colors='white')
 
-    ax.set_title('Ascent and Descent over Time')
+    ax.set_title('Ascent and Descent in meters over Time')
     ax.grid(True, color='#444444')
 
     fig.tight_layout()
@@ -744,10 +766,7 @@ if __name__ == "__main__":
         isLora = False
         if meshtastic_client is not None:
             meshtastic_client.close()
-            with open(LoraDBPath, 'wb') as f:
-                pickle.dump(LoraDB, f)
-            with open(MoveDBPath, 'wb') as f:
-                pickle.dump(movement_log, f)
+            safedatabase()
             print('Saved Databases')
         root.quit()
         sys.exit()
@@ -934,12 +953,14 @@ if __name__ == "__main__":
             text_loc += 'HopsAway  : ' + str(LoraDB[marker.data][12]) + '\n'
         insert_colored_text(info_label, text_loc, "#d1d1d1")
 
-        # Canvas for Plot Here ?
-        # fig, ax = plt.subplots()
-        # nodecanvas = FigureCanvasTkAgg(fig, master = overlay)
-        # nodecanvas.get_tk_widget().pack()
+        # if we have mmetrics data, plot it just need ponder, 24 hours, 3 days or a week ... via config perhaps
+        # + Device Metrics (Battery Level, Channel Utilization and Air Util TX)
+        # + Environment Metrics (Temperature, Humidity, Pressure)
+        # + Power Metrics (Channel 1, 2 and 3) tough we realy need this ?
+
+        # If we have movement data, make height plot
         if MapMarkers[marker.data][4] != None:
-            plot_balloon_curve(movement_log, marker.data, overlay)
+            plot_movment_curve(movement_log, marker.data, overlay)
 
         # Create a frame to hold the buttons
         if marker.data != MyLora:
@@ -985,7 +1006,7 @@ if __name__ == "__main__":
 
         current_view = text_box_middle.yview()
 
-        remove_old_positions(movement_log, minutes = (map_oldnode / 2))
+        remove_old_nodedata(movement_log, minutes = 360) # delete after 6 hours
 
         # Sort the nodes by last seen time
         sorted_nodes = sorted(LoraDB.items(), key=lambda item: item[1][0], reverse=True)[:30]
@@ -1083,7 +1104,7 @@ if __name__ == "__main__":
                             MapMarkers[node_id][4] = None
                             MapMarkers[node_id][5] = 0
 
-                        positions = get_positions_for_node(movement_log, node_id)
+                        positions = get_data_for_node(movement_log, node_id)
                         if len(positions) > 1:
                             drawline = []
                             for position in positions:
@@ -1097,10 +1118,7 @@ if __name__ == "__main__":
         if tnow > tlast + 900:
             updatesnodes()
             tlast = tnow
-            with open(LoraDBPath, 'wb') as f:
-                pickle.dump(LoraDB, f)
-            with open(MoveDBPath, 'wb') as f:
-                pickle.dump(movement_log, f)
+            safedatabase()
             print('Saved Databases')
             gc.collect()
         root.after(2000, update_active_nodes)    
@@ -1142,10 +1160,7 @@ if __name__ == "__main__":
     try:
         root.mainloop()
     except KeyboardInterrupt:
-        with open(LoraDBPath, 'wb') as f:
-            pickle.dump(LoraDB, f)
-        with open(MoveDBPath, 'wb') as f:
-            pickle.dump(movement_log, f)
+        safedatabase()
         print('Saved Databases')
         sys.exit()
     except Exception as e:

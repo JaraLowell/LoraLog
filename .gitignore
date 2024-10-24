@@ -1,6 +1,7 @@
 LoraLog.spec
 build/
 dist/
+DataBase/
 *.spec
 *.psd
 MoveDB.pkl
