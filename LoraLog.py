@@ -364,6 +364,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                             movement_log.append({'nodeID': fromraw, 'time': tnow, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                             if fromraw in MapMarkers:
                                 MapMarkers[fromraw][5] = 0
+                            text_msgs += ' (Moved!)'
                     if not last_position and 'latitude' in position and 'longitude' in position:
                         movement_log.append({'nodeID': fromraw, 'time': tnow, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                 text_raws = text_msgs
@@ -701,10 +702,42 @@ def is_hour_between(start, end):
     is_between |= end < start and (start <= now or now <= end)
     return is_between
 
-#---------------------------------------------------------------- Start Mains -----------------------------------------------------------------------------
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+# Assuming the movement_log is already populated with the required data
+# movement_log = [{'nodeID': '1', 'time': 1698163200, 'latitude': 10.0, 'longitude': 20.0, 'altitude': 1000}, ...]
+def plot_balloon_curve(movement_log, node_id, frame , width=412, height=183):
+    # plt.rcParams["font.family"] = "Fixedsys"
+    plt.rcParams["font.size"] = 8
+
+    # Extract times and altitudes from the log
+    positions = get_positions_for_node(movement_log, node_id)
+
+    times = [entry['time'] for entry in positions]
+    altitudes = [entry['altitude'] for entry in positions]
+    
+    # Convert epoch times to datetime for better readability
+    dates = [datetime.fromtimestamp(time) for time in times]
+    
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(width/100, height/100))
+    ax.plot(dates, altitudes, marker='o', linestyle='-', color='b')
+    
+    # Add labels and title
+    ax.set_title('Ascent and Descent over Time')
+    ax.grid(True)
+
+    # Adjust layout to fit nicely
+    fig.tight_layout()
+
+    # Create a canvas and embed the plot in the Tkinter frame
+    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+#---------------------------------------------------------------- Start Mains -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
     os.system("")
@@ -811,11 +844,8 @@ if __name__ == "__main__":
     frame_right.grid_rowconfigure(0, weight=1)
     frame_right.grid_columnconfigure(0, weight=1)
 
-    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#121212')
+    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000')
     mapview.grid(row=0, column=0, sticky='nsew')
-
-    # Create a new thread for node requests
-    stop_event = threading.Event()
 
     def send_position(nodeid):
         try:
@@ -840,7 +870,6 @@ if __name__ == "__main__":
         global ok2Send
         text_from = LoraDB[MyLora][1] + " (" + LoraDB[MyLora][2] + ")"
         if ok2Send == 0:
-            stop_event.clear()
             print("Button " + str(info) + " node !" + str(nodeid))
             ok2Send = 15
             node_id = '!' + str(nodeid)
@@ -915,6 +944,8 @@ if __name__ == "__main__":
         # fig, ax = plt.subplots()
         # nodecanvas = FigureCanvasTkAgg(fig, master = overlay)
         # nodecanvas.get_tk_widget().pack()
+        if MapMarkers[marker.data][4] != None:
+            plot_balloon_curve(movement_log, marker.data, overlay)
 
         # Create a frame to hold the buttons
         if marker.data != MyLora:
@@ -1082,7 +1113,7 @@ if __name__ == "__main__":
     ### end
 
     mapview.set_position(48.860381, 2.338594)
-    mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'))
+    mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=22)
     mapview.set_zoom(5)
 
     def start_mesh():
