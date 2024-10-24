@@ -285,7 +285,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 LoraDB[text_from] = [tnow, '', '', -8.0, -8.0, 0, '', '', tnow, '', '', '', -1]
                 text_box3.image_create("end", image=hr_img)
                 insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + text_from + "]\n", "#c24400")
-                playsound('data/NewNode.mp3')
+                playsound('Data' + os.path.sep + 'NewNode.mp3')
 
             if "viaMqtt" in packet:
                 LoraDB[fromraw][10] = ' via mqtt'
@@ -360,7 +360,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_chns = str(mylorachan[packet["channel"]])
 
                     ischat = True
-                    playsound('data/NewChat.mp3')
+                    playsound('Data' + os.path.sep + 'NewChat.mp3')
                 else:
                     text_raws = 'Node Chat Encrypted'
             elif data["portnum"] == "POSITION_APP":
@@ -795,21 +795,21 @@ if __name__ == "__main__":
             insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
             insert_colored_text(text_box3, (' ' * 11) + '[' + str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii') +'] ' + text2send + '\n', "#02bae8")
             my_msg.set("")
-            playsound('data/NewChat.mp3')
+            playsound('Data' + os.path.sep + 'NewChat.mp3')
 
     root = customtkinter.CTk()
     root.title("Meshtastic Lora Logger")
     root.resizable(True, True)
-    root.iconbitmap("data\mesh.ico")
+    root.iconbitmap('Data' + os.path.sep + 'mesh.ico')
     root.protocol('WM_DELETE_WINDOW', on_closing)
 
     # Map MArker Images
-    tk_icon = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker.png'))
-    tk_direct = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker-green.png'))
-    tk_mqtt = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker-orange.png'))
-    tk_old = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'marker-grey.png'))
-    btn_img = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'ui_button.png'))
-    hr_img = ImageTk.PhotoImage(Image.open('data' + os.path.sep + 'hr.png'))
+    tk_icon = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker.png'))
+    tk_direct = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-green.png'))
+    tk_mqtt = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-orange.png'))
+    tk_old = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-grey.png'))
+    btn_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'ui_button.png'))
+    hr_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'hr.png'))
 
     my_msg = tk.StringVar()  # For the messages to be sent.
     my_msg.set("")
@@ -913,7 +913,7 @@ if __name__ == "__main__":
     def click_command(marker):
         global LoraDB, MyLora, overlay
         # Destroy the existing overlay if it exists
-        playsound('data/Button.mp3')
+        playsound('Data' + os.path.sep + 'Button.mp3')
         if overlay is not None:
             overlay.destroy()
 
@@ -1130,7 +1130,7 @@ if __name__ == "__main__":
 
     def start_mesh():
         global overlay, root
-        playsound('data/Button.mp3')
+        playsound('Data' + os.path.sep + 'Button.mp3')
         if overlay is not None:
             overlay.destroy()
         # Maybe add this to a connect button later via a overlay window and button as no window is shown duuring connect
