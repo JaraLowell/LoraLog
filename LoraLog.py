@@ -729,8 +729,60 @@ def is_hour_between(start, end):
     return is_between
 
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-def plot_movment_curve(movement_log, node_id, frame, width=412, height=183):
+
+def plot_metrics_log(metrics_log, node_id, frame , width=512, height=256):
+    plt.rcParams["font.size"] = 7
+    metrics = get_data_for_node(metrics_log, node_id)
+    times = [datetime.fromtimestamp(entry['time']) for entry in metrics]
+    battery_levels = [entry['battery'] for entry in metrics]
+    voltages = [entry['voltage'] for entry in metrics]
+    utilizations = [entry['utilization'] for entry in metrics]
+    airutiltxs = [entry['airutiltx'] for entry in metrics]
+
+    fig, axs = plt.subplots(2, 2, figsize=(width/100, height/100))
+    fig.patch.set_facecolor('#242424')  # Set background color
+
+    # Plot battery levels
+    axs[0, 0].plot(times, battery_levels, label='Battery Level', color='#02bae8')
+    axs[0, 0].set_title('Battery Level %')
+    axs[0, 0].set_xlabel(None)
+    axs[0, 0].set_ylabel(None)
+    axs[0, 0].grid(True, color='#444444')
+    # Plot voltages
+    axs[0, 1].plot(times, voltages, label='Voltage', color='#c9a500')
+    axs[0, 1].set_title('Voltage')
+    axs[0, 1].set_xlabel(None)
+    axs[0, 1].set_ylabel(None)
+    axs[0, 1].grid(True, color='#444444')
+    # Plot utilizations
+    axs[1, 0].plot(times, utilizations, label='Utilization', color='#00c983')
+    axs[1, 0].set_title('Utilization %')
+    axs[1, 0].set_xlabel(None)
+    axs[1, 0].set_ylabel(None)
+    axs[1, 0].grid(True, color='#444444')
+    # Plot Air Utilization TX
+    axs[1, 1].plot(times, airutiltxs, label='Air Utilization TX', color='red')
+    axs[1, 1].set_title('Air Utilization TX %')
+    axs[1, 1].set_xlabel(None)
+    axs[1, 1].set_ylabel(None)
+    axs[1, 1].grid(True, color='#444444')
+    for ax in axs.flat:
+        ax.set_facecolor('#242424')  # Set plot area background color
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
+        ax.xaxis.set_major_locator(mdates.HourLocator())
+        ax.title.set_color('white')
+        ax.xaxis.label.set_color('white')
+        ax.tick_params(axis='x', colors='white')
+        ax.tick_params(axis='y', colors='white')
+        ax.set(frame_on=False)
+    fig.tight_layout()
+    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+def plot_movment_curve(movement_log, node_id, frame, width=512, height=128):
     plt.rcParams["font.size"] = 7
 
     positions = get_data_for_node(movement_log, node_id)
@@ -748,8 +800,10 @@ def plot_movment_curve(movement_log, node_id, frame, width=412, height=183):
     ax.yaxis.label.set_color('white')
     ax.tick_params(axis='x', colors='white')
     ax.tick_params(axis='y', colors='white')
-
-    ax.set_title('Ascent and Descent in meters over Time')
+    ax.set(frame_on=False)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
+    ax.xaxis.set_major_locator(mdates.HourLocator())
+    ax.set_title('Ascent and Descent in meters')
     ax.grid(True, color='#444444')
 
     fig.tight_layout()
@@ -924,10 +978,10 @@ if __name__ == "__main__":
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
 
-        info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=51, height=12)
+        info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=12)
         info_label.pack(pady=2)
         insert_colored_text(info_label, "\n⬢ ", "#" + marker.data[-6:],  center=True)
-        # text_loc += html.unescape(LoraDB[marker.data][1]).ljust(10)
+
         if LoraDB[marker.data][2] != '':
             text_loc = html.unescape(LoraDB[marker.data][2]) + '\n'
         elif LoraDB[marker.data][1] != '':
@@ -935,12 +989,12 @@ if __name__ == "__main__":
         else:
             text_loc = '#' + str(marker.data) + '\n'
         insert_colored_text(info_label, text_loc, "#02bae8",  center=True)
-        text_loc = ('─' * 34) + '\n'
+        text_loc = ('─' * 42) + '\n'
         insert_colored_text(info_label, text_loc, "#3d3d3d")
         text_loc = ' Position : ' + str(round(LoraDB[marker.data][3],6)) + '/' + str(round(LoraDB[marker.data][4],6)) + ' (' + LatLon2qth(round(LoraDB[marker.data][3],6),round(LoraDB[marker.data][4],6)) + ')\n'
         text_loc += ' Altitude : ' + str(LoraDB[marker.data][5]) + 'm\n'
         insert_colored_text(info_label, text_loc, "#d1d1d1")
-        text_loc = ('─' * 34) + '\n'
+        text_loc = ('─' * 42) + '\n'
         insert_colored_text(info_label, text_loc, "#3d3d3d")
         text_loc = ' HW Model : ' + str(LoraDB[marker.data][7]) + '\n'
         text_loc += ' Hex ID   : ' + '!' + str(marker.data).ljust(14)
@@ -961,6 +1015,11 @@ if __name__ == "__main__":
         # + Device Metrics (Battery Level, Channel Utilization and Air Util TX)
         # + Environment Metrics (Temperature, Humidity, Pressure)
         # + Power Metrics (Channel 1, 2 and 3) tough we realy need this ?
+
+        plt.close('all')
+
+        if node_id_exists(metrics_log, marker.data):
+            plot_metrics_log(metrics_log, marker.data, overlay)
 
         # If we have movement data, make height plot
         if MapMarkers[marker.data][4] != None:
@@ -1121,8 +1180,8 @@ if __name__ == "__main__":
             tlast = tnow
             updatesnodes()
             remove_old_nodedata(movement_log, minutes = 720) # delete after 12 hours
-            remove_old_nodedata(metrics_log, minutes = 4320) # delete after 3 days
-            remove_old_nodedata(environment_log, minutes = 4320) # delete after 3 days
+            remove_old_nodedata(metrics_log, minutes = 1440) # delete after 24 hours
+            remove_old_nodedata(environment_log, minutes = 1440) # delete after 24 hours
             safedatabase()
             print('Saved Databases')
             gc.collect()
