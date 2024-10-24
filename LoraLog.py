@@ -10,9 +10,9 @@ from unidecode import unidecode
 import configparser
 import pickle
 import html
-import pygame
+from pygame import mixer
 import threading
-# import yaml
+import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -43,7 +43,7 @@ def has_pairs(lst):
     return len(lst) != 0 and len(lst) % 2 == 0
 
 config = configparser.ConfigParser()
-config.read('./config.ini')
+config.read('config.ini')
 
 MapMarkers = {}
 ok2Send = 0
@@ -105,11 +105,6 @@ def get_data_for_node(database, nodeID):
     positions = [entry for entry in database if entry['nodeID'] == nodeID]
     return positions
 
-def remove_old_nodedata(database, minutes=720):
-    current_time = time.time()
-    cutoff_time = current_time - minutes
-    database[:] = [entry for entry in database if not (entry['time'] < cutoff_time)]
-
 def node_id_exists(database, nodeID):
     return any(entry['nodeID'] == nodeID for entry in database)
 
@@ -128,13 +123,22 @@ def safedatabase():
 
 #----------------------------------------------------------- Meshtastic Lora Con ------------------------------------------------------------------------
 meshtastic_client = None
-map_delete = int(config.get('meshtastic', 'map_delete_time')) * 60
-map_oldnode = int(config.get('meshtastic', 'map_oldnode_time')) * 60
+try:
+    map_delete = int(config.get('meshtastic', 'map_delete_time')) * 60
+    map_oldnode = int(config.get('meshtastic', 'map_oldnode_time')) * 60
+    map_trail_age = int(config.get('meshtastic', 'map_trail_age')) * 60
+    metrics_age = int(config.get('meshtastic', 'metrics_age')) * 60
+except Exception as e :
+    print(str(e),' could not read configuration file')
+    map_delete = 2700
+    map_oldnode = 86400
+    map_trail_age = 43200
+    metrics_age = 86400
 
-pygame.mixer.init()
+mixer.init()
 def playsound(soundfile):
-    pygame.mixer.music.load(soundfile)
-    pygame.mixer.music.play(loops=0)
+    mixer.music.load(soundfile)
+    mixer.music.play(loops=0)
 
 def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
     value = max(min_value, min(max_value, value))
@@ -265,6 +269,9 @@ def on_meshtastic_message(packet, interface, loop=None):
     global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log
     ischat = False
     tnow = int(time.time())
+    rectime = tnow
+    if 'rxTime' in packet:
+        rectime = packet['rxTime']
     text_from = ''
     if 'fromId' in packet and packet['fromId'] is not None:
         text_from = packet.get('fromId', '')[1:]
@@ -315,7 +322,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                         if MyLora == fromraw:
                             MyLoraText1 = (' ChUtil').ljust(13) + str(round(device_metrics.get('channelUtilization', 0.00),2)).rjust(6) + '%\n' + (' AirUtilTX').ljust(13) + str(round(device_metrics.get('airUtilTx', 0.00),2)).rjust(6) + '%\n' + (' Power').ljust(13) + str(round(device_metrics.get('voltage', 0.00),2)).rjust(6) + 'v\n' + (' Battery').ljust(13) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
                         if 'batteryLevel' in device_metrics or 'voltage' in device_metrics or 'channelUtilization' in device_metrics or 'airUtilTx' in device_metrics:
-                            metrics_log.append({'nodeID': fromraw, 'time': tnow, 'battery': device_metrics.get('batteryLevel', 0), 'voltage': round(device_metrics.get('voltage', 0.00),2), 'utilization': round(device_metrics.get('channelUtilization', 0.00),2), 'airutiltx': round(device_metrics.get('airUtilTx', 0.00),2)})
+                            metrics_log.append({'nodeID': fromraw, 'time': rectime, 'battery': device_metrics.get('batteryLevel', 0), 'voltage': round(device_metrics.get('voltage', 0.00),2), 'utilization': round(device_metrics.get('channelUtilization', 0.00),2), 'airutiltx': round(device_metrics.get('airUtilTx', 0.00),2)})
                     power_metrics = telemetry.get('powerMetrics', {})
                     if power_metrics:
                         text_raws += '\n' + (' ' * 11) + 'CH1 Voltage: ' + str(round(power_metrics.get('ch1_voltage', 'N/A'),2)) + 'v'
@@ -328,7 +335,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_raws += ' Humidity: ' + str(round(environment_metrics.get('relativeHumidity', 0.0),1)) + '%'
                         text_raws += ' Pressure: ' + str(round(environment_metrics.get('barometricPressure', 0.00),2)) + 'hPa'
                         if 'temperature' in environment_metrics or 'relativeHumidity' in environment_metrics or 'barometricPressure' in environment_metrics:
-                            environment_log.append({'nodeID': fromraw, 'time': tnow, 'temperature': round(environment_metrics.get('temperature', 0.0),2), 'humidity': round(environment_metrics.get('relativeHumidity', 0.0),2), 'pressure': round(environment_metrics.get('barometricPressure', 0.00),2)})
+                            environment_log.append({'nodeID': fromraw, 'time': rectime, 'temperature': round(environment_metrics.get('temperature', 0.0),2), 'humidity': round(environment_metrics.get('relativeHumidity', 0.0),2), 'pressure': round(environment_metrics.get('barometricPressure', 0.00),2)})
                     localstats_metrics = telemetry.get('localStats', {})
                     if localstats_metrics:
                         text_raws += '\n' + (' ' * 11) + 'PacketsTx: ' + str(localstats_metrics.get('numPacketsTx', 0))
@@ -387,12 +394,12 @@ def on_meshtastic_message(packet, interface, loop=None):
                     last_position = get_last_position(movement_log, fromraw)
                     if last_position and 'latitude' in position and 'longitude' in position:
                         if last_position['latitude'] != nodelat or last_position['longitude'] != nodelon:
-                            movement_log.append({'nodeID': fromraw, 'time': tnow, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
+                            movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                             if fromraw in MapMarkers:
                                 MapMarkers[fromraw][5] = 0
                             text_msgs += ' (Moved!)'
                     if not last_position and 'latitude' in position and 'longitude' in position:
-                        movement_log.append({'nodeID': fromraw, 'time': tnow, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
+                        movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                 text_raws = text_msgs
             elif data["portnum"] == "NODEINFO_APP":
                 node_info = packet['decoded'].get('user', {})
@@ -687,21 +694,6 @@ def LatLon2qth(latitude, longitude):
             lat = 10 * b[1]
     return locator
 
-def locator2deg(locator):
-    if len(locator) == 6:
-        locator += "55AA"
-    if len(locator) == 7:
-        locator += "LL"
-
-    loca = [ord(char) - 65 for char in locator]
-    loca[2] += 17
-    loca[3] += 17
-    loca[6] += 17
-    loca[7] += 17
-    lon = (loca[0] * 20 + loca[2] * 2 + loca[4] / 12 + loca[6] / 120 + loca[8] / 2880 - 180)
-    lat = (loca[1] * 10 + loca[3] + loca[5] / 24 + loca[7] / 240 + loca[9] / 5760 - 90)
-    return {'latitude': lat, 'longitude': lon}
-
 def calc_gc(end_lat, end_long, start_lat, start_long):
     start_lat = math.radians(start_lat)
     start_long = math.radians(start_long)
@@ -721,12 +713,7 @@ def calc_gc(end_lat, end_long, start_lat, start_long):
 
     return f"{round(EARTH_R*c,1)}Km"
 
-def is_hour_between(start, end):
-    now = datetime.now().hour
-    is_between = False
-    is_between |= start <= now <= end
-    is_between |= end < start and (start <= now or now <= end)
-    return is_between
+#-------------------------------------------------------------- Plot Functions ---------------------------------------------------------------------------
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -786,14 +773,15 @@ def plot_movment_curve(movement_log, node_id, frame, width=512, height=128):
     plt.rcParams["font.size"] = 7
 
     positions = get_data_for_node(movement_log, node_id)
+    print(yaml.dump(positions))
     times = [entry['time'] for entry in positions]
     altitudes = [entry['altitude'] for entry in positions]
     dates = [datetime.fromtimestamp(time) for time in times]
     
     fig, ax = plt.subplots(figsize=(width/100, height/100))
-    fig.patch.set_facecolor('#242424')  # Set background color
-    ax.set_facecolor('#242424')  # Set plot area background color
-    ax.plot(dates, altitudes, marker='.', linestyle='-', color='r')  # Set plot line color
+    fig.patch.set_facecolor('#242424')
+    ax.set_facecolor('#242424')
+    ax.plot(dates, altitudes, marker='.', linestyle='-', color='#02bae8')
 
     ax.title.set_color('white')
     ax.xaxis.label.set_color('white')
@@ -801,8 +789,8 @@ def plot_movment_curve(movement_log, node_id, frame, width=512, height=128):
     ax.tick_params(axis='x', colors='white')
     ax.tick_params(axis='y', colors='white')
     ax.set(frame_on=False)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-    ax.xaxis.set_major_locator(mdates.HourLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=30))
     ax.set_title('Ascent and Descent in meters')
     ax.grid(True, color='#444444')
 
@@ -1061,7 +1049,7 @@ if __name__ == "__main__":
 
     # Function to update the middle frame with the last 30 active nodes
     def update_active_nodes():
-        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send, movement_log
+        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send, movement_log, metrics_log
         # Timer for Send Requests
         if ok2Send != 0:
             ok2Send -= 1
@@ -1179,9 +1167,13 @@ if __name__ == "__main__":
         if tnow > tlast + 900:
             tlast = tnow
             updatesnodes()
-            remove_old_nodedata(movement_log, minutes = 720) # delete after 12 hours
-            remove_old_nodedata(metrics_log, minutes = 1440) # delete after 24 hours
-            remove_old_nodedata(environment_log, minutes = 1440) # delete after 24 hours
+
+            cutoff_time = tnow - map_trail_age
+            movement_log[:] = [entry for entry in movement_log if not (entry['time'] < cutoff_time)]
+            cutoff_time = tnow - metrics_age
+            metrics_log[:] = [entry for entry in metrics_log if not (entry['time'] < cutoff_time)]
+            environment_log[:] = [entry for entry in environment_log if not (entry['time'] < cutoff_time)]
+
             safedatabase()
             print('Saved Databases')
             gc.collect()
