@@ -702,37 +702,31 @@ def is_hour_between(start, end):
     is_between |= end < start and (start <= now or now <= end)
     return is_between
 
-
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
-# Assuming the movement_log is already populated with the required data
-# movement_log = [{'nodeID': '1', 'time': 1698163200, 'latitude': 10.0, 'longitude': 20.0, 'altitude': 1000}, ...]
-def plot_balloon_curve(movement_log, node_id, frame , width=412, height=183):
-    # plt.rcParams["font.family"] = "Fixedsys"
+def plot_balloon_curve(movement_log, node_id, frame, width=412, height=183):
     plt.rcParams["font.size"] = 8
 
-    # Extract times and altitudes from the log
     positions = get_positions_for_node(movement_log, node_id)
-
     times = [entry['time'] for entry in positions]
     altitudes = [entry['altitude'] for entry in positions]
-    
-    # Convert epoch times to datetime for better readability
     dates = [datetime.fromtimestamp(time) for time in times]
     
-    # Create the plot
     fig, ax = plt.subplots(figsize=(width/100, height/100))
-    ax.plot(dates, altitudes, marker='o', linestyle='-', color='b')
-    
-    # Add labels and title
+    fig.patch.set_facecolor('#242424')  # Set background color
+    ax.set_facecolor('#242424')  # Set plot area background color
+    ax.plot(dates, altitudes, marker='.', linestyle='-', color='r')  # Set plot line color
+
+    ax.title.set_color('white')
+    ax.xaxis.label.set_color('white')
+    ax.yaxis.label.set_color('white')
+    ax.tick_params(axis='x', colors='white')
+    ax.tick_params(axis='y', colors='white')
+
     ax.set_title('Ascent and Descent over Time')
-    ax.grid(True)
+    ax.grid(True, color='#444444')
 
-    # Adjust layout to fit nicely
     fig.tight_layout()
-
-    # Create a canvas and embed the plot in the Tkinter frame
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
     canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
