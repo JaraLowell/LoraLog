@@ -722,6 +722,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+plt.switch_backend('agg') # No clue why we even need this
+
 def plot_metrics_log(metrics_log, node_id, frame , width=512, height=248):
     plt.rcParams["font.size"] = 7
     metrics = get_data_for_node(metrics_log, node_id)
@@ -959,6 +961,11 @@ if __name__ == "__main__":
             meshtastic_client.sendTraceRoute(dest=nodeid, hopLimit=7, channelIndex=0)
         except Exception as e:
             print(f"Error sending Traceroute: {e}")
+    def close_overlay():
+        global overlay
+        overlay.destroy()
+        overlay = None
+        plt.close('all')
 
     # Hadnle the buttons
     def buttonpress(info, nodeid):
@@ -998,6 +1005,8 @@ if __name__ == "__main__":
         playsound('Data' + os.path.sep + 'Button.mp3')
         if overlay is not None:
             overlay.destroy()
+            overlay = None
+            plt.close('all')
 
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
@@ -1035,13 +1044,6 @@ if __name__ == "__main__":
             text_loc += 'HopsAway  : ' + str(LoraDB[marker.data][12]) + '\n'
         insert_colored_text(info_label, text_loc, "#d1d1d1")
 
-        # if we have mmetrics data, plot it just need ponder, 24 hours, 3 days or a week ... via config perhaps
-        # + Device Metrics (Battery Level, Channel Utilization and Air Util TX)
-        # + Environment Metrics (Temperature, Humidity, Pressure)
-        # + Power Metrics (Channel 1, 2 and 3) tough we realy need this ?
-
-        plt.close('all')
-
         if count_entries_for_node(metrics_log, marker.data) > 1:
             plot_metrics_log(metrics_log, marker.data, overlay)
 
@@ -1071,7 +1073,7 @@ if __name__ == "__main__":
         button4 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 4 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text=" ", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button4.pack(side=tk.LEFT, padx=1)
 
-        button5 = tk.Button(button_frame2, image=btn_img, command=overlay.destroy, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button5 = tk.Button(button_frame2, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button5.pack(side=tk.LEFT, padx=1)
 
         button6 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 6 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text=" ", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
