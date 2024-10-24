@@ -101,6 +101,9 @@ def get_first_position(database, nodeID):
             return entry
     return None
 
+def count_entries_for_node(database, nodeID):
+    return len([entry for entry in database if entry['nodeID'] == nodeID])
+
 def get_data_for_node(database, nodeID):
     positions = [entry for entry in database if entry['nodeID'] == nodeID]
     return positions
@@ -718,8 +721,9 @@ def calc_gc(end_lat, end_long, start_lat, start_long):
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.ticker import LinearLocator
 
-def plot_metrics_log(metrics_log, node_id, frame , width=512, height=256):
+def plot_metrics_log(metrics_log, node_id, frame , width=512, height=248):
     plt.rcParams["font.size"] = 7
     metrics = get_data_for_node(metrics_log, node_id)
     times = [datetime.fromtimestamp(entry['time']) for entry in metrics]
@@ -750,7 +754,7 @@ def plot_metrics_log(metrics_log, node_id, frame , width=512, height=256):
     axs[1, 0].set_ylabel(None)
     axs[1, 0].grid(True, color='#444444')
     # Plot Air Utilization TX
-    axs[1, 1].plot(times, airutiltxs, label='Air Utilization TX', color='red')
+    axs[1, 1].plot(times, airutiltxs, label='Air Utilization TX', color='#ee0000')
     axs[1, 1].set_title('Air Utilization TX %')
     axs[1, 1].set_xlabel(None)
     axs[1, 1].set_ylabel(None)
@@ -764,6 +768,41 @@ def plot_metrics_log(metrics_log, node_id, frame , width=512, height=256):
         ax.tick_params(axis='x', colors='white')
         ax.tick_params(axis='y', colors='white')
         ax.set(frame_on=False)
+    fig.tight_layout()
+    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+def plot_environment_log(metrics_log, node_id, frame , width=512, height=248):
+    metrics = get_data_for_node(metrics_log, node_id)
+    times = [datetime.fromtimestamp(entry['time']) for entry in metrics]
+    temperatures = [entry['temperature'] for entry in metrics]
+    humidities = [entry['humidity'] for entry in metrics]
+    pressures = [round(entry['pressure'],1) for entry in metrics]
+
+    fig, ax1 = plt.subplots(figsize=(width/100, height/100))
+    fig.patch.set_facecolor('#242424')  # Set background color
+
+    ax1.set_facecolor('#242424')  # Set plot area background color
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
+    ax1.xaxis.set_major_locator(mdates.HourLocator())
+    # ax1.set_ylabel('Temperature (°C) / Humidity (%)', color='white')  # Set y-axis label color to white
+    ax1.plot(times, temperatures, 'r-', label='Temperature (°C)')
+    ax1.plot(times, humidities, '#02bae8', label='Humidity (%)')
+    ax1.tick_params(axis='y', labelcolor='white', colors='white')
+    ax1.tick_params(axis='x', colors='white')
+    ax1.grid(True, color='#444444')
+    ax1.set(frame_on=False)
+
+    ax2 = ax1.twinx()
+    ax2.set_facecolor('#242424')  # Set plot area background color
+    # ax2.set_ylabel('Pressure (hPa)', color='white')  # Set y-axis label color to white
+    ax2.plot(times, pressures, '#00c983', label='Pressure (hPa)')
+    ax2.tick_params(axis='y', labelcolor='white', colors='white')  # Set y-axis tick labels to white
+    ax2.grid(True, color='#242424ff')
+    ax2.set(frame_on=False)
+
+    fig.legend(loc='upper center', ncol=3, facecolor='#242424', edgecolor='#242424', labelcolor='linecolor')
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
@@ -1006,11 +1045,13 @@ if __name__ == "__main__":
 
         plt.close('all')
 
-        if node_id_exists(metrics_log, marker.data):
+        if count_entries_for_node(metrics_log, marker.data) > 1:
             plot_metrics_log(metrics_log, marker.data, overlay)
 
-        # If we have movement data, make height plot
-        if MapMarkers[marker.data][4] != None:
+        if count_entries_for_node(environment_log, marker.data) > 1:
+            plot_environment_log(environment_log, marker.data, overlay)
+
+        if count_entries_for_node(movement_log, marker.data) > 1:
             plot_movment_curve(movement_log, marker.data, overlay)
 
         # Create a frame to hold the buttons
