@@ -242,7 +242,7 @@ def logLora(nodeID, info):
     if nodeID in LoraDB:
         LoraDB[nodeID][0] = tnow # time last seen
     else:
-        LoraDB[nodeID] = [tnow, '', '', -8.0, -8.0, 0, '', '', tnow, '', '', '',-1]
+        LoraDB[nodeID] = [tnow, str(nodeID)[-4:], '', -8.0, -8.0, 0, '', '', tnow, '', '', '',-1]
         text_box3.image_create("end", image=hr_img)
         insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + nodeID + "]\n", "#c24400")
 
@@ -292,7 +292,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if LoraDB[text_from][1] != '':
                     text_from = LoraDB[text_from][1] + " (" + LoraDB[text_from][2] + ")"
             else:
-                LoraDB[text_from] = [tnow, '', '', -8.0, -8.0, 0, '', '', tnow, '', '', '', -1]
+                LoraDB[text_from] = [tnow, str(text_from)[-4:], '', -8.0, -8.0, 0, '', '', tnow, '', '', '', -1]
                 text_box3.image_create("end", image=hr_img)
                 insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + text_from + "]\n", "#c24400")
                 playsound('Data' + os.path.sep + 'NewNode.mp3')
@@ -611,11 +611,10 @@ def updatesnodes():
                 if "lastHeard" in info and info["lastHeard"] is not None: nodeLast = info['lastHeard']
 
                 if nodeID not in LoraDB:
-                    LoraDB[nodeID] = [nodeLast, '', '', -8.0, -8.0, 0, '', '', tnow, '', '', '',-1]
+                    LoraDB[nodeID] = [nodeLast, str(nodeID)[-4:], '', -8.0, -8.0, 0, '', '', tnow, '', '', '',-1]
                     text_box3.image_create("end", image=hr_img)
                     insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + nodeID + "]\n", "#c24400")
 
-                # New node?
                 if "shortName" in tmp and "longName" in tmp:
                     lora_sn = str(tmp['shortName'].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "")
                     lora_ln = str(tmp['longName'].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "")
@@ -722,19 +721,20 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-plt.switch_backend('agg') # No clue why we even need this
+plt.switch_backend('TkAgg') # No clue why we even need this
+plt.rcParams["font.family"] = 'sans-serif'
+plt.rcParams["font.size"] = 7
 
-def average_metrics(metrics_log, local_node_id):
-    local_logs = [entry for entry in metrics_log if entry['nodeID'] == local_node_id]
-    avarage_over = 10
+def average_metrics(metrics_log, node_id):
+    avarage_over = int(max(1, len(metrics_log) // 10) / 5)
     averaged_local_logs = []
-    for i in range(0, len(local_logs), avarage_over):
-        chunk = local_logs[i:i+avarage_over]
+    for i in range(0, len(metrics_log), avarage_over):
+        chunk = metrics_log[i:i+avarage_over]
         if len(chunk) < avarage_over:
             averaged_local_logs.extend(chunk)
         else:
             averaged_log = {
-                'nodeID': local_node_id,
+                'nodeID': node_id,
                 'time': chunk[0]['time'],  # Take the time of the first entry in the chunk
                 'battery': sum(entry['battery'] for entry in chunk) / avarage_over,
                 'voltage': sum(entry['voltage'] for entry in chunk) / avarage_over,
@@ -744,13 +744,12 @@ def average_metrics(metrics_log, local_node_id):
             averaged_local_logs.append(averaged_log)
     return averaged_local_logs
 
-def plot_metrics_log(metrics_log, node_id, frame , width=512, height=248):
+def plot_metrics_log(metrics_log, node_id, frame , width=512, height=242):
     global MyLora
-    plt.rcParams["font.size"] = 7
     metrics = get_data_for_node(metrics_log, node_id)
-    if MyLora == node_id and len(metrics) > 360:
-        # Average local node logs (we send 10x more logs than other nodes)
-        metrics = average_metrics(metrics, MyLora)
+    if len(metrics) > 200:
+        # Average node logs if there are too many (usualy happens after like 14 hours of data collected)
+        metrics = average_metrics(metrics, node_id)
     times = [datetime.fromtimestamp(entry['time']) for entry in metrics]
     battery_levels = [entry['battery'] for entry in metrics]
     voltages = [entry['voltage'] for entry in metrics]
@@ -803,8 +802,9 @@ def plot_metrics_log(metrics_log, node_id, frame , width=512, height=248):
     canvas.draw()
     canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-def plot_environment_log(metrics_log, node_id, frame , width=512, height=248):
+def plot_environment_log(metrics_log, node_id, frame , width=512, height=242):
     metrics = get_data_for_node(metrics_log, node_id)
+    # we might need to Average node logs if there are too many here to as we do for metrics,. but that for later
     times = [datetime.fromtimestamp(entry['time']) for entry in metrics]
     temperatures = [entry['temperature'] for entry in metrics]
     humidities = [entry['humidity'] for entry in metrics]
@@ -821,7 +821,7 @@ def plot_environment_log(metrics_log, node_id, frame , width=512, height=248):
         ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
     else:
         ax1.xaxis.set_major_locator(mdates.HourLocator())
-    ax1.plot(times, temperatures, 'r-', label='Temperature (°C)')
+    ax1.plot(times, temperatures, '#c9a500', label='Temperature (°C)')
     ax1.plot(times, humidities, '#02bae8', label='Humidity (%)')
     ax1.tick_params(axis='y', labelcolor='white', colors='white')
     ax1.tick_params(axis='x', colors='white')
@@ -842,8 +842,6 @@ def plot_environment_log(metrics_log, node_id, frame , width=512, height=248):
     canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
 def plot_movment_curve(movement_log, node_id, frame, width=512, height=128):
-    plt.rcParams["font.size"] = 7
-
     positions = get_data_for_node(movement_log, node_id)
 
     times = [entry['time'] for entry in positions]
@@ -1150,6 +1148,10 @@ if __name__ == "__main__":
 
             if LoraDB[node_id][8] == 0: LoraDB[node_id][8] = LoraDB[node_id][0] # Fix for first seen being 0 on old DBs
             if '.' not in LoraDB[node_id][9]: LoraDB[node_id][9] = '' # Fix for old DBs with no power info
+
+            if LoraDB[node_id][1] == '':
+                LoraDB[node_id][1] = str(nodeID)[-4:]
+                print(f"Node {node_id} has no name, setting to {LoraDB[node_id][1]}")
 
             if tnow - node_time >= map_oldnode and node_id != MyLora:
                 if node_id in MapMarkers:
