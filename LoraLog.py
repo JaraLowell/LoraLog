@@ -1150,7 +1150,7 @@ if __name__ == "__main__":
             if '.' not in LoraDB[node_id][9]: LoraDB[node_id][9] = '' # Fix for old DBs with no power info
 
             if LoraDB[node_id][1] == '':
-                LoraDB[node_id][1] = str(nodeID)[-4:]
+                LoraDB[node_id][1] = str(node_id)[-4:]
                 print(f"Node {node_id} has no name, setting to {LoraDB[node_id][1]}")
 
             if tnow - node_time >= map_oldnode and node_id != MyLora:
