@@ -724,15 +724,41 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 plt.switch_backend('agg') # No clue why we even need this
 
+def average_metrics(metrics_log, local_node_id):
+    local_logs = [entry for entry in metrics_log if entry['nodeID'] == local_node_id]
+    avarage_over = 10
+    averaged_local_logs = []
+    for i in range(0, len(local_logs), avarage_over):
+        chunk = local_logs[i:i+avarage_over]
+        if len(chunk) < avarage_over:
+            averaged_local_logs.extend(chunk)
+        else:
+            averaged_log = {
+                'nodeID': local_node_id,
+                'time': chunk[0]['time'],  # Take the time of the first entry in the chunk
+                'battery': sum(entry['battery'] for entry in chunk) / avarage_over,
+                'voltage': sum(entry['voltage'] for entry in chunk) / avarage_over,
+                'utilization': sum(entry['utilization'] for entry in chunk) / avarage_over,
+                'airutiltx': sum(entry['airutiltx'] for entry in chunk) / avarage_over
+            }
+            averaged_local_logs.append(averaged_log)
+    return averaged_local_logs
+
 def plot_metrics_log(metrics_log, node_id, frame , width=512, height=248):
+    global MyLora
     plt.rcParams["font.size"] = 7
     metrics = get_data_for_node(metrics_log, node_id)
+    if MyLora == node_id and len(metrics) > 360:
+        # Average local node logs (we send 10x more logs than other nodes)
+        metrics = average_metrics(metrics, MyLora)
     times = [datetime.fromtimestamp(entry['time']) for entry in metrics]
     battery_levels = [entry['battery'] for entry in metrics]
     voltages = [entry['voltage'] for entry in metrics]
     utilizations = [entry['utilization'] for entry in metrics]
     airutiltxs = [entry['airutiltx'] for entry in metrics]
-
+    total_hours = 0
+    if len(times) > 1:
+        total_hours = (times[-1] - times[0]).total_seconds() / 3600
     fig, axs = plt.subplots(2, 2, figsize=(width/100, height/100))
     fig.patch.set_facecolor('#242424')
 
@@ -763,7 +789,10 @@ def plot_metrics_log(metrics_log, node_id, frame , width=512, height=248):
     for ax in axs.flat:
         ax.set_facecolor('#242424')
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-        ax.xaxis.set_major_locator(mdates.HourLocator())
+        if total_hours > 11:
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+        else:
+            ax.xaxis.set_major_locator(mdates.HourLocator())
         ax.title.set_color('white')
         ax.xaxis.label.set_color('white')
         ax.tick_params(axis='x', colors='white')
@@ -780,13 +809,18 @@ def plot_environment_log(metrics_log, node_id, frame , width=512, height=248):
     temperatures = [entry['temperature'] for entry in metrics]
     humidities = [entry['humidity'] for entry in metrics]
     pressures = [round(entry['pressure'],1) for entry in metrics]
-
+    total_hours = 0
+    if len(times) > 1:
+        total_hours = (times[-1] - times[0]).total_seconds() / 3600
     fig, ax1 = plt.subplots(figsize=(width/100, height/100))
     fig.patch.set_facecolor('#242424')
 
     ax1.set_facecolor('#242424')
     ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-    ax1.xaxis.set_major_locator(mdates.HourLocator())
+    if total_hours > 11:
+        ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+    else:
+        ax1.xaxis.set_major_locator(mdates.HourLocator())
     ax1.plot(times, temperatures, 'r-', label='Temperature (°C)')
     ax1.plot(times, humidities, '#02bae8', label='Humidity (%)')
     ax1.tick_params(axis='y', labelcolor='white', colors='white')
