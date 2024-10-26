@@ -55,13 +55,19 @@ tlast = int(time.time())
 
 # Function to insert colored text
 def insert_colored_text(text_widget, text, color, center=False):
+    parent_frame = str(text_widget.winfo_parent())
+    if "frame5" not in parent_frame:
+        text_widget.configure(state="normal")
+        if color == '#d1d1d1' or color == '#c24400':
+            text_widget.image_create("end", image=hr_img)
     text_widget.tag_configure(color, foreground=color)
     text_widget.insert(tk.END, text, color)
     if center:
         text_widget.tag_configure("center", justify='center')
         text_widget.tag_add("center", "1.0", "end")
-    if ".frame5" not in str(text_widget):
+    if "!frame5" not in parent_frame:
         text_widget.see(tk.END)
+        text_widget.configure(state="disabled")
 
 #------------------------------------------------------------- Movment Tracker --------------------------------------------------------------------------
 movement_log    = [] # movement_log = [{'nodeID': '1', 'time': 1698163200, 'latitude': 10.0, 'longitude': 20.0, 'altitude': 1000}, ...]
@@ -242,8 +248,7 @@ def logLora(nodeID, info):
     if nodeID in LoraDB:
         LoraDB[nodeID][0] = tnow # time last seen
     else:
-        LoraDB[nodeID] = [tnow, str(nodeID)[-4:], '', -8.0, -8.0, 0, '', '', tnow, '', '', '',-1]
-        text_box3.image_create("end", image=hr_img)
+        LoraDB[nodeID] = [tnow, nodeID[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '',-1]
         insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + nodeID + "]\n", "#c24400")
 
     if info[0] == 'NODEINFO_APP':
@@ -269,7 +274,7 @@ def idToHex(nodeId):
 
 def on_meshtastic_message(packet, interface, loop=None):
     # print(yaml.dump(packet))
-    global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log
+    global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log, updatelist
     ischat = False
     tnow = int(time.time())
     rectime = tnow
@@ -292,8 +297,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if LoraDB[text_from][1] != '':
                     text_from = LoraDB[text_from][1] + " (" + LoraDB[text_from][2] + ")"
             else:
-                LoraDB[text_from] = [tnow, str(text_from)[-4:], '', -8.0, -8.0, 0, '', '', tnow, '', '', '', -1]
-                text_box3.image_create("end", image=hr_img)
+                LoraDB[text_from] = [tnow, text_from[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '', -1]
                 insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + text_from + "]\n", "#c24400")
                 playsound('Data' + os.path.sep + 'NewNode.mp3')
 
@@ -551,10 +555,8 @@ def on_meshtastic_message(packet, interface, loop=None):
             text_from = html.unescape(text_from)
             text_raws = html.unescape(text_raws)
             if text_raws != '' and MyLora != fromraw:
-                text_box1.image_create("end", image=hr_img)
                 insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1")
                 if ischat == True:
-                    text_box3.image_create("end", image=hr_img)
                     insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1")
                 if viaMqtt == True:
                     insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
@@ -574,15 +576,12 @@ def on_meshtastic_message(packet, interface, loop=None):
                     if ischat == True:
                         insert_colored_text(text_box3, (' ' * 11) + '[' + text_chns +'] ' + text_raws + '\n', "#02bae8")
             elif text_raws != '' and MyLora == fromraw:
-                text_box2.image_create("end", image=hr_img)
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
             else:
-                text_box1.image_create("end", image=hr_img)
                 insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1")
         else:
             print("No fromId in packet")
-            text_box1.image_create("end", image=hr_img)
             insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] No fromId in packet\n', "#c24400")
     else:
         if text_from != '':
@@ -591,7 +590,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_from = LoraDB[text_from][1] + " (" + LoraDB[text_from][2] + ") [!" + text_from + "]"
             else:
                 text_from = "Unknown Node [!" + text_from + "]"
-        text_box1.image_create("end", image=hr_img)                
         insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] Encrypted packet from ' + text_from + '\n', "#c24400")
 
 def updatesnodes():
@@ -605,47 +603,47 @@ def updatesnodes():
             if "id" in tmp and tmp['id'] != '':
                 # Only push to DB if we actually get a node ID
                 nodeID = str(tmp['id'])[1:]
-                nodeLast = tnow
-                itmp = itmp + 1
+                if nodeID != '':
+                    nodeLast = tnow
+                    itmp = itmp + 1
 
-                if "lastHeard" in info and info["lastHeard"] is not None: nodeLast = info['lastHeard']
+                    if "lastHeard" in info and info["lastHeard"] is not None: nodeLast = info['lastHeard']
 
-                if nodeID not in LoraDB:
-                    LoraDB[nodeID] = [nodeLast, str(nodeID)[-4:], '', -8.0, -8.0, 0, '', '', tnow, '', '', '',-1]
-                    text_box3.image_create("end", image=hr_img)
-                    insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + nodeID + "]\n", "#c24400")
+                    if nodeID not in LoraDB:
+                        LoraDB[nodeID] = [nodeLast, nodeID[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '',-1]
+                        insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged [!" + nodeID + "]\n", "#c24400")
 
-                if "shortName" in tmp and "longName" in tmp:
-                    lora_sn = str(tmp['shortName'].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "")
-                    lora_ln = str(tmp['longName'].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "")
-                    if lora_sn in lora_ln and "Meshtastic" in lora_ln:
-                        if LoraDB[nodeID][1] == '': LoraDB[nodeID][1] = lora_ln
-                        if LoraDB[nodeID][2] == '': LoraDB[nodeID][2] = lora_ln
-                    else:
-                        LoraDB[nodeID][1] = lora_sn
-                        LoraDB[nodeID][2] = lora_ln
-                if "macaddr" in tmp: LoraDB[nodeID][6] = str(tmp['macaddr'])
-                if "hwModel" in tmp: LoraDB[nodeID][7] = str(tmp['hwModel'])
-                LoraDB[nodeID][12] = -1
-                if "hopsAway" in info: LoraDB[nodeID][12] = info['hopsAway']
+                    if "shortName" in tmp and "longName" in tmp:
+                        lora_sn = str(tmp['shortName'].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "")
+                        lora_ln = str(tmp['longName'].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "")
+                        if lora_sn in lora_ln and "Meshtastic" in lora_ln:
+                            if LoraDB[nodeID][1] == '': LoraDB[nodeID][1] = lora_ln
+                            if LoraDB[nodeID][2] == '': LoraDB[nodeID][2] = lora_ln
+                        else:
+                            LoraDB[nodeID][1] = lora_sn
+                            LoraDB[nodeID][2] = lora_ln
+                    if "macaddr" in tmp: LoraDB[nodeID][6] = str(tmp['macaddr'])
+                    if "hwModel" in tmp: LoraDB[nodeID][7] = str(tmp['hwModel'])
+                    LoraDB[nodeID][12] = -1
+                    if "hopsAway" in info: LoraDB[nodeID][12] = info['hopsAway']
 
-                if "position" in info:
-                    tmp2 = info['position']
-                    if "latitude" in tmp2 and "longitude" in tmp2:
-                        LoraDB[nodeID][3] = tmp2['latitude']
-                        LoraDB[nodeID][4] = tmp2['longitude']
-                    if "altitude" in tmp:
-                        LoraDB[nodeID][5] = tmp['altitude']
-                    
-                    if nodeID == MyLora:
-                        if MyLora not in MapMarkers:
-                            MapMarkers[MyLora] = [None, False, nodeLast, None, None, 0]
-                            MapMarkers[MyLora][0] = mapview.set_marker(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6), text=html.unescape(LoraDB[MyLora][1]), icon = tk_icon, text_color = '#00c983', font = ('Fixedsys', 8), data=MyLora, command = click_command)
-                            mapview.set_position(round(LoraDB[nodeID][3],6), round(LoraDB[nodeID][4],6))
-                            mapview.set_zoom(11)
+                    if "position" in info:
+                        tmp2 = info['position']
+                        if "latitude" in tmp2 and "longitude" in tmp2:
+                            LoraDB[nodeID][3] = tmp2['latitude']
+                            LoraDB[nodeID][4] = tmp2['longitude']
+                        if "altitude" in tmp:
+                            LoraDB[nodeID][5] = tmp['altitude']
+                        
+                        if nodeID == MyLora:
+                            if MyLora not in MapMarkers:
+                                MapMarkers[MyLora] = [None, False, nodeLast, None, None, 0]
+                                MapMarkers[MyLora][0] = mapview.set_marker(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6), text=html.unescape(LoraDB[MyLora][1]), icon = tk_icon, text_color = '#00c983', font = ('Fixedsys', 8), data=MyLora, command = click_command)
+                                mapview.set_position(round(LoraDB[nodeID][3],6), round(LoraDB[nodeID][4],6))
+                                mapview.set_zoom(11)
 
-                if "viaMqtt" in info: LoraDB[nodeID][10] = ' via mqtt'
-                if "snr" in info and info['snr'] is not None: LoraDB[nodeID][11] = str(info['snr']) + 'dB'
+                    if "viaMqtt" in info: LoraDB[nodeID][10] = ' via mqtt'
+                    if "snr" in info and info['snr'] is not None: LoraDB[nodeID][11] = str(info['snr']) + 'dB'
 
 #-------------------------------------------------------------- Side Functions ---------------------------------------------------------------------------
 
@@ -907,7 +905,6 @@ if __name__ == "__main__":
         if text2send != '':
             meshtastic_client.sendText(text2send)
             text_from = LoraDB[MyLora][1] + " (" + LoraDB[MyLora][2] + ")"
-            text_box3.image_create("end", image=hr_img)
             insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
             insert_colored_text(text_box3, (' ' * 11) + '[' + str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii') +'] ' + text2send + '\n', "#02bae8")
             my_msg.set("")
@@ -1008,25 +1005,21 @@ if __name__ == "__main__":
             ok2Send = 15
             node_id = '!' + str(nodeid)
             if info == 'ReqInfo':
-                text_box2.image_create("end", image=hr_img)
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Telemetry sending Telemetry request\n", "#02bae8")
                 telemetry_thread = threading.Thread(target=send_telemetry, args=(node_id,))
                 telemetry_thread.start()
             elif info == 'ReqPos':
-                text_box2.image_create("end", image=hr_img)
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Position sending Position request\n", "#02bae8")
                 position_thread = threading.Thread(target=send_position, args=(node_id,))
                 position_thread.start()
             elif info == 'ReqTrace':
-                text_box2.image_create("end", image=hr_img)
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node TraceRoute sending Trace Route request\n", "#02bae8")
                 trace_thread = threading.Thread(target=send_trace, args=(node_id,))
                 trace_thread.start()
         else:
-            text_box2.image_create("end", image=hr_img)
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + html.unescape(text_from) + "\n", "#d1d1d1")
             insert_colored_text(text_box2, (' ' * 11) + "Please wait before the next request, 30 secconds inbetween requests\n", "#02bae8")
 
@@ -1122,52 +1115,51 @@ if __name__ == "__main__":
     # Function to update the middle frame with the last 30 active nodes
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send, movement_log, metrics_log
-        # Timer for Send Requests
+        start = time.time()
+
         if ok2Send != 0:
             ok2Send -= 1
             if ok2Send < 0: ok2Send = 0
 
+        text_box_middle.configure(state="normal")
         current_view = text_box_middle.yview()
 
-        # Sort the nodes by last seen time
-        sorted_nodes = sorted(LoraDB.items(), key=lambda item: item[1][0], reverse=True)[:30]
+        sorted_nodes = sorted(LoraDB.items(), key=lambda item: item[1][0], reverse=True)
         text_box_middle.delete("1.0", tk.END)
+
         insert_colored_text(text_box_middle, "\n " + LoraDB[MyLora][1] + "\n", "#da0000")
         if MyLoraText1 != '':
-            insert_colored_text(text_box_middle, MyLoraText1, "#d1d1d1")
+            insert_colored_text(text_box_middle, MyLoraText1, "#c1c1c1")
         if MyLoraText2 != '':
-            insert_colored_text(text_box_middle, MyLoraText2, "#d1d1d1")
+            insert_colored_text(text_box_middle, MyLoraText2, "#c1c1c1")
         text_box_middle.mark_set(LoraDB[MyLora][1], "1.0")
         tnow = int(time.time())
         for node_id, node_info in sorted_nodes:
             node_time = node_info[0]
 
-            if LoraDB[node_id][3] == 81.0 and LoraDB[node_id][4] == 186.0: # Fix for old DBs with no position info
-                LoraDB[node_id][3] = -8.0
-                LoraDB[node_id][4] = -8.0
-
-            if LoraDB[node_id][8] == 0: LoraDB[node_id][8] = LoraDB[node_id][0] # Fix for first seen being 0 on old DBs
-            if '.' not in LoraDB[node_id][9]: LoraDB[node_id][9] = '' # Fix for old DBs with no power info
-
-            if LoraDB[node_id][1] == '':
-                LoraDB[node_id][1] = str(node_id)[-4:]
-                print(f"Node {node_id} has no name, setting to {LoraDB[node_id][1]}")
+            if LoraDB[node_id][1] == '' or LoraDB[node_id][1] == ' ':
+                LoraDB[node_id][1] = node_id[-4:]
+            if LoraDB[node_id][0] == 0:
+                LoraDB[node_id][0] = 1725865749
+            if LoraDB[node_id][8] == 0: 
+                LoraDB[node_id][8] = LoraDB[node_id][0]
+            if 'v' not in LoraDB[node_id][9]:
+                LoraDB[node_id][9] = '0% 0.0v'
 
             if tnow - node_time >= map_oldnode and node_id != MyLora:
                 if node_id in MapMarkers:
-                    if len(MapMarkers[node_id]) > 3 and MapMarkers[node_id][3] is not None:
+                    if MapMarkers[node_id][3] != None:
                         MapMarkers[node_id][3].delete()
-                    MapMarkers[node_id][0].delete()
-                    del MapMarkers[node_id]
                     if MapMarkers[node_id][4] != None:
                         MapMarkers[node_id][4].delete()
-                        MapMarkers[node_id][4] = None
-                    MapMarkers[node_id][5] = False
+                    MapMarkers[node_id][0].delete()
+                    del MapMarkers[node_id]
             elif tnow - node_time >= map_delete and node_id != MyLora:
                 if node_id in MapMarkers:
                     if MapMarkers[node_id][0].text_color != '#6d6d6d':
                         if len(MapMarkers[node_id]) > 3 and MapMarkers[node_id][3] is not None:
                             MapMarkers[node_id][3].delete()
+                            MapMarkers[node_id][3] = None
                         MapMarkers[node_id][0].delete()
                         MapMarkers[node_id][0] = None
                         MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=html.unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
@@ -1218,28 +1210,30 @@ if __name__ == "__main__":
                             MapMarkers[node_id][0].text_color = '#02bae8'
 
             # Draw the movmment trail if MapMarkers[node_id][5] == True
-            if node_id in MapMarkers:
-                last_position = get_last_position(movement_log, node_id)
-                if last_position:
-                    first_position = get_first_position(movement_log, node_id)
+            if node_id in MapMarkers and MapMarkers[node_id][5] == 0:
+                positions = get_data_for_node(movement_log, node_id)
+                if MapMarkers[node_id][4] != None:
+                    MapMarkers[node_id][4].delete()
+                    MapMarkers[node_id][4] = None
+                if len(positions) > 1:
+                    last_position = get_last_position(positions, node_id)
+                    first_position = get_first_position(positions, node_id)
                     checktime = first_position['time'] + last_position['time']
                     if MapMarkers[node_id][5] != checktime:
-                        if MapMarkers[node_id][4] != None:
-                            MapMarkers[node_id][4].delete()
-                            MapMarkers[node_id][4] = None
-                            MapMarkers[node_id][5] = 0
+                        drawline = []
+                        for position in positions:
+                            pos = (position['latitude'], position['longitude'])
+                            drawline.append(pos)
+                        MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
+                        MapMarkers[node_id][5] = checktime
+                        print(f"Drawing trail for {LoraDB[node_id][1]}")
+                else:
+                    MapMarkers[node_id][5] = 1
 
-                        positions = get_data_for_node(movement_log, node_id)
-                        if len(positions) > 1:
-                            drawline = []
-                            for position in positions:
-                                pos = (position['latitude'], position['longitude'])
-                                drawline.append(pos)
-                            MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
-                            MapMarkers[node_id][5] = checktime
-                            print(f"Drawing trail for {LoraDB[node_id][1]}")
-
+        time1 = round((time.time() - start) * 1000, 3)
+        insert_colored_text(text_box_middle, f'\n {time1:.3f} ms', "#9d9d9d")
         text_box_middle.yview_moveto(current_view[0])
+        text_box_middle.configure(state="disabled")
         if tnow > tlast + 900:
             tlast = tnow
             updatesnodes()
