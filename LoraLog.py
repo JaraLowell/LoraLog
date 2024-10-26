@@ -5,6 +5,7 @@ from datetime import datetime
 import sys
 import asyncio
 import gc
+import psutil
 import math
 from unidecode import unidecode
 import configparser
@@ -1195,7 +1196,7 @@ if __name__ == "__main__":
     # Function to update the middle frame with the last 30 active nodes
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send, movement_log, metrics_log
-        start = time.time()
+        start = time.perf_counter()
 
         if ok2Send != 0:
             ok2Send -= 1
@@ -1310,8 +1311,14 @@ if __name__ == "__main__":
                 else:
                     MapMarkers[node_id][5] = 1
 
-        time1 = round((time.time() - start) * 1000, 3)
-        insert_colored_text(text_box_middle, f'\n {time1:.3f} ms', "#9d9d9d")
+        time1 = (time.perf_counter() - start) * 1000
+        insert_colored_text(text_box_middle, f'\n Update: {time1:.3f}ms', "#9d9d9d")
+        tmp2 = threading.active_count()
+        insert_colored_text(text_box_middle, f"\n Threads: {tmp2}", "#9d9d9d")
+        tmp2 = int(psutil.Process(os.getpid()).memory_info().rss)
+        time1 = round(tmp2 / 1024 / 1024 * 100,2) / 100
+        insert_colored_text(text_box_middle, f"\n Mem: {time1:.1}MB", "#9d9d9d")
+
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
         if tnow > tlast + 900:
