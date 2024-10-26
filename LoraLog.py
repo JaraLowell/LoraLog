@@ -59,7 +59,6 @@ def showLink(event):
     idx= event.widget.tag_names("current")[1]
     temp = type('temp', (object,), {})()
     temp.data = idx
-    print(str(idx))
     click_command(temp)
 
 # Function to insert colored text
@@ -918,7 +917,6 @@ def insert_image_to_text(text_widget, image_path, crop_area):
 '''
 
 def has_open_figures():
-    print(str(plt.get_fignums()))
     return bool(plt.get_fignums())
 
 #---------------------------------------------------------------- Start Mains -----------------------------------------------------------------------------
@@ -1081,7 +1079,6 @@ if __name__ == "__main__":
 
         text_from = LoraDB[MyLora][1] + " (" + LoraDB[MyLora][2] + ")"
         if ok2Send == 0:
-            print("Button " + str(info) + " node !" + str(nodeid))
             ok2Send = 15
             node_id = '!' + str(nodeid)
             if info == 'ReqInfo':
