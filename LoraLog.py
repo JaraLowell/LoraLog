@@ -917,6 +917,10 @@ def insert_image_to_text(text_widget, image_path, crop_area):
     # insert_image_to_text(text_widget, image_path, emoticon_area)
 '''
 
+def has_open_figures():
+    print(str(plt.get_fignums()))
+    return bool(plt.get_fignums())
+
 #---------------------------------------------------------------- Start Mains -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -1063,7 +1067,8 @@ if __name__ == "__main__":
         if overlay is not None:
             overlay.destroy()
             overlay = None
-            plt.close('all')
+            if has_open_figures():
+                plt.close('all')
 
     # Hadnle the buttons
     def buttonpress(info, nodeid):
@@ -1106,7 +1111,8 @@ if __name__ == "__main__":
         if overlay is not None:
             overlay.destroy()
             overlay = None
-            plt.close('all')
+            if has_open_figures():
+                plt.close('all')
 
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
@@ -1144,7 +1150,8 @@ if __name__ == "__main__":
         if overlay is not None:
             overlay.destroy()
             overlay = None
-            plt.close('all')
+            if has_open_figures():
+                plt.close('all')
 
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
