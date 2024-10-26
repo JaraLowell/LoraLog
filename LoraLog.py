@@ -74,6 +74,7 @@ movement_log    = [] # movement_log = [{'nodeID': '1', 'time': 1698163200, 'lati
 metrics_log     = [] # metrics_log  = [{'nodeID': '1', 'time': 1698163200, 'battery': 100, 'voltage': 3.7, 'utilization': 0.0, 'airutiltx': 0.0}, ...]
 environment_log = [] # environment  = [{'nodeID': '1', 'time': 1698163200, 'temperature': 1.0, 'humidity': 20.0, 'pressure': 1010.0}, ...]
 LoraDB          = {} # LoraDB       = {'nodeID': [timenow, ShortName, LongName, latitude, longitude, altitude, macaddr, hardware, timefirst, rightbarstats, mmqtt, snr, hops], ...}
+chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
 
 LoraDBPath = 'DataBase' + os.path.sep + 'LoraDB.pkl'
 if os.path.exists(LoraDBPath):
@@ -94,6 +95,11 @@ EnviPath = 'DataBase' + os.path.sep + 'EnviDB.pkl'
 if os.path.exists(EnviPath):
     with open(EnviPath, 'rb') as f:
         environment_log = pickle.load(f)
+
+ChatPath = 'DataBase' + os.path.sep + 'ChatDB.pkl'
+if os.path.exists(ChatPath):
+    with open(ChatPath, 'rb') as f:
+        chat_log = pickle.load(f)
 
 def get_last_position(database, nodeID):
     for entry in reversed(database):
@@ -129,6 +135,9 @@ def safedatabase():
         pickle.dump(metrics_log, f)
     with open(EnviPath, 'wb') as f:
         pickle.dump(environment_log, f)
+    with open(ChatPath, 'wb') as f:
+        pickle.dump(chat_log, f)
+
 
 #----------------------------------------------------------- Meshtastic Lora Con ------------------------------------------------------------------------
 meshtastic_client = None
@@ -928,6 +937,9 @@ if __name__ == "__main__":
     my_msg.set("")
     my_label = tk.StringVar()
     my_label.set("Send a message to channel")
+    my_chat = tk.StringVar()
+    my_chat.set("")
+    chat_input = None
 
     frame = tk.Frame(root, borderwidth=0, highlightthickness=1, highlightcolor="#121212", highlightbackground="#121212")
     frame.grid(row=0, column=0, padx=2, pady=2, sticky='nsew')
@@ -961,9 +973,12 @@ if __name__ == "__main__":
     padding_frame.grid_rowconfigure(1, weight=1)
     padding_frame.grid_columnconfigure(0, weight=1)
 
-    text_box4 = tk.Entry(padding_frame, textvariable=my_msg, width=90, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
-    text_box4.grid(row=4, column=0)
-    text_box4.bind("<Return>", send)
+    text_box4 = tk.Entry(padding_frame, textvariable=my_msg, width=77, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
+    text_box4.grid(row=4, column=0, padx=(1, 0))
+    send_box4 = tk.Button(padding_frame, image=btn_img, command=lambda: send(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+    send_box4.grid(row=4, column=1, padx=(0, 18))
+
+    # text_box4.bind("<Return>", send)
 
     frame_right = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#242424", highlightbackground="#242424", padx=2, pady=2)
     frame_right.grid(row=0, column=1, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
@@ -990,8 +1005,10 @@ if __name__ == "__main__":
             meshtastic_client.sendTraceRoute(dest=nodeid, hopLimit=7, channelIndex=0)
         except Exception as e:
             print(f"Error sending Traceroute: {e}")
+
     def close_overlay():
         global overlay
+        playsound('Data' + os.path.sep + 'Button.mp3')
         overlay.destroy()
         overlay = None
         plt.close('all')
@@ -1024,6 +1041,44 @@ if __name__ == "__main__":
             insert_colored_text(text_box2, (' ' * 11) + "Please wait before the next request, 30 secconds inbetween requests\n", "#02bae8")
 
     overlay = None
+
+    def chatbox(marker):
+        global LoraDB, MyLora, overlay, my_chat, chat_input
+        playsound('Data' + os.path.sep + 'Button.mp3')
+        if overlay is not None:
+            overlay.destroy()
+            overlay = None
+            plt.close('all')
+
+        overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
+        overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
+        chat_label = tk.Label(overlay, text=LoraDB[marker][1] + '\n' + LoraDB[marker][2], font=('Fixedsys', 12), bg='#242424', fg='#02bae8')
+        chat_label.pack(side="top", fill="x", pady=3)
+        chat_box = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=12)
+        chat_box.pack_propagate(False)  # Prevent resizing based on the content
+        chat_box.pack(side="top", fill="both", expand=True, padx=10, pady=3)
+
+        # And here we need use and utalize chat_log
+        # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
+        insert_colored_text(chat_box, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Welcome!\n", "#dddddd")
+
+        chat_input = tk.Entry(overlay, textvariable=my_chat, width=50, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
+        chat_input.pack(side="top", fill="x", padx=10, pady=3)
+        button_frame = Frame(overlay, bg='#242424')
+        button_frame.pack(pady=12)
+        send_button = tk.Button(button_frame, image=btn_img, command=lambda: send_message(chat_input.get(), marker), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        send_button.pack(side=tk.LEFT, padx=2)
+        clear_button = tk.Button(button_frame, image=btn_img, command=lambda: print("Button Clear clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Clear Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        clear_button.pack(side=tk.LEFT, padx=2)
+        close_button = tk.Button(button_frame, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        close_button.pack(side=tk.LEFT, padx=2)
+
+    def send_message(message, nodeid):
+        global my_chat
+        playsound('Data' + os.path.sep + 'Button.mp3')
+        my_chat.set("")
+        print("Sending "+ nodeid + " message: " + message)
+
     def click_command(marker):
         global LoraDB, MyLora, overlay
         # Destroy the existing overlay if it exists
@@ -1101,7 +1156,7 @@ if __name__ == "__main__":
         button5 = tk.Button(button_frame2, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button5.pack(side=tk.LEFT, padx=1)
 
-        button6 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 6 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text=" ", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button6 = tk.Button(button_frame2, image=btn_img, command=lambda: chatbox(marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button6.pack(side=tk.LEFT, padx=1)
 
     frame_middle = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, padx=0, pady=0)
