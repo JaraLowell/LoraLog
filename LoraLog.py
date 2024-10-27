@@ -780,7 +780,7 @@ def calc_gc(end_lat, end_long, start_lat, start_long):
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import pandas as pd
+from pandas import DataFrame
 from scipy.signal import savgol_filter
 
 plt.switch_backend('TkAgg') # No clue why we even need this
@@ -790,7 +790,7 @@ plt.rcParams["font.size"] = 7
 def plot_metrics_log(metrics_log, node_id, frame, width=512, height=242):
     global MyLora
     metrics = get_data_for_node(metrics_log, node_id)
-    df = pd.DataFrame({
+    df = DataFrame({
         'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
         'battery': [entry['battery'] for entry in metrics],
         'voltage': [entry['voltage'] for entry in metrics],
@@ -860,7 +860,7 @@ def plot_metrics_log(metrics_log, node_id, frame, width=512, height=242):
 
 def plot_environment_log(metrics_log, node_id, frame , width=512, height=242):
     metrics = get_data_for_node(metrics_log, node_id)
-    df = pd.DataFrame({
+    df = DataFrame({
         'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
         'temperatures': [entry['temperature'] for entry in metrics],
         'humidities': [entry['humidity'] for entry in metrics],
