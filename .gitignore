@@ -2,5 +2,7 @@ LoraLog.spec
 build/
 dist/
 DataBase/
+env/
+venv/
 *.spec
 *.psd
