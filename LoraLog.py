@@ -790,8 +790,6 @@ plt.rcParams["font.size"] = 7
 def plot_metrics_log(metrics_log, node_id, frame, width=512, height=242):
     global MyLora
     metrics = get_data_for_node(metrics_log, node_id)
-
-    # Convert to DataFrame for easier resampling
     df = pd.DataFrame({
         'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
         'battery': [entry['battery'] for entry in metrics],
@@ -799,9 +797,7 @@ def plot_metrics_log(metrics_log, node_id, frame, width=512, height=242):
         'utilization': [entry['utilization'] for entry in metrics],
         'airutiltx': [entry['airutiltx'] for entry in metrics]
     })
-
-    # Resample to have an average of 100 points
-    resample_interval = len(df) // 80 or 1
+    resample_interval = len(df) // 80 or 5
     df_resampled = df.set_index('time').resample(f'{resample_interval}min').mean().dropna().reset_index()
     times_resampled = df_resampled['time'].tolist()
     battery_levels_resampled = df_resampled['battery'].tolist()
@@ -809,7 +805,6 @@ def plot_metrics_log(metrics_log, node_id, frame, width=512, height=242):
     utilizations_resampled = df_resampled['utilization'].tolist()
     airutiltxs_resampled = df_resampled['airutiltx'].tolist()
 
-    # Smoothing the data with Savitzky-Golay filter
     battery_levels_smooth = savgol_filter(battery_levels_resampled, window_length=5, polyorder=2)
     voltages_smooth = savgol_filter(voltages_resampled, window_length=5, polyorder=2)
     utilizations_smooth = savgol_filter(utilizations_resampled, window_length=5, polyorder=2)
@@ -865,14 +860,27 @@ def plot_metrics_log(metrics_log, node_id, frame, width=512, height=242):
 
 def plot_environment_log(metrics_log, node_id, frame , width=512, height=242):
     metrics = get_data_for_node(metrics_log, node_id)
-    # we might need to Average node logs if there are too many here to as we do for metrics,. but that for later
-    times = [datetime.fromtimestamp(entry['time']) for entry in metrics]
-    temperatures = [entry['temperature'] for entry in metrics]
-    humidities = [entry['humidity'] for entry in metrics]
-    pressures = [round(entry['pressure'],1) for entry in metrics]
+    df = pd.DataFrame({
+        'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
+        'temperatures': [entry['temperature'] for entry in metrics],
+        'humidities': [entry['humidity'] for entry in metrics],
+        'pressures': [entry['pressure'] for entry in metrics],
+    })
+    resample_interval = len(df) // 80 or 5
+    df_resampled = df.set_index('time').resample(f'{resample_interval}min').mean().dropna().reset_index()
+    times = df_resampled['time'].tolist()
+    temperatures_resampled = df_resampled['temperatures'].tolist()
+    humidities_resampled = df_resampled['humidities'].tolist()
+    pressures_resampled = df_resampled['pressures'].tolist()
+
+    temperatures = savgol_filter(temperatures_resampled, window_length=5, polyorder=2)
+    humidities = savgol_filter(humidities_resampled, window_length=5, polyorder=2)
+    pressures = savgol_filter(pressures_resampled, window_length=5, polyorder=2)
+
     total_hours = 0
     if len(times) > 1:
         total_hours = (times[-1] - times[0]).total_seconds() / 3600
+
     fig, ax1 = plt.subplots(figsize=(width/100, height/100))
     fig.patch.set_facecolor('#242424')
 
@@ -889,12 +897,14 @@ def plot_environment_log(metrics_log, node_id, frame , width=512, height=242):
     ax1.grid(True, color='#444444')
     ax1.set(frame_on=False)
 
-    ax2 = ax1.twinx()
-    ax2.set_facecolor('#242424')
-    ax2.plot(times, pressures, '#00c983', label='Pressure (hPa)')
-    ax2.tick_params(axis='y', labelcolor='white', colors='white')
-    ax2.grid(True, color='#242424ff')
-    ax2.set(frame_on=False)
+    # Add pressure data if available
+    if pressures[-1] != 0 and pressures[0] != 0:
+        ax2 = ax1.twinx()
+        ax2.set_facecolor('#242424')
+        ax2.plot(times, pressures, '#00c983', label='Pressure (hPa)')
+        ax2.tick_params(axis='y', labelcolor='white', colors='white')
+        ax2.grid(True, color='#242424ff')
+        ax2.set(frame_on=False)
 
     fig.legend(loc='upper center', ncol=3, facecolor='#242424', edgecolor='#242424', labelcolor='linecolor')
     fig.tight_layout()
@@ -1099,9 +1109,8 @@ if __name__ == "__main__":
         playsound('Data' + os.path.sep + 'Button.mp3')
         if overlay is not None:
             overlay.destroy()
-            overlay = None
-            if has_open_figures():
-                plt.close('all')
+        if has_open_figures():
+            plt.close('all')
 
     # Hadnle the buttons
     def buttonpress(info, nodeid):
@@ -1211,13 +1220,13 @@ if __name__ == "__main__":
             text_loc += 'HopsAway  : ' + str(LoraDB[marker.data][12])
         insert_colored_text(info_label, text_loc, "#d1d1d1")
 
-        if count_entries_for_node(metrics_log, marker.data) > 1:
+        if count_entries_for_node(metrics_log, marker.data) > 5:
             plot_metrics_log(metrics_log, marker.data, overlay)
 
-        if count_entries_for_node(environment_log, marker.data) > 1:
+        if count_entries_for_node(environment_log, marker.data) > 5:
             plot_environment_log(environment_log, marker.data, overlay)
 
-        if count_entries_for_node(movement_log, marker.data) > 1:
+        if count_entries_for_node(movement_log, marker.data) > 5:
             plot_movment_curve(movement_log, marker.data, overlay)
 
         # Create a frame to hold the buttons
