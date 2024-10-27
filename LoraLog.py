@@ -780,67 +780,68 @@ def calc_gc(end_lat, end_long, start_lat, start_long):
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import pandas as pd
+from scipy.signal import savgol_filter
 
 plt.switch_backend('TkAgg') # No clue why we even need this
 plt.rcParams["font.family"] = 'sans-serif'
 plt.rcParams["font.size"] = 7
 
-def average_metrics(metrics_log, node_id):
-    avarage_over = int(max(1, len(metrics_log) // 10) / 5)
-    averaged_local_logs = []
-    for i in range(0, len(metrics_log), avarage_over):
-        chunk = metrics_log[i:i+avarage_over]
-        if len(chunk) < avarage_over:
-            averaged_local_logs.extend(chunk)
-        else:
-            averaged_log = {
-                'nodeID': node_id,
-                'time': chunk[0]['time'],  # Take the time of the first entry in the chunk
-                'battery': sum(entry['battery'] for entry in chunk) / avarage_over,
-                'voltage': sum(entry['voltage'] for entry in chunk) / avarage_over,
-                'utilization': sum(entry['utilization'] for entry in chunk) / avarage_over,
-                'airutiltx': sum(entry['airutiltx'] for entry in chunk) / avarage_over
-            }
-            averaged_local_logs.append(averaged_log)
-    return averaged_local_logs
-
-def plot_metrics_log(metrics_log, node_id, frame , width=512, height=242):
+def plot_metrics_log(metrics_log, node_id, frame, width=512, height=242):
     global MyLora
     metrics = get_data_for_node(metrics_log, node_id)
-    if len(metrics) > 200:
-        # Average node logs if there are too many (usualy happens after like 14 hours of data collected)
-        metrics = average_metrics(metrics, node_id)
-    times = [datetime.fromtimestamp(entry['time']) for entry in metrics]
-    battery_levels = [entry['battery'] for entry in metrics]
-    voltages = [entry['voltage'] for entry in metrics]
-    utilizations = [entry['utilization'] for entry in metrics]
-    airutiltxs = [entry['airutiltx'] for entry in metrics]
+
+    # Convert to DataFrame for easier resampling
+    df = pd.DataFrame({
+        'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
+        'battery': [entry['battery'] for entry in metrics],
+        'voltage': [entry['voltage'] for entry in metrics],
+        'utilization': [entry['utilization'] for entry in metrics],
+        'airutiltx': [entry['airutiltx'] for entry in metrics]
+    })
+
+    # Resample to have an average of 100 points
+    resample_interval = len(df) // 80 or 1
+    df_resampled = df.set_index('time').resample(f'{resample_interval}min').mean().dropna().reset_index()
+    times_resampled = df_resampled['time'].tolist()
+    battery_levels_resampled = df_resampled['battery'].tolist()
+    voltages_resampled = df_resampled['voltage'].tolist()
+    utilizations_resampled = df_resampled['utilization'].tolist()
+    airutiltxs_resampled = df_resampled['airutiltx'].tolist()
+
+    # Smoothing the data with Savitzky-Golay filter
+    battery_levels_smooth = savgol_filter(battery_levels_resampled, window_length=5, polyorder=2)
+    voltages_smooth = savgol_filter(voltages_resampled, window_length=5, polyorder=2)
+    utilizations_smooth = savgol_filter(utilizations_resampled, window_length=5, polyorder=2)
+    airutiltxs_smooth = savgol_filter(airutiltxs_resampled, window_length=5, polyorder=2)
+
     total_hours = 0
-    if len(times) > 1:
-        total_hours = (times[-1] - times[0]).total_seconds() / 3600
+    if len(times_resampled) > 1:
+        total_hours = (times_resampled[-1] - times_resampled[0]).total_seconds() / 3600
+
     fig, axs = plt.subplots(2, 2, figsize=(width/100, height/100))
     fig.patch.set_facecolor('#242424')
 
     # Plot battery levels
-    axs[0, 0].plot(times, battery_levels, label='Battery Level', color='#02bae8')
+    axs[0, 0].plot(times_resampled, battery_levels_smooth, label='Battery Level', color='#02bae8')
     axs[0, 0].set_title('Battery Level %')
     axs[0, 0].set_xlabel(None)
     axs[0, 0].set_ylabel(None)
     axs[0, 0].grid(True, color='#444444')
     # Plot voltages
-    axs[0, 1].plot(times, voltages, label='Voltage', color='#c9a500')
+    axs[0, 1].plot(times_resampled, voltages_smooth, label='Voltage', color='#c9a500')
     axs[0, 1].set_title('Voltage')
     axs[0, 1].set_xlabel(None)
     axs[0, 1].set_ylabel(None)
     axs[0, 1].grid(True, color='#444444')
     # Plot utilizations
-    axs[1, 0].plot(times, utilizations, label='Utilization', color='#00c983')
+    axs[1, 0].plot(times_resampled, utilizations_smooth, label='Utilization', color='#00c983')
     axs[1, 0].set_title('Utilization %')
     axs[1, 0].set_xlabel(None)
     axs[1, 0].set_ylabel(None)
     axs[1, 0].grid(True, color='#444444')
     # Plot Air Utilization TX
-    axs[1, 1].plot(times, airutiltxs, label='Air Utilization TX', color='#ee0000')
+    axs[1, 1].plot(times_resampled, airutiltxs_smooth, label='Air Utilization TX', color='#ee0000')
     axs[1, 1].set_title('Air Utilization TX %')
     axs[1, 1].set_xlabel(None)
     axs[1, 1].set_ylabel(None)
@@ -1036,7 +1037,8 @@ if __name__ == "__main__":
     # Create three text boxes with padding color
     text_box1 = create_text(frame, 0, 0, 30, 100)
     # Todo: Add a logo
-    insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/\n", "#02bae8")
+    insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#02bae8")
+    insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
     insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.36 By Jara Lowell\n", "#02bae8")
     insert_colored_text(text_box1, " Meshtastic Lybrary : v" + meshtastic.version.get_active_version() + '\n', "#02bae8")
     text_box1.image_create("end", image=hr_img)
@@ -1140,7 +1142,7 @@ if __name__ == "__main__":
 
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
-        chat_label = tk.Label(overlay, text=LoraDB[marker][1] + '\n' + LoraDB[marker][2], font=('Fixedsys', 12), bg='#242424', fg='#02bae8')
+        chat_label = tk.Label(overlay, text=html.unescape(LoraDB[marker.data][1]) + '\n' + html.unescape(LoraDB[marker.data][2]), font=('Fixedsys', 12), bg='#242424', fg='#02bae8')
         chat_label.pack(side="top", fill="x", pady=3)
         chat_box = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=12)
         chat_box.pack_propagate(False)  # Prevent resizing based on the content
@@ -1180,24 +1182,20 @@ if __name__ == "__main__":
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
 
-        info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=12)
-        info_label.pack(pady=2)
-        insert_colored_text(info_label, "\n⬢ ", "#" + marker.data[-6:],  center=True)
+        info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=10)
+        info_label.pack(pady=1)
+        insert_colored_text(info_label, "⬢ ", "#" + marker.data[-6:],  center=True)
 
         if LoraDB[marker.data][2] != '':
-            text_loc = html.unescape(LoraDB[marker.data][2]) + '\n'
+            text_loc = html.unescape(LoraDB[marker.data][1]) + '\n' + html.unescape(LoraDB[marker.data][2]) + '\n'
         elif LoraDB[marker.data][1] != '':
-            text_loc = html.unescape(LoraDB[marker.data][2]) + '\n'
+            text_loc = html.unescape(LoraDB[marker.data][1]) + '\n'
         else:
-            text_loc = '#' + str(marker.data) + '\n'
+            text_loc = '!' + marker.data + '\n'
         insert_colored_text(info_label, text_loc, "#02bae8",  center=True)
-        text_loc = ('─' * 42) + '\n'
-        insert_colored_text(info_label, text_loc, "#3d3d3d")
         text_loc = ' Position : ' + str(round(LoraDB[marker.data][3],6)) + '/' + str(round(LoraDB[marker.data][4],6)) + ' (' + LatLon2qth(round(LoraDB[marker.data][3],6),round(LoraDB[marker.data][4],6)) + ')\n'
         text_loc += ' Altitude : ' + str(LoraDB[marker.data][5]) + 'm\n'
         insert_colored_text(info_label, text_loc, "#d1d1d1")
-        text_loc = ('─' * 42) + '\n'
-        insert_colored_text(info_label, text_loc, "#3d3d3d")
         text_loc = ' HW Model : ' + str(LoraDB[marker.data][7]) + '\n'
         text_loc += ' Hex ID   : ' + '!' + str(marker.data).ljust(14)
         text_loc += 'MAC Addr  : ' + str(LoraDB[marker.data][6]) + '\n'
@@ -1208,9 +1206,9 @@ if __name__ == "__main__":
         if LoraDB[marker.data][3] != -8.0 and LoraDB[marker.data][3] != -8.0:
             text_loc += ' Distance : ' + calc_gc(LoraDB[marker.data][3], LoraDB[marker.data][4], LoraDB[MyLora][3], LoraDB[MyLora][4]).ljust(15)
         else:
-            text_loc += ' Distance : -\n'
+            text_loc += (' Distance : -').ljust(15)
         if LoraDB[marker.data][12] > 0:
-            text_loc += 'HopsAway  : ' + str(LoraDB[marker.data][12]) + '\n'
+            text_loc += 'HopsAway  : ' + str(LoraDB[marker.data][12])
         insert_colored_text(info_label, text_loc, "#d1d1d1")
 
         if count_entries_for_node(metrics_log, marker.data) > 1:
