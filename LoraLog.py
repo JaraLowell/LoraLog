@@ -65,6 +65,7 @@ def showLink(event):
 
 # Function to insert colored text
 def insert_colored_text(text_widget, text, color, center=False, tag=None):
+    global hr_img, MyLora
     parent_frame = str(text_widget.winfo_parent())
     if "frame5" not in parent_frame:
         text_widget.configure(state="normal")
@@ -72,7 +73,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
             text_widget.image_create("end", image=hr_img)
     text_widget.tag_configure(color, foreground=color)
 
-    if tag:
+    if tag and tag != MyLora:
         text_widget.tag_configure(tag, foreground=color, underline=False)
         text_widget.insert(tk.END, text, (color, tag))
         text_widget.tag_bind(tag, "<Button-1>", showLink)
@@ -1274,8 +1275,12 @@ if __name__ == "__main__":
 
         text_box_middle.configure(state="normal")
         current_view = text_box_middle.yview()
+        # Unbind all tags from text_box_middle
+        for tag in text_box_middle.tag_names():
+            text_box_middle.tag_unbind(tag, "<Button-1>")
 
         sorted_nodes = sorted(LoraDB.items(), key=lambda item: item[1][0], reverse=True)
+
         text_box_middle.delete("1.0", tk.END)
 
         insert_colored_text(text_box_middle, "\n " + LoraDB[MyLora][1] + "\n", "#da0000")
@@ -1405,6 +1410,9 @@ if __name__ == "__main__":
         if tnow > tlast + 900:
             tlast = tnow
             updatesnodes()
+
+            if has_open_figures():
+                plt.close('all')
 
             cutoff_time = tnow - map_trail_age
             movement_log[:] = [entry for entry in movement_log if not (entry['time'] < cutoff_time)]
