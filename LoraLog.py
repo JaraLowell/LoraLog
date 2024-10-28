@@ -308,7 +308,7 @@ def logLora(nodeID, info):
     if nodeID in LoraDB:
         LoraDB[nodeID][0] = tnow # time last seen
     else:
-        LoraDB[nodeID] = [tnow, nodeID[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '',-1]
+        LoraDB[nodeID] = [tnow, nodeID[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '',-1, 0]
         insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
         insert_colored_text(text_box3, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
 
@@ -358,7 +358,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if LoraDB[text_from][1] != '':
                     text_from = LoraDB[text_from][1] + " (" + LoraDB[text_from][2] + ")"
             else:
-                LoraDB[text_from] = [tnow, text_from[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '', -1]
+                LoraDB[text_from] = [tnow, text_from[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '', -1, 0]
                 insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                 insert_colored_text(text_box3, " New Node Logged [!" + text_from + "]\n", "#e8643f", tag=text_from)
                 playsound('Data' + os.path.sep + 'NewNode.mp3')
@@ -387,7 +387,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                         LoraDB[fromraw][9] += str(round(device_metrics.get('voltage', 0.00),2)) + 'v'
                         text_raws += 'ChUtil: ' + str(round(device_metrics.get('channelUtilization', 0.00),2)) + '% '
                         text_raws += 'AirUtilTX (DutyCycle): ' + str(round(device_metrics.get('airUtilTx', 0.00),2)) + '%'
-                        text_raws += '\n' + (' ' * 11) + 'Uptime ' + ez_date(device_metrics.get('uptimeSeconds', 0))
+                        LoraDB[fromraw][13] = device_metrics.get('uptimeSeconds', 0)
+                        text_raws += '\n' + (' ' * 11) + uptimmehuman(fromraw)
+                        # Need store uptimme somwhere !
                         if MyLora == fromraw:
                             MyLoraText1 = (' ChUtil').ljust(13) + str(round(device_metrics.get('channelUtilization', 0.00),2)).rjust(6) + '%\n' + (' AirUtilTX').ljust(13) + str(round(device_metrics.get('airUtilTx', 0.00),2)).rjust(6) + '%\n' + (' Power').ljust(13) + str(round(device_metrics.get('voltage', 0.00),2)).rjust(6) + 'v\n' + (' Battery').ljust(13) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
                         if 'batteryLevel' in device_metrics or 'voltage' in device_metrics or 'channelUtilization' in device_metrics or 'airUtilTx' in device_metrics:
@@ -686,7 +688,7 @@ def updatesnodes():
                     if "lastHeard" in info and info["lastHeard"] is not None: nodeLast = info['lastHeard']
 
                     if nodeID not in LoraDB:
-                        LoraDB[nodeID] = [nodeLast, nodeID[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '',-1]
+                        LoraDB[nodeID] = [nodeLast, nodeID[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '',-1, 0]
                         insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                         insert_colored_text(text_box3, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
 
@@ -750,6 +752,17 @@ def ez_date(d):
         val = "Just now"
     return val
 
+def uptimmehuman(node_id):
+    tnow = int(time.time())
+    days, remainder = divmod(LoraDB[node_id][13] + (tnow - LoraDB[node_id][0]), 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    text = 'Uptime   : '
+    if days > 0: text += str(days) + ' days, '
+    text += str(hours) + ' hours and ' + str(minutes) + ' minutes'
+    if tnow - LoraDB[node_id][0] >= map_delete: text += ' ? Seems offline'
+    return text
+
 def LatLon2qth(latitude, longitude):
     A = ord('A')
     a = divmod(longitude + 180, 20)
@@ -796,6 +809,7 @@ def calc_gc(end_lat, end_long, start_lat, start_long):
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.ticker import ScalarFormatter
 from pandas import DataFrame
 from scipy.signal import savgol_filter
 
@@ -803,7 +817,7 @@ plt.switch_backend('TkAgg') # No clue why we even need this
 plt.rcParams["font.family"] = 'sans-serif'
 plt.rcParams["font.size"] = 7
 
-def plot_metrics_log(metrics_log, node_id, frame, width=512, height=242):
+def plot_metrics_log(metrics_log, node_id, frame, width=512, height=212):
     global MyLora
     metrics = get_data_for_node(metrics_log, node_id)
     df = DataFrame({
@@ -874,7 +888,7 @@ def plot_metrics_log(metrics_log, node_id, frame, width=512, height=242):
     canvas.draw()
     canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-def plot_environment_log(metrics_log, node_id, frame , width=512, height=242):
+def plot_environment_log(metrics_log, node_id, frame , width=512, height=212):
     metrics = get_data_for_node(metrics_log, node_id)
     df = DataFrame({
         'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
@@ -912,6 +926,12 @@ def plot_environment_log(metrics_log, node_id, frame , width=512, height=242):
     ax1.tick_params(axis='x', colors='white')
     ax1.grid(True, color='#444444')
     ax1.set(frame_on=False)
+    # Set y-axis limits to extend 10 units above and below the min and max values
+    min_temp = min(temperatures)
+    max_temp = max(temperatures)
+    min_humidity = min(humidities)
+    max_humidity = max(humidities)
+    ax1.set_ylim(min(min_temp, min_humidity) - 10, max(max_temp, max_humidity) + 10)
 
     # Add pressure data if available
     if pressures[-1] != 0 and pressures[0] != 0:
@@ -921,6 +941,9 @@ def plot_environment_log(metrics_log, node_id, frame , width=512, height=242):
         ax2.tick_params(axis='y', labelcolor='white', colors='white')
         ax2.grid(True, color='#242424ff')
         ax2.set(frame_on=False)
+        formatter = ScalarFormatter(useOffset=False)
+        formatter.set_scientific(False)
+        ax2.yaxis.set_major_formatter(formatter)
 
     fig.legend(loc='upper center', ncol=3, facecolor='#242424', edgecolor='#242424', labelcolor='linecolor')
     fig.tight_layout()
@@ -1218,12 +1241,14 @@ if __name__ == "__main__":
             print("Closing open figures")
         if overlay is not None:
            destroy_overlay()
-
+        if marker.data not in LoraDB:
+            print(f"Node {marker.data} not in database")
+            return
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
 
         info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=10)
-        info_label.pack(pady=1)
+        info_label.pack(pady=3)
         insert_colored_text(info_label, "⬢ ", "#" + marker.data[-6:],  center=True)
 
         if LoraDB[marker.data][2] != '':
@@ -1236,12 +1261,15 @@ if __name__ == "__main__":
         if LoraDB[marker.data][3] == -8.0 and LoraDB[marker.data][4] == -8.0:
             text_loc = ' Position : Unknown\n'
         else:
-            text_loc = ' Position : ' + str(round(LoraDB[marker.data][3],6)) + '/' + str(round(LoraDB[marker.data][4],6)) + ' (' + LatLon2qth(round(LoraDB[marker.data][3],6),round(LoraDB[marker.data][4],6)) + ')\n'
-        text_loc += ' Altitude : ' + str(LoraDB[marker.data][5]) + 'm\n'
+            text_loc = ' Position : ' + str(round(LoraDB[marker.data][3],6)) + ' / ' + str(round(LoraDB[marker.data][4],6)) + ' (' + LatLon2qth(round(LoraDB[marker.data][3],6),round(LoraDB[marker.data][4],6))[:-2] + ')'
+            text_loc += ' Altitude ' + str(LoraDB[marker.data][5]) + 'm\n'
         insert_colored_text(info_label, text_loc, "#d1d1d1")
         text_loc = ' HW Model : ' + str(LoraDB[marker.data][7]) + '\n'
         text_loc += ' Hex ID   : ' + '!' + str(marker.data).ljust(14)
         text_loc += 'MAC Addr  : ' + str(LoraDB[marker.data][6]) + '\n'
+        # Add uptime back
+        if LoraDB[marker.data][13] != 0:
+            text_loc += ' ' + uptimmehuman(marker.data) + '\n'
         text_loc += ' Last SNR : ' + str(LoraDB[marker.data][11]).ljust(15)
         text_loc += 'Last Seen : ' + ez_date(int(time.time()) - LoraDB[marker.data][0]) + '\n'
         text_loc += ' Power    : ' + LoraDB[marker.data][9].ljust(15)
@@ -1336,6 +1364,9 @@ if __name__ == "__main__":
                 LoraDB[node_id][8] = LoraDB[node_id][0]
             if 'v' not in LoraDB[node_id][9]:
                 LoraDB[node_id][9] = '0% 0.0v'
+            if len(node_info) < 14:
+                LoraDB[node_id].append(0)
+                print(f"Node {node_id} has no uptime and a length of {len(node_info)}")
 
             if tnow - node_time >= map_oldnode and node_id != MyLora:
                 if node_id in MapMarkers:
