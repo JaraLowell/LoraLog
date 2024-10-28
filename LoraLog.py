@@ -94,6 +94,8 @@ environment_log = [] # environment  = [{'nodeID': '1', 'time': 1698163200, 'temp
 LoraDB          = {} # LoraDB       = {'nodeID': [timenow, ShortName, LongName, latitude, longitude, altitude, macaddr, hardware, timefirst, rightbarstats, mmqtt, snr, hops], ...}
 chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
 
+# database_path = 'DataBase' + os.path.sep + "tiles.db"
+
 LoraDBPath = 'DataBase' + os.path.sep + 'LoraDB.pkl'
 if os.path.exists(LoraDBPath):
     with open(LoraDBPath, 'rb') as f:
@@ -137,9 +139,6 @@ def count_entries_for_node(database, nodeID):
 def get_data_for_node(database, nodeID):
     positions = [entry for entry in database if entry['nodeID'] == nodeID]
     return positions
-
-def node_id_exists(database, nodeID):
-    return any(entry['nodeID'] == nodeID for entry in database)
 
 def safedatabase():
     global LoraDB, LoraDBPath, movement_log, MoveDBPath, metrics_log, MetricsPath, environment_log, EnviPath
@@ -704,8 +703,9 @@ def updatesnodes():
                             if MyLora not in MapMarkers:
                                 MapMarkers[MyLora] = [None, False, nodeLast, None, None, 0]
                                 MapMarkers[MyLora][0] = mapview.set_marker(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6), text=unescape(LoraDB[MyLora][1]), icon = tk_icon, text_color = '#00c983', font = ('Fixedsys', 8), data=MyLora, command = click_command)
+                                MapMarkers[MyLora][0].text_color = '#00c983'
                                 mapview.set_position(round(LoraDB[nodeID][3],6), round(LoraDB[nodeID][4],6))
-                                mapview.set_zoom(11)
+                                mapview.set_zoom(10)
 
                     if "viaMqtt" in info: LoraDB[nodeID][10] = ' via mqtt'
                     if "snr" in info and info['snr'] is not None: LoraDB[nodeID][11] = str(info['snr']) + 'dB'
@@ -1034,7 +1034,6 @@ if __name__ == "__main__":
     tk_direct = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-green.png'))
     tk_mqtt = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-orange.png'))
     tk_old = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-grey.png'))
-    tk_dot = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'dot.png'))
     btn_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'ui_button.png'))
     hr_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'hr.png'))
 
@@ -1092,7 +1091,7 @@ if __name__ == "__main__":
     frame_right.grid_rowconfigure(0, weight=1)
     frame_right.grid_columnconfigure(0, weight=1)
 
-    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000')
+    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6) # database_path=database_path, use_database_only=True
     mapview.grid(row=0, column=0, sticky='nsew')
 
     def send_position(nodeid):
@@ -1183,7 +1182,7 @@ if __name__ == "__main__":
         chat_input.pack(side="top", fill="x", padx=10, pady=3)
         button_frame = Frame(overlay, bg='#242424')
         button_frame.pack(pady=12)
-        send_button = tk.Button(button_frame, image=btn_img, command=lambda: send_message(chat_input.get(), marker), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        send_button = tk.Button(button_frame, image=btn_img, command=lambda: send_message(chat_input.get(), nodeid), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         send_button.pack(side=tk.LEFT, padx=2)
         clear_button = tk.Button(button_frame, image=btn_img, command=lambda: print("Button Clear clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Clear Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         clear_button.pack(side=tk.LEFT, padx=2)
@@ -1336,6 +1335,7 @@ if __name__ == "__main__":
                         MapMarkers[node_id][0] = None
                         MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
                         MapMarkers[node_id][0].text_color = '#6d6d6d'
+                        mapview.manage_z_order
                 else:
                     if 'Meshtastic' in LoraDB[node_id][1]:
                         LoraDB[node_id][1] = (LoraDB[node_id][1])[-4:]
@@ -1440,8 +1440,8 @@ if __name__ == "__main__":
     ### end
 
     mapview.set_position(48.860381, 2.338594)
-    mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=22)
-    mapview.set_zoom(5)
+    mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
+    mapview.set_zoom(4)
 
     def start_mesh():
         global overlay, root
