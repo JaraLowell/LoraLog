@@ -1034,6 +1034,7 @@ if __name__ == "__main__":
     tk_direct = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-green.png'))
     tk_mqtt = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-orange.png'))
     tk_old = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-grey.png'))
+    tk_dot = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'dot.png'))
     btn_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'ui_button.png'))
     hr_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'hr.png'))
 
@@ -1196,7 +1197,7 @@ if __name__ == "__main__":
         print("Sending "+ nodeid + " message: " + message)
 
     def click_command(marker):
-        global LoraDB, MyLora, overlay
+        global LoraDB, MyLora, overlay, mapview
         # Destroy the existing overlay if it exists
         playsound('Data' + os.path.sep + 'Button.mp3')
         if has_open_figures():
@@ -1218,7 +1219,10 @@ if __name__ == "__main__":
         else:
             text_loc = '!' + marker.data + '\n'
         insert_colored_text(info_label, text_loc, "#02bae8",  center=True)
-        text_loc = ' Position : ' + str(round(LoraDB[marker.data][3],6)) + '/' + str(round(LoraDB[marker.data][4],6)) + ' (' + LatLon2qth(round(LoraDB[marker.data][3],6),round(LoraDB[marker.data][4],6)) + ')\n'
+        if LoraDB[marker.data][3] == -8.0 and LoraDB[marker.data][4] == -8.0:
+            text_loc = ' Position : Unknown\n'
+        else:
+            text_loc = ' Position : ' + str(round(LoraDB[marker.data][3],6)) + '/' + str(round(LoraDB[marker.data][4],6)) + ' (' + LatLon2qth(round(LoraDB[marker.data][3],6),round(LoraDB[marker.data][4],6)) + ')\n'
         text_loc += ' Altitude : ' + str(LoraDB[marker.data][5]) + 'm\n'
         insert_colored_text(info_label, text_loc, "#d1d1d1")
         text_loc = ' HW Model : ' + str(LoraDB[marker.data][7]) + '\n'
@@ -1261,8 +1265,10 @@ if __name__ == "__main__":
 
         button_frame2 = Frame(overlay, bg='#242424')
         button_frame2.pack(pady=2)
-
-        button4 = tk.Button(button_frame2, image=btn_img, command=lambda: print("Button 4 clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text=" ", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        if LoraDB[marker.data][3] != -8.0 and LoraDB[marker.data][3] != -8.0:
+            button4 = tk.Button(button_frame2, image=btn_img, command=lambda: mapview.set_position(round(LoraDB[marker.data][3],6), round(LoraDB[marker.data][4],6)), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Zoom", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        else:
+            button4 = tk.Button(button_frame2, image=btn_img, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Zoom", compound="center", fg='#616161', font=('Fixedsys', 10))
         button4.pack(side=tk.LEFT, padx=1)
 
         button5 = tk.Button(button_frame2, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
@@ -1335,7 +1341,6 @@ if __name__ == "__main__":
                         MapMarkers[node_id][0] = None
                         MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
                         MapMarkers[node_id][0].text_color = '#6d6d6d'
-                        mapview.manage_z_order
                 else:
                     if 'Meshtastic' in LoraDB[node_id][1]:
                         LoraDB[node_id][1] = (LoraDB[node_id][1])[-4:]
@@ -1395,13 +1400,15 @@ if __name__ == "__main__":
                     checktime = first_position['time'] + last_position['time']
                     if MapMarkers[node_id][5] != checktime:
                         drawline = []
-                        # index = len(positions)
+                        index = len(positions)
                         for position in positions:
-                            # index -= 1
+                            index -= 1
                             pos = (position['latitude'], position['longitude'])
                             drawline.append(pos)
-                            #if index != 0:
-                            #    MapMarkers[node_id][4] = mapview.set_marker(position['latitude'], position['longitude'], text='', icon = tk_dot)
+                            if index != 0:
+                                MapMarkers[node_id][4] = mapview.set_marker(position['latitude'], position['longitude'], icon = tk_dot)
+                                marker = MapMarkers[node_id][4]
+                                mapview.canvas.lower(marker.canvas_icon, "marker")
                         MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
                         MapMarkers[node_id][5] = checktime
                         print(f"Drawing trail for {LoraDB[node_id][1]}")
