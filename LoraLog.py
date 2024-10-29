@@ -20,7 +20,7 @@ from PIL import Image, ImageTk
 import tkinter as tk
 import customtkinter
 from tkinter import Frame
-from tkintermapview import TkinterMapView
+from tkintermapview2 import TkinterMapView
 
 # Meshtastic imports
 import base64
@@ -517,11 +517,13 @@ def on_meshtastic_message(packet, interface, loop=None):
                                 MapMarkers[nodeid][2] = tnow
                             # Lets add to paths ass well if we are on map
                             if fromraw in MapMarkers:
-                                if LoraDB[nodeid][3] != -8.0 and LoraDB[nodeid][4] != -8.0:
+                                if LoraDB[nodeid][3] != -8.0 and LoraDB[nodeid][4] != -8.0 and MapMarkers[fromraw][3] is None:
+                                    listmaps = []
                                     pos = ( round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6) )
                                     listmaps.append(pos)
                                     pos = ( round(LoraDB[nodeid][3],6) , round(LoraDB[nodeid][4],6) )
                                     listmaps.append(pos)
+                                    MapMarkers[fromraw][3] = mapview.set_path(listmaps, color="#006642", width=2)
                             nodeid = LoraDB[nodeid][1]
                         else:
                             nodeid = '!' + nodeid
@@ -529,13 +531,21 @@ def on_meshtastic_message(packet, interface, loop=None):
                         if "snr" in neighbor:
                             text_raws += ' (' + str(neighbor["snr"]) + 'dB)'
                     # Add Paths if we have any
+                    '''
                     if fromraw in MapMarkers and has_pairs(listmaps):
                         try:
                             # How can MapMarkers[fromraw][3] cause a IndexError: list index out of range
                             if len(MapMarkers[fromraw]) > 3 and MapMarkers[fromraw][3] is None:
-                                MapMarkers[fromraw][3] = mapview.set_path(listmaps, color="#006642", width=2)
+                                for i in range(len(listmaps) - 1):
+                                    tmp = []
+                                    start_pos = listmaps[i]
+                                    end_pos = listmaps[i + 1]
+                                    tmp.append((start_pos[0], start_pos[1]))
+                                    tmp.append((end_pos[0], end_pos[1]))
+                                    MapMarkers[fromraw][3] = mapview.set_path(tmp, color="#006642", width=2)
                         except Exception as e:
                             print(repr(e))
+                    '''
                 else:
                     text_raws += ' No Data'
             elif data["portnum"] == "RANGE_TEST_APP":
@@ -888,7 +898,7 @@ def plot_metrics_log(metrics_log, node_id, frame, width=512, height=212):
     canvas.draw()
     canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-def plot_environment_log(metrics_log, node_id, frame , width=512, height=212):
+def plot_environment_log(metrics_log, node_id, frame , width=512, height=184):
     metrics = get_data_for_node(metrics_log, node_id)
     df = DataFrame({
         'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
@@ -1259,25 +1269,25 @@ if __name__ == "__main__":
             text_loc = '!' + marker.data + '\n'
         insert_colored_text(info_label, text_loc, "#02bae8",  center=True)
         if LoraDB[marker.data][3] == -8.0 and LoraDB[marker.data][4] == -8.0:
-            text_loc = ' Position : Unknown\n'
+            text_loc = '  Position : Unknown\n'
         else:
-            text_loc = ' Position : ' + str(round(LoraDB[marker.data][3],6)) + ' / ' + str(round(LoraDB[marker.data][4],6)) + ' (' + LatLon2qth(round(LoraDB[marker.data][3],6),round(LoraDB[marker.data][4],6))[:-2] + ')'
+            text_loc = '  Position : ' + str(round(LoraDB[marker.data][3],6)) + ' / ' + str(round(LoraDB[marker.data][4],6)) + ' (' + LatLon2qth(round(LoraDB[marker.data][3],6),round(LoraDB[marker.data][4],6))[:-2] + ')'
             text_loc += ' Altitude ' + str(LoraDB[marker.data][5]) + 'm\n'
         insert_colored_text(info_label, text_loc, "#d1d1d1")
-        text_loc = ' HW Model : ' + str(LoraDB[marker.data][7]) + '\n'
-        text_loc += ' Hex ID   : ' + '!' + str(marker.data).ljust(14)
+        text_loc = '  HW Model : ' + str(LoraDB[marker.data][7]) + '\n'
+        text_loc += '  Hex ID   : ' + '!' + str(marker.data).ljust(18)
         text_loc += 'MAC Addr  : ' + str(LoraDB[marker.data][6]) + '\n'
         # Add uptime back
         if LoraDB[marker.data][13] != 0:
-            text_loc += ' ' + uptimmehuman(marker.data) + '\n'
-        text_loc += ' Last SNR : ' + str(LoraDB[marker.data][11]).ljust(15)
+            text_loc += '  ' + uptimmehuman(marker.data) + '\n'
+        text_loc += '  Last SNR : ' + str(LoraDB[marker.data][11]).ljust(19)
         text_loc += 'Last Seen : ' + ez_date(int(time.time()) - LoraDB[marker.data][0]) + '\n'
-        text_loc += ' Power    : ' + LoraDB[marker.data][9].ljust(15)
+        text_loc += '  Power    : ' + LoraDB[marker.data][9].ljust(19)
         text_loc += 'First Seen: ' + datetime.fromtimestamp(LoraDB[marker.data][8]).strftime('%b %#d \'%y') + '\n'
         if LoraDB[marker.data][3] != -8.0 and LoraDB[marker.data][3] != -8.0:
-            text_loc += ' Distance : ' + calc_gc(LoraDB[marker.data][3], LoraDB[marker.data][4], LoraDB[MyLora][3], LoraDB[MyLora][4]).ljust(15)
+            text_loc += '  Distance : ' + calc_gc(LoraDB[marker.data][3], LoraDB[marker.data][4], LoraDB[MyLora][3], LoraDB[MyLora][4]).ljust(19)
         else:
-            text_loc += (' Distance : -').ljust(15)
+            text_loc += (' Distance : -').ljust(19)
         if LoraDB[marker.data][12] > 0:
             text_loc += 'HopsAway  : ' + str(LoraDB[marker.data][12])
         insert_colored_text(info_label, text_loc, "#d1d1d1")
@@ -1331,6 +1341,7 @@ if __name__ == "__main__":
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send, movement_log, metrics_log
         start = time.perf_counter()
+        tnow = int(time.time())
 
         if ok2Send != 0:
             ok2Send -= 1
@@ -1342,7 +1353,9 @@ if __name__ == "__main__":
         for tag in text_box_middle.tag_names():
             text_box_middle.tag_unbind(tag, "<Button-1>")
 
-        sorted_nodes = sorted(LoraDB.items(), key=lambda item: item[1][0], reverse=True)
+        # sorted_nodes = sorted(LoraDB.items(), key=lambda item: item[1][0], reverse=True)
+
+        sorted_nodes = sorted((item for item in LoraDB.items() if (tnow - item[1][0] <= map_oldnode)), key=lambda item: item[1][0], reverse=True)
 
         text_box_middle.delete("1.0", tk.END)
 
@@ -1352,7 +1365,7 @@ if __name__ == "__main__":
         if MyLoraText2 != '':
             insert_colored_text(text_box_middle, MyLoraText2, "#c1c1c1")
         text_box_middle.mark_set(LoraDB[MyLora][1], "1.0")
-        tnow = int(time.time())
+
         for node_id, node_info in sorted_nodes:
             node_time = node_info[0]
 
@@ -1433,37 +1446,6 @@ if __name__ == "__main__":
                             MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=unescape(LoraDB[node_id][1]), icon = tk_direct, text_color = '#02bae8', font = ('Fixedsys', 8), data=node_id, command = click_command)
                             MapMarkers[node_id][0].text_color = '#02bae8'
 
-            if node_id in MapMarkers and MapMarkers[node_id][6] != None:
-                if tnow - node_time >= 3:
-                    MapMarkers[node_id][6].delete()
-                    MapMarkers[node_id][6] = None
-
-            # Draw the movmment trail if MapMarkers[node_id][5] == True
-            if node_id in MapMarkers and MapMarkers[node_id][5] == 0:
-                positions = get_data_for_node(movement_log, node_id)
-                if MapMarkers[node_id][4] != None:
-                    MapMarkers[node_id][4].delete()
-                    MapMarkers[node_id][4] = None
-                if len(positions) > 1:
-                    last_position = get_last_position(positions, node_id)
-                    first_position = get_first_position(positions, node_id)
-                    checktime = first_position['time'] + last_position['time']
-                    if MapMarkers[node_id][5] != checktime:
-                        drawline = []
-                        # index = len(positions)
-                        for position in positions:
-                            # index -= 1
-                            pos = (position['latitude'], position['longitude'])
-                            drawline.append(pos)
-                            # if index != 0:
-                            #     MapMarkers[node_id][4] = mapview.set_marker(position['latitude'], position['longitude'], icon = tk_dot)
-                            #     marker = MapMarkers[node_id][4]
-                            #     mapview.canvas.lower(marker.canvas_icon, "marker")
-                        MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
-                        MapMarkers[node_id][5] = checktime
-                        print(f"Drawing trail for {LoraDB[node_id][1]}")
-                else:
-                    MapMarkers[node_id][5] = 1
         # Just some stats for checks
         insert_colored_text(text_box_middle, '\n' + ('─' * 14), "#3d3d3d")
         time1 = (time.perf_counter() - start) * 1000
@@ -1493,8 +1475,47 @@ if __name__ == "__main__":
             safedatabase()
             print('Saved Databases')
             gc.collect()
-        root.after(2000, update_active_nodes)    
+        root.after(1000, update_paths_nodes)
     ### end
+
+    def update_paths_nodes():
+        global MyLora, LoraDB, movement_log, MapMarkers
+        tnow = int(time.time())
+        sorted_nodes = sorted((item for item in LoraDB.items() if (tnow - item[1][0] <= map_oldnode)), key=lambda item: item[1][0], reverse=True)
+        for node_id, node_info in sorted_nodes:
+            if node_id in MapMarkers:
+                node_time = node_info[0]
+
+                if MapMarkers[node_id][6] != None and (tnow - node_time) >= 3:
+                    MapMarkers[node_id][6].delete()
+                    MapMarkers[node_id][6] = None
+
+                if MapMarkers[node_id][5] == 0:
+                    positions = get_data_for_node(movement_log, node_id)
+                    if MapMarkers[node_id][4] != None:
+                        MapMarkers[node_id][4].delete()
+                        MapMarkers[node_id][4] = None
+                    if len(positions) > 1 and tnow - node_info[0] <= map_oldnode / 2:
+                        last_position = get_last_position(positions, node_id)
+                        first_position = get_first_position(positions, node_id)
+                        checktime = first_position['time'] + last_position['time']
+                        if MapMarkers[node_id][5] != checktime:
+                            drawline = []
+                            # index = len(positions)
+                            for position in positions:
+                                # index -= 1
+                                pos = (position['latitude'], position['longitude'])
+                                drawline.append(pos)
+                                # if index != 0:
+                                #     MapMarkers[node_id][4] = mapview.set_marker(position['latitude'], position['longitude'], icon = tk_dot)
+                                #     marker = MapMarkers[node_id][4]
+                                #     mapview.canvas.lower(marker.canvas_icon, "marker")
+                            MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
+                            MapMarkers[node_id][5] = checktime
+                            print(f"Drawing trail for {LoraDB[node_id][1]}")
+                    else:
+                        MapMarkers[node_id][5] = 1
+        root.after(1000, update_active_nodes)
 
     mapview.set_position(48.860381, 2.338594)
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
@@ -1512,7 +1533,7 @@ if __name__ == "__main__":
             insert_colored_text(text_box1, "\n*** Failed to connect to meshtastic did you edit the config.ini    ***", "#02bae8")
             insert_colored_text(text_box1, "\n*** and wrote down the correct ip for tcp or commport for serial ? ***", "#02bae8")
         else:
-            root.after(2000, update_active_nodes)  # Schedule the next update in 30 seconds
+            root.after(1000, update_active_nodes)  # Schedule the next update in 30 seconds
 
     overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
     overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
