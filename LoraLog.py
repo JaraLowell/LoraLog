@@ -19,7 +19,7 @@ import threading
 from PIL import Image, ImageTk
 import tkinter as tk
 import customtkinter
-from tkinter import Frame
+from tkinter import Frame, LabelFrame
 from tkintermapview2 import TkinterMapView
 
 # Meshtastic imports
@@ -61,7 +61,10 @@ def showLink(event):
     idx= event.widget.tag_names("current")[1]
     temp = type('temp', (object,), {})()
     temp.data = idx
-    click_command(temp)
+    if idx in LoraDB:
+        click_command(temp)
+    else:
+        print(f'Node {idx} not in DB')
 
 # Function to insert colored text
 def insert_colored_text(text_widget, text, color, center=False, tag=None):
@@ -86,6 +89,22 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
     if "!frame5" not in parent_frame:
         text_widget.see(tk.END)
         text_widget.configure(state="disabled")
+
+def add_message(text_widget, nodeid, text, msgtime, private=False, msend=False, ackn=True):
+    label = LoraDB[nodeid][1] + " (" + LoraDB[nodeid][2] + ")"
+    labelcol = "#00c983"
+    if nodeid == MyLora: labelcol = "#02bae8"
+    chat_frame = LabelFrame(text_widget, text=label, padx=0, pady=0, bg='#242424', fg=labelcol, font=('Fixedsys', 10), borderwidth=1, relief="groove")
+    text_widget.window_create(tk.END, window=chat_frame, padx=3, pady=2)
+    chat_label = tk.Label(chat_frame, text=text, bg='#242424', fg='#d1d1d1', font=('Fixedsys', 10), width=98, anchor="nw", justify="left")
+    chat_label.pack(fill=tk.X, anchor="nw", padx=1, pady=0)
+    timestamp = datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
+    timestamp_label = tk.Label(chat_frame, text=timestamp, bg='#242424', anchor="se", justify="right", fg='#9d9d9d', font=('Fixedsys', 8))
+    timestamp_label.pack(anchor="se", padx=0, pady=0)
+    text_widget.insert(tk.END, "\n")
+    text_widget.see(tk.END)
+    # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
+    chat_log.append({'nodeID': nodeid, 'time': msgtime, 'private': private, 'send': msend, 'ackn': ackn, 'text': text})
 
 #------------------------------------------------------------- Movment Tracker --------------------------------------------------------------------------
 movement_log    = [] # movement_log = [{'nodeID': '1', 'time': 1698163200, 'latitude': 10.0, 'longitude': 20.0, 'altitude': 1000}, ...]
@@ -530,22 +549,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_raws += '\n' + (' ' * 11) + nodeid
                         if "snr" in neighbor:
                             text_raws += ' (' + str(neighbor["snr"]) + 'dB)'
-                    # Add Paths if we have any
-                    '''
-                    if fromraw in MapMarkers and has_pairs(listmaps):
-                        try:
-                            # How can MapMarkers[fromraw][3] cause a IndexError: list index out of range
-                            if len(MapMarkers[fromraw]) > 3 and MapMarkers[fromraw][3] is None:
-                                for i in range(len(listmaps) - 1):
-                                    tmp = []
-                                    start_pos = listmaps[i]
-                                    end_pos = listmaps[i + 1]
-                                    tmp.append((start_pos[0], start_pos[1]))
-                                    tmp.append((end_pos[0], end_pos[1]))
-                                    MapMarkers[fromraw][3] = mapview.set_path(tmp, color="#006642", width=2)
-                        except Exception as e:
-                            print(repr(e))
-                    '''
                 else:
                     text_raws += ' No Data'
             elif data["portnum"] == "RANGE_TEST_APP":
@@ -626,7 +629,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 MapMarkers[fromraw][0].text_color = '#02bae8'
 
             # Lets add a indicator
-            if fromraw in MapMarkers and MapMarkers[fromraw][6] == None:
+            if fromraw in MapMarkers and MapMarkers[fromraw][6] == None and 'localstats_metrics' not in packet:
                 MapMarkers[fromraw][6] = mapview.set_marker(round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6), icon = snd_icon, data=fromraw, command = click_command)
 
             # Cleanup and get ready to print
@@ -635,11 +638,15 @@ def on_meshtastic_message(packet, interface, loop=None):
             if text_raws != '' and MyLora != fromraw:
                 insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
                 if ischat == True:
-                    insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
+                    # insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
+                    prv = False
+                    if text_chns == 'Private':
+                        prv = True
+                    add_message(text_box3, fromraw, text_raws, tnow, private=prv)
                 if viaMqtt == True:
                     insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
-                    if ischat == True:
-                        insert_colored_text(text_box3, (' ' * 11) + '[' + text_chns +'] ' + text_raws + '\n', "#00c983")
+                    # if ischat == True:
+                    #     insert_colored_text(text_box3, (' ' * 11) + '[' + text_chns +'] ' + text_raws + '\n', "#00c983")
                 else:
                     text_from = ''
                     if LoraDB[fromraw][12] > 0:
@@ -651,8 +658,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_from += f"{round(v,1)}dB {value_to_graph(v)}"
 
                     insert_colored_text(text_box1, (' ' * 11) + text_raws + text_from + '\n', "#00c983")
-                    if ischat == True:
-                        insert_colored_text(text_box3, (' ' * 11) + '[' + text_chns +'] ' + text_raws + '\n', "#02bae8")
+                    #if ischat == True:
+                    #    insert_colored_text(text_box3, (' ' * 11) + '[' + text_chns +'] ' + text_raws + '\n', "#02bae8")
             elif text_raws != '' and MyLora == fromraw:
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
                 insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
@@ -1064,8 +1071,9 @@ if __name__ == "__main__":
         if text2send != '':
             meshtastic_client.sendText(text2send)
             text_from = LoraDB[MyLora][1] + " (" + LoraDB[MyLora][2] + ")"
-            insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
-            insert_colored_text(text_box3, (' ' * 11) + '[' + str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii') +'] ' + text2send + '\n', "#02bae8")
+            add_message(text_box3, MyLora, text2send, int(time.time()), msend=True)
+            # insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
+            # insert_colored_text(text_box3, (' ' * 11) + '[' + str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii') +'] ' + text2send + '\n', "#02bae8")
             my_msg.set("")
             playsound('Data' + os.path.sep + 'NewChat.mp3')
 
@@ -1287,7 +1295,7 @@ if __name__ == "__main__":
         if LoraDB[marker.data][3] != -8.0 and LoraDB[marker.data][3] != -8.0:
             text_loc += '  Distance : ' + calc_gc(LoraDB[marker.data][3], LoraDB[marker.data][4], LoraDB[MyLora][3], LoraDB[MyLora][4]).ljust(19)
         else:
-            text_loc += (' Distance : -').ljust(19)
+            text_loc += '  Distance : ' + ('Unknown').ljust(19)
         if LoraDB[marker.data][12] > 0:
             text_loc += 'HopsAway  : ' + str(LoraDB[marker.data][12])
         insert_colored_text(info_label, text_loc, "#d1d1d1")
