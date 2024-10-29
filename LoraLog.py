@@ -90,7 +90,11 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
         text_widget.see(tk.END)
         text_widget.configure(state="disabled")
 
-def add_message(text_widget, nodeid, text, msgtime, private=False, msend=False, ackn=True):
+def on_mouse_wheel(event, text_widget):
+    text_widget.yview_scroll(int(-1*(event.delta/120)), "units")
+
+def add_message(text_widget, nodeid, text, msgtime, private=False, msend=False, ackn=True, bulk=False):
+    text_widget.configure(state="normal")
     label = LoraDB[nodeid][1] + " (" + LoraDB[nodeid][2] + ")"
     labelcol = "#00c983"
     if nodeid == MyLora: labelcol = "#02bae8"
@@ -102,9 +106,22 @@ def add_message(text_widget, nodeid, text, msgtime, private=False, msend=False, 
     timestamp_label = tk.Label(chat_frame, text=timestamp, bg='#242424', anchor="se", justify="right", fg='#9d9d9d', font=('Fixedsys', 8))
     timestamp_label.pack(anchor="se", padx=0, pady=0)
     text_widget.insert(tk.END, "\n")
+
+    # Bind the mouse wheel event to the LabelFrame
+    chat_frame.bind("<Enter>", lambda e: chat_frame.bind_all("<MouseWheel>", lambda event: on_mouse_wheel(event, text_widget)))
+    chat_frame.bind("<Leave>", lambda e: chat_frame.unbind_all("<MouseWheel>"))
+
+    # Ensure the Text widget is scrolled to the end
     text_widget.see(tk.END)
-    # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
-    chat_log.append({'nodeID': nodeid, 'time': msgtime, 'private': private, 'send': msend, 'ackn': ackn, 'text': text})
+    text_widget.configure(state="disabled")
+
+    if bulk == False:
+        chat_log.append({'nodeID': nodeid, 'time': msgtime, 'private': private, 'send': msend, 'ackn': ackn, 'text': text})
+
+def get_messages():
+    sorted_data = sorted(chat_log, key=lambda x: x['time'])[-30:]
+    for entry in sorted_data:
+        add_message(text_box3, entry['nodeID'], entry['text'], entry['time'], private=entry['private'], msend=entry['send'], ackn=entry['ackn'], bulk=True)
 
 #------------------------------------------------------------- Movment Tracker --------------------------------------------------------------------------
 movement_log    = [] # movement_log = [{'nodeID': '1', 'time': 1698163200, 'latitude': 10.0, 'longitude': 20.0, 'altitude': 1000}, ...]
@@ -1124,11 +1141,16 @@ if __name__ == "__main__":
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
     insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.36 By Jara Lowell\n", "#02bae8")
     insert_colored_text(text_box1, " Meshtastic Lybrary : v" + meshtastic.version.get_active_version() + '\n', "#02bae8")
+
     text_box1.image_create("end", image=hr_img)
     insert_colored_text(text_box1, "\n", "#02bae8")
 
     text_box2 = create_text(frame, 1, 0, 10, 100)
     text_box3 = create_text(frame, 2, 0, 10, 100)
+
+    # Create a Scrollbar and configure it to work with text_box3
+    scrollbar = tk.Scrollbar(text_box3, width=10)
+    text_box3.config(yscrollcommand=scrollbar.set)
 
     padding_frame = tk.LabelFrame(frame, background="#242424", padx=0, pady=4, text=my_label.get(), bg='#242424', fg='#999999', font=('Fixedsys', 10), borderwidth=0, highlightthickness=0, labelanchor='n')
     padding_frame.grid(row=4, column=0, rowspan=1, columnspan=1, padx=0, pady=0, sticky="nsew")
@@ -1367,7 +1389,7 @@ if __name__ == "__main__":
 
         text_box_middle.delete("1.0", tk.END)
 
-        insert_colored_text(text_box_middle, "\n " + LoraDB[MyLora][1] + "\n", "#da0000")
+        insert_colored_text(text_box_middle, "\n " + LoraDB[MyLora][1] + "\n", "#ff8f8f")
         if MyLoraText1 != '':
             insert_colored_text(text_box_middle, MyLoraText1, "#c1c1c1")
         if MyLoraText2 != '':
@@ -1541,6 +1563,7 @@ if __name__ == "__main__":
             insert_colored_text(text_box1, "\n*** Failed to connect to meshtastic did you edit the config.ini    ***", "#02bae8")
             insert_colored_text(text_box1, "\n*** and wrote down the correct ip for tcp or commport for serial ? ***", "#02bae8")
         else:
+            get_messages()
             root.after(1000, update_active_nodes)  # Schedule the next update in 30 seconds
 
     overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
