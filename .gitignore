@@ -6,3 +6,4 @@ env/
 venv/
 *.spec
 *.psd
+tkintermapview2/__pycache__/
