@@ -13,13 +13,14 @@ import pickle
 from html import unescape
 from pygame import mixer
 import threading
+import copy
 # import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
 import tkinter as tk
 import customtkinter
-from tkinter import Frame, LabelFrame
+from tkinter import Frame, LabelFrame, ttk
 from tkintermapview2 import TkinterMapView
 import textwrap
 
@@ -415,6 +416,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                         LoraDB[fromraw][9] += str(round(device_metrics.get('voltage', 0.00),2)) + 'v'
                         text_raws += 'ChUtil: ' + str(round(device_metrics.get('channelUtilization', 0.00),2)) + '% '
                         text_raws += 'AirUtilTX (DutyCycle): ' + str(round(device_metrics.get('airUtilTx', 0.00),2)) + '%'
+                        if len(LoraDB[fromraw]) < 14:
+                            LoraDB[fromraw].append(0)
+                            print(f"Node {fromraw} has no uptime and a length of {len(LoraDB[fromraw])}")
                         LoraDB[fromraw][13] = device_metrics.get('uptimeSeconds', 0)
                         text_raws += '\n' + (' ' * 11) + uptimmehuman(fromraw)
                         # Need store uptimme somwhere !
@@ -545,7 +549,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                                 MapMarkers[nodeid][2] = tnow
                             # Lets add to paths ass well if we are on map
                             if fromraw in MapMarkers:
-                                if LoraDB[nodeid][3] != -8.0 and LoraDB[nodeid][4] != -8.0 and MapMarkers[fromraw][3] is None:
+                                if LoraDB[nodeid][3] != -8.0 and LoraDB[nodeid][4] != -8.0:
                                     listmaps = []
                                     pos = ( round(LoraDB[fromraw][3],6), round(LoraDB[fromraw][4],6) )
                                     listmaps.append(pos)
@@ -1383,6 +1387,7 @@ if __name__ == "__main__":
         tmp2 = int(psutil.Process(os.getpid()).memory_info().rss)
         time1 = round(tmp2 / 1024 / 1024 * 100,2) / 100
         insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n\n", "#9d9d9d")
+        insert_colored_text(text_box_middle, " F11 Map Mode\n F5  Node DB\n", "#9d9d9d")
 
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
@@ -1462,6 +1467,7 @@ if __name__ == "__main__":
 
     root = customtkinter.CTk()
     root.title("Meshtastic Lora Logger")
+    root.geometry(f'1440x810')
     root.resizable(True, True)
     root.iconbitmap('Data' + os.path.sep + 'mesh.ico')
     root.protocol('WM_DELETE_WINDOW', on_closing)
@@ -1502,7 +1508,7 @@ if __name__ == "__main__":
     root.grid_columnconfigure(0, weight=1)
 
     # Left Top Window
-    text_box1 = create_text(frame, 0, 0, 30, 100)
+    text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#02bae8")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
     insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.36 By Jara Lowell\n", "#02bae8")
@@ -1512,10 +1518,10 @@ if __name__ == "__main__":
     text_box1.configure(state="disabled")
 
     # Left Middle Window
-    text_box2 = create_text(frame, 1, 0, 10, 100)
+    text_box2 = create_text(frame, 1, 0, 10, 90)
     text_box2.configure(state="disabled")
     # Left Bottom Window
-    text_box3 = create_text(frame, 2, 0, 10, 100)
+    text_box3 = create_text(frame, 2, 0, 15, 90)
     text_box3.configure(state="disabled")
 
     # Left Box Chat input
@@ -1524,7 +1530,7 @@ if __name__ == "__main__":
     padding_frame.grid_rowconfigure(1, weight=1)
     padding_frame.grid_columnconfigure(0, weight=1)
 
-    text_box4 = tk.Entry(padding_frame, textvariable=my_msg, width=77, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
+    text_box4 = tk.Entry(padding_frame, textvariable=my_msg, width=68, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
     text_box4.grid(row=4, column=0, padx=(1, 0))
     send_box4 = tk.Button(padding_frame, image=btn_img, command=lambda: send(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
     send_box4.grid(row=4, column=1, padx=(0, 18))
@@ -1534,12 +1540,92 @@ if __name__ == "__main__":
     frame_right.grid(row=0, column=1, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
     frame_right.grid_rowconfigure(0, weight=1)
     frame_right.grid_columnconfigure(0, weight=1)
-    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6) # database_path=database_path, use_database_only=True
-    mapview.grid(row=0, column=0, sticky='nsew')
 
+    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6) # database_path=database_path, use_database_only=True
+    mapview.pack(fill=tk.BOTH, expand=True) # grid(row=0, column=0, sticky='nsew')
     mapview.set_position(48.860381, 2.338594)
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
     mapview.set_zoom(4)
+
+    is_fullscreen = False
+    def toggle_fullscreen(event=None):
+        global is_fullscreen
+        if is_fullscreen:
+            # Restore mapview to frame_right
+            mapview.pack_forget()
+            mapview.pack(fill=tk.BOTH, expand=True)
+            frame_right.grid(row=0, column=1, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
+        else:
+            # Make mapview full screen
+            mapview.pack_forget()
+            mapview.pack(fill=tk.BOTH, expand=True)
+            mapview.master.grid(row=0, column=0, rowspan=5, columnspan=3, padx=0, pady=0, sticky='nsew')
+        is_fullscreen = not is_fullscreen
+    root.bind('<F11>', toggle_fullscreen)
+
+    def show_loradb():
+        global LoraDB
+        # Create a new window
+        new_window = tk.Toplevel(root)
+        new_window.title("LoraDB Nodes")
+        new_window.geometry("1440x810")
+        new_window.configure(bg="#242424")
+        style = ttk.Style()
+        style.theme_use('default')
+        # style.configure(".", font=('Fixedsys', 10))
+        style.configure("Treeview", background="#242424", foreground="#eeeeee", fieldbackground="#3d3d3d")
+        style.configure("Treeview.Heading", background="#242424", foreground="#eeeeee")
+        tree = ttk.Treeview(new_window, columns=("nodeID", "timenow", "ShortName", "LongName", "latitude", "longitude", "altitude", "macaddr", "hardware", "timefirst", "rightbarstats", "mmqtt", "snr", "hops", "uptime"), show='headings')
+        tree.heading("nodeID", text="Node ID")
+        tree.column("nodeID", minwidth=75, width=75, anchor='center')
+        tree.heading("timenow", text="Last Seen")
+        tree.column("timenow", minwidth=140, width=140, anchor='center')
+        tree.heading("ShortName", text="Short")
+        tree.column("ShortName", minwidth=50, width=50, anchor='center')
+        tree.heading("LongName", text="Long Name")
+        tree.column("LongName", minwidth=260, width=260)
+        tree.heading("latitude", text="Latitude")
+        tree.column("latitude", minwidth=90, width=90, anchor='center')
+        tree.heading("longitude", text="Longitude")
+        tree.column("longitude", minwidth=90, width=90, anchor='center')
+        tree.heading("altitude", text="Alt")
+        tree.column("altitude", minwidth=40, width=40, anchor='center')
+        tree.heading("macaddr", text="MAC Address")
+        tree.column("macaddr", minwidth=90, width=90, anchor='center')
+        tree.heading("hardware", text="Hardware")
+        tree.column("hardware", minwidth=120, width=120)
+        tree.heading("timefirst", text="First Seen")
+        tree.column("timefirst", minwidth=95, width=95, anchor='center')
+        tree.heading("rightbarstats", text="Status")
+        tree.column("rightbarstats", minwidth=90, width=90, anchor='center')
+        tree.heading("mmqtt", text="MQTT")
+        tree.column("mmqtt", minwidth=90, width=90, anchor='center')
+        tree.heading("snr", text="SNR")
+        tree.column("snr", minwidth=85, width=85, anchor='center')
+        tree.heading("hops", text="Hops")
+        tree.column("hops", minwidth=40, width=40, anchor='center')
+        tree.heading("uptime", text="Uptime")
+        tree.column("uptime", minwidth=90, width=90)
+        tree.tag_configure('oddrow', background='#242424')
+        tree.tag_configure('evenrow', background='#3d3d3d')
+        tmpnodes = copy.deepcopy(LoraDB)
+        tmpnodes = dict(sorted(tmpnodes.items(), key=lambda item: item[1][0], reverse=True))
+        i = False
+        for nodeID, data in tmpnodes.items():
+            data[0] = datetime.fromtimestamp(int(data[0])).strftime('%d %b %y %H:%M')
+            data[1] = unescape(data[1])
+            data[2] = unescape(data[2])
+            data[3] = round(data[3],6)
+            data[4] = round(data[4],6)
+            data[8] = datetime.fromtimestamp(int(data[8])).strftime('%d %b %y')
+            if i:
+                tree.insert("", "end", values=(nodeID, *data), tags=('oddrow',))
+            else:
+                tree.insert("", "end", values=(nodeID, *data), tags=('evenrow',))
+            i = not i
+        tree.pack(fill=tk.BOTH, expand=True)
+        tmpnodes = None
+    root.bind('<F5>', lambda event: show_loradb())
 
     # Right Status Window
     frame_middle = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, padx=0, pady=0)
