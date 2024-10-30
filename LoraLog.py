@@ -21,6 +21,7 @@ import tkinter as tk
 import customtkinter
 from tkinter import Frame, LabelFrame
 from tkintermapview2 import TkinterMapView
+import textwrap
 
 # Meshtastic imports
 import base64
@@ -72,7 +73,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
     parent_frame = str(text_widget.winfo_parent())
     if "frame5" not in parent_frame:
         text_widget.configure(state="normal")
-        if color == '#d1d1d1':
+        if color == '#d1d1d1' and "frame3" not in parent_frame:
             text_widget.image_create("end", image=hr_img)
     text_widget.tag_configure(color, foreground=color)
 
@@ -90,36 +91,22 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
         text_widget.see(tk.END)
         text_widget.configure(state="disabled")
 
-def on_mouse_wheel(event, text_widget):
-    text_widget.yview_scroll(int(-1*(event.delta/120)), "units")
-
-def add_message(text_widget, nodeid, text, msgtime, private=False, msend=False, ackn=True, bulk=False):
-    text_widget.configure(state="normal")
+def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend=False, ackn=True, bulk=False):
     label = LoraDB[nodeid][1] + " (" + LoraDB[nodeid][2] + ")"
-    labelcol = "#00c983"
-    if nodeid == MyLora: labelcol = "#02bae8"
-    chat_frame = LabelFrame(text_widget, text=label, padx=0, pady=0, bg='#242424', fg=labelcol, font=('Fixedsys', 10), borderwidth=1, relief="groove")
-    text_widget.window_create(tk.END, window=chat_frame, padx=3, pady=2)
-    chat_label = tk.Label(chat_frame, text=text, bg='#242424', fg='#d1d1d1', font=('Fixedsys', 10), width=98, anchor="nw", justify="left")
-    chat_label.pack(fill=tk.X, anchor="nw", padx=1, pady=0)
+    tcolor = "#00c983"
+    if nodeid == MyLora: tcolor = "#02bae8"
     timestamp = datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
-    timestamp_label = tk.Label(chat_frame, text=timestamp, bg='#242424', anchor="se", justify="right", fg='#9d9d9d', font=('Fixedsys', 8))
-    timestamp_label.pack(anchor="se", padx=0, pady=0)
-    text_widget.insert(tk.END, "\n")
-
-    # Bind the mouse wheel event to the LabelFrame
-    chat_frame.bind("<Enter>", lambda e: chat_frame.bind_all("<MouseWheel>", lambda event: on_mouse_wheel(event, text_widget)))
-    chat_frame.bind("<Leave>", lambda e: chat_frame.unbind_all("<MouseWheel>"))
-
-    # Ensure the Text widget is scrolled to the end
-    text_widget.see(tk.END)
-    text_widget.configure(state="disabled")
-
+    insert_colored_text(text_box3,'\n From ' + label + '\n',tcolor)
+    mtext = textwrap.fill(mtext, 95)
+    mtext = textwrap.indent(text=mtext, prefix='   ', predicate=lambda line: True)
+    insert_colored_text(text_box3, mtext + '\n',"#d1d1d1")
+    insert_colored_text(text_box3,timestamp.rjust(98) + '\n',"#919191")
+    text_box3.image_create("end", image=hr_img)
     if bulk == False:
         chat_log.append({'nodeID': nodeid, 'time': msgtime, 'private': private, 'send': msend, 'ackn': ackn, 'text': text})
 
 def get_messages():
-    sorted_data = sorted(chat_log, key=lambda x: x['time'])[-30:]
+    sorted_data = chat_log[-10:]
     for entry in sorted_data:
         add_message(text_box3, entry['nodeID'], entry['text'], entry['time'], private=entry['private'], msend=entry['send'], ackn=entry['ackn'], bulk=True)
 
@@ -1147,10 +1134,6 @@ if __name__ == "__main__":
 
     text_box2 = create_text(frame, 1, 0, 10, 100)
     text_box3 = create_text(frame, 2, 0, 10, 100)
-
-    # Create a Scrollbar and configure it to work with text_box3
-    scrollbar = tk.Scrollbar(text_box3, width=10)
-    text_box3.config(yscrollcommand=scrollbar.set)
 
     padding_frame = tk.LabelFrame(frame, background="#242424", padx=0, pady=4, text=my_label.get(), bg='#242424', fg='#999999', font=('Fixedsys', 10), borderwidth=0, highlightthickness=0, labelanchor='n')
     padding_frame.grid(row=4, column=0, rowspan=1, columnspan=1, padx=0, pady=0, sticky="nsew")
