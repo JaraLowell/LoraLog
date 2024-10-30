@@ -96,26 +96,31 @@ def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend=False,
     tcolor = "#00c983"
     if nodeid == MyLora: tcolor = "#02bae8"
     timestamp = datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
-    insert_colored_text(text_box3,'\n From ' + label + '\n',tcolor)
+    insert_colored_text(text_widget,'\n From ' + label + '\n',tcolor)
     mtext = textwrap.fill(mtext, 95)
     mtext = textwrap.indent(text=mtext, prefix='   ', predicate=lambda line: True)
-    insert_colored_text(text_box3, mtext + '\n',"#d1d1d1")
-    insert_colored_text(text_box3,timestamp.rjust(98) + '\n',"#919191")
-    text_box3.image_create("end", image=hr_img)
+    insert_colored_text(text_widget, mtext + '\n',"#d1d1d1")
+    insert_colored_text(text_widget,timestamp.rjust(98) + '\n',"#919191")
+    text_widget.image_create("end", image=hr_img)
     if bulk == False:
-        chat_log.append({'nodeID': nodeid, 'time': msgtime, 'private': private, 'send': msend, 'ackn': ackn, 'text': text})
+        # We might have to html it so we dont get any ' and " in text that would break the the db
+        chat_log.append({'nodeID': nodeid, 'time': msgtime, 'private': private, 'send': msend, 'ackn': ackn, 'seen': False, 'text': str(mtext.encode('ascii', 'xmlcharrefreplace'), 'ascii')})
+
+    # url escape for save storage > str(text.encode('ascii', 'xmlcharrefreplace'), 'ascii')
+    # and back to normal > unescape(text_from)
+    # Do wee need to send ackn back to the sender after we seen the message ? 
 
 def get_messages():
-    sorted_data = chat_log[-10:]
+    sorted_data = chat_log[-10:] # for now retrieve only the last 10 messages
     for entry in sorted_data:
-        add_message(text_box3, entry['nodeID'], entry['text'], entry['time'], private=entry['private'], msend=entry['send'], ackn=entry['ackn'], bulk=True)
+        add_message(text_box3, entry['nodeID'], unescape(entry['text']), entry['time'], private=entry['private'], msend=entry['send'], ackn=entry['ackn'], bulk=True)
 
 #------------------------------------------------------------- Movment Tracker --------------------------------------------------------------------------
 movement_log    = [] # movement_log = [{'nodeID': '1', 'time': 1698163200, 'latitude': 10.0, 'longitude': 20.0, 'altitude': 1000}, ...]
 metrics_log     = [] # metrics_log  = [{'nodeID': '1', 'time': 1698163200, 'battery': 100, 'voltage': 3.7, 'utilization': 0.0, 'airutiltx': 0.0}, ...]
 environment_log = [] # environment  = [{'nodeID': '1', 'time': 1698163200, 'temperature': 1.0, 'humidity': 20.0, 'pressure': 1010.0}, ...]
 LoraDB          = {} # LoraDB       = {'nodeID': [timenow, ShortName, LongName, latitude, longitude, altitude, macaddr, hardware, timefirst, rightbarstats, mmqtt, snr, hops], ...}
-chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
+chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': True, 'ackn' : True, seen': False, 'text': 'Hello World!'}, ...]
 
 # database_path = 'DataBase' + os.path.sep + "tiles.db"
 
@@ -642,15 +647,11 @@ def on_meshtastic_message(packet, interface, loop=None):
             if text_raws != '' and MyLora != fromraw:
                 insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
                 if ischat == True:
-                    # insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
                     prv = False
-                    if text_chns == 'Private':
-                        prv = True
+                    if text_chns == 'Private': prv = True
                     add_message(text_box3, fromraw, text_raws, tnow, private=prv)
                 if viaMqtt == True:
                     insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
-                    # if ischat == True:
-                    #     insert_colored_text(text_box3, (' ' * 11) + '[' + text_chns +'] ' + text_raws + '\n', "#00c983")
                 else:
                     text_from = ''
                     if LoraDB[fromraw][12] > 0:
@@ -662,8 +663,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_from += f"{round(v,1)}dB {value_to_graph(v)}"
 
                     insert_colored_text(text_box1, (' ' * 11) + text_raws + text_from + '\n', "#00c983")
-                    #if ischat == True:
-                    #    insert_colored_text(text_box3, (' ' * 11) + '[' + text_chns +'] ' + text_raws + '\n', "#02bae8")
             elif text_raws != '' and MyLora == fromraw:
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
                 insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
@@ -1081,80 +1080,6 @@ if __name__ == "__main__":
             my_msg.set("")
             playsound('Data' + os.path.sep + 'NewChat.mp3')
 
-    root = customtkinter.CTk()
-    root.title("Meshtastic Lora Logger")
-    root.resizable(True, True)
-    root.iconbitmap('Data' + os.path.sep + 'mesh.ico')
-    root.protocol('WM_DELETE_WINDOW', on_closing)
-
-    # Map MArker Images
-    tk_icon = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker.png'))
-    tk_direct = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-green.png'))
-    tk_mqtt = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-orange.png'))
-    tk_old = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-grey.png'))
-    tk_dot = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'dot.png'))
-    btn_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'ui_button.png'))
-    hr_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'hr.png'))
-    snd_icon = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'signal.png'))
-
-    my_msg = tk.StringVar()  # For the messages to be sent.
-    my_msg.set("")
-    my_label = tk.StringVar()
-    my_label.set("Send a message to channel")
-    my_chat = tk.StringVar()
-    my_chat.set("")
-    chat_input = None
-
-    frame = tk.Frame(root, borderwidth=0, highlightthickness=1, highlightcolor="#121212", highlightbackground="#121212")
-    frame.grid(row=0, column=0, padx=2, pady=2, sticky='nsew')
-
-    # Configure grid layout for the main frame
-    frame.grid_rowconfigure(0, weight=1)
-    frame.grid_rowconfigure(1, weight=1)
-    frame.grid_rowconfigure(2, weight=1)
-    frame.grid_rowconfigure(3, weight=0)
-    frame.grid_columnconfigure(0, weight=0)
-    frame.grid_columnconfigure(1, weight=1)
-    frame.grid_columnconfigure(2, weight=0)
-
-    # Configure grid layout for the root window
-    root.grid_rowconfigure(0, weight=1)
-    root.grid_columnconfigure(0, weight=1)
-
-    # Create three text boxes with padding color
-    text_box1 = create_text(frame, 0, 0, 30, 100)
-    # Todo: Add a logo
-    insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#02bae8")
-    insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.36 By Jara Lowell\n", "#02bae8")
-    insert_colored_text(text_box1, " Meshtastic Lybrary : v" + meshtastic.version.get_active_version() + '\n', "#02bae8")
-
-    text_box1.image_create("end", image=hr_img)
-    insert_colored_text(text_box1, "\n", "#02bae8")
-
-    text_box2 = create_text(frame, 1, 0, 10, 100)
-    text_box3 = create_text(frame, 2, 0, 10, 100)
-
-    padding_frame = tk.LabelFrame(frame, background="#242424", padx=0, pady=4, text=my_label.get(), bg='#242424', fg='#999999', font=('Fixedsys', 10), borderwidth=0, highlightthickness=0, labelanchor='n')
-    padding_frame.grid(row=4, column=0, rowspan=1, columnspan=1, padx=0, pady=0, sticky="nsew")
-    padding_frame.grid_rowconfigure(1, weight=1)
-    padding_frame.grid_columnconfigure(0, weight=1)
-
-    text_box4 = tk.Entry(padding_frame, textvariable=my_msg, width=77, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
-    text_box4.grid(row=4, column=0, padx=(1, 0))
-    send_box4 = tk.Button(padding_frame, image=btn_img, command=lambda: send(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-    send_box4.grid(row=4, column=1, padx=(0, 18))
-
-    # text_box4.bind("<Return>", send)
-
-    frame_right = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#242424", highlightbackground="#242424", padx=2, pady=2)
-    frame_right.grid(row=0, column=1, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
-    frame_right.grid_rowconfigure(0, weight=1)
-    frame_right.grid_columnconfigure(0, weight=1)
-
-    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6) # database_path=database_path, use_database_only=True
-    mapview.grid(row=0, column=0, sticky='nsew')
-
     def send_position(nodeid):
         global meshtastic_client, loop, stop_thread
         try:
@@ -1216,8 +1141,6 @@ if __name__ == "__main__":
         else:
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
             insert_colored_text(text_box2, (' ' * 11) + "Please wait before the next request, 30 secconds inbetween requests\n", "#02bae8")
-
-    overlay = None
 
     def chatbox(nodeid):
         global LoraDB, MyLora, overlay, my_chat, chat_input
@@ -1341,14 +1264,6 @@ if __name__ == "__main__":
 
         button6 = tk.Button(button_frame2, image=btn_img, command=lambda: chatbox(marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button6.pack(side=tk.LEFT, padx=1)
-
-    frame_middle = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, padx=0, pady=0)
-    frame_middle.grid(row=0, column=2, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
-    frame_middle.grid_rowconfigure(0, weight=1)
-    frame_middle.grid_columnconfigure(0, weight=0)
-
-    # Create a text widget inside the middle frame to display the last 30 active nodes
-    text_box_middle = create_text(frame_middle, 0, 0, 0, 21)
 
     # Function to update the middle frame with the last 30 active nodes
     def update_active_nodes():
@@ -1530,10 +1445,6 @@ if __name__ == "__main__":
                         MapMarkers[node_id][5] = 1
         root.after(1000, update_active_nodes)
 
-    mapview.set_position(48.860381, 2.338594)
-    mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
-    mapview.set_zoom(4)
-
     def start_mesh():
         global overlay, root
         playsound('Data' + os.path.sep + 'Button.mp3')
@@ -1549,6 +1460,95 @@ if __name__ == "__main__":
             get_messages()
             root.after(1000, update_active_nodes)  # Schedule the next update in 30 seconds
 
+    root = customtkinter.CTk()
+    root.title("Meshtastic Lora Logger")
+    root.resizable(True, True)
+    root.iconbitmap('Data' + os.path.sep + 'mesh.ico')
+    root.protocol('WM_DELETE_WINDOW', on_closing)
+    overlay = None
+
+    # Map Marker Images
+    tk_icon = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker.png'))
+    tk_direct = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-green.png'))
+    tk_mqtt = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-orange.png'))
+    tk_old = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'marker-grey.png'))
+    tk_dot = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'dot.png'))
+    btn_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'ui_button.png'))
+    hr_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'hr.png'))
+    snd_icon = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'signal.png'))
+
+    my_msg = tk.StringVar()  # For the messages to be sent.
+    my_msg.set("")
+    my_label = tk.StringVar()
+    my_label.set("Send a message to channel")
+    my_chat = tk.StringVar()
+    my_chat.set("")
+    chat_input = None
+
+    frame = tk.Frame(root, borderwidth=0, highlightthickness=1, highlightcolor="#121212", highlightbackground="#121212")
+    frame.grid(row=0, column=0, padx=2, pady=2, sticky='nsew')
+
+    # Configure grid layout for the main frame
+    frame.grid_rowconfigure(0, weight=1)
+    frame.grid_rowconfigure(1, weight=1)
+    frame.grid_rowconfigure(2, weight=1)
+    frame.grid_rowconfigure(3, weight=0)
+    frame.grid_columnconfigure(0, weight=0)
+    frame.grid_columnconfigure(1, weight=1)
+    frame.grid_columnconfigure(2, weight=0)
+
+    # Configure grid layout for the root window
+    root.grid_rowconfigure(0, weight=1)
+    root.grid_columnconfigure(0, weight=1)
+
+    # Left Top Window
+    text_box1 = create_text(frame, 0, 0, 30, 100)
+    insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#02bae8")
+    insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.36 By Jara Lowell\n", "#02bae8")
+    insert_colored_text(text_box1, " Meshtastic Lybrary : v" + meshtastic.version.get_active_version() + '\n', "#02bae8")
+    text_box1.image_create("end", image=hr_img)
+    insert_colored_text(text_box1, "\n", "#02bae8")
+    text_box1.configure(state="disabled")
+
+    # Left Middle Window
+    text_box2 = create_text(frame, 1, 0, 10, 100)
+    text_box2.configure(state="disabled")
+    # Left Bottom Window
+    text_box3 = create_text(frame, 2, 0, 10, 100)
+    text_box3.configure(state="disabled")
+
+    # Left Box Chat input
+    padding_frame = tk.LabelFrame(frame, background="#242424", padx=0, pady=4, text=my_label.get(), bg='#242424', fg='#999999', font=('Fixedsys', 10), borderwidth=0, highlightthickness=0, labelanchor='n')
+    padding_frame.grid(row=4, column=0, rowspan=1, columnspan=1, padx=0, pady=0, sticky="nsew")
+    padding_frame.grid_rowconfigure(1, weight=1)
+    padding_frame.grid_columnconfigure(0, weight=1)
+
+    text_box4 = tk.Entry(padding_frame, textvariable=my_msg, width=77, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
+    text_box4.grid(row=4, column=0, padx=(1, 0))
+    send_box4 = tk.Button(padding_frame, image=btn_img, command=lambda: send(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+    send_box4.grid(row=4, column=1, padx=(0, 18))
+
+    # Middle Map Window
+    frame_right = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#242424", highlightbackground="#242424", padx=2, pady=2)
+    frame_right.grid(row=0, column=1, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
+    frame_right.grid_rowconfigure(0, weight=1)
+    frame_right.grid_columnconfigure(0, weight=1)
+    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6) # database_path=database_path, use_database_only=True
+    mapview.grid(row=0, column=0, sticky='nsew')
+
+    mapview.set_position(48.860381, 2.338594)
+    mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
+    mapview.set_zoom(4)
+
+    # Right Status Window
+    frame_middle = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, padx=0, pady=0)
+    frame_middle.grid(row=0, column=2, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
+    frame_middle.grid_rowconfigure(0, weight=1)
+    frame_middle.grid_columnconfigure(0, weight=0)
+    text_box_middle = create_text(frame_middle, 0, 0, 0, 21)
+
+    # Start OverLay window
     overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
     overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
     info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=51, height=8)
