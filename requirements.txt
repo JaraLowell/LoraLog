@@ -9,3 +9,4 @@ Pypubsub==4.0.3
 scipy==1.14.1
 tkintermapview==1.29
 Unidecode==1.3.8
+logging>=0.4.9

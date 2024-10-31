@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import os
 import time
 from datetime import datetime
@@ -14,7 +15,7 @@ from html import unescape
 from pygame import mixer
 import threading
 import copy
-# import yaml
+import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -40,7 +41,15 @@ except ImportError:
 Fix sub parts if they brake a main part install > pip install --upgrade setuptools <sub tool name>
 Upgrade the Meshtastic Python Library           > pip install --upgrade meshtastic
 Build the build                                 > pyinstaller --icon=mesh.ico -F --onefile --noconsole LoraLog.py
+
+from pprint import pprint
+pprint(vars(object))
 '''
+
+# Configure Error logging
+import logging
+logging.basicConfig(filename='LoraLog.log', level=logging.ERROR, format='%(asctime)s : %(message)s', datefmt='%m-%d %H:%M', filemode='w')
+logging.error("Startin Up")
 
 def has_pairs(lst):
     return len(lst) != 0 and len(lst) % 2 == 0
@@ -66,7 +75,7 @@ def showLink(event):
     if idx in LoraDB:
         click_command(temp)
     else:
-        print(f'Node {idx} not in DB')
+        logging.error(f'Node {idx} not in DB')
 
 # Function to insert colored text
 def insert_colored_text(text_widget, text, color, center=False, tag=None):
@@ -78,7 +87,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
             text_widget.image_create("end", image=hr_img)
     text_widget.tag_configure(color, foreground=color)
 
-    if tag and tag != MyLora:
+    if tag: # and tag != MyLora:
         text_widget.tag_configure(tag, foreground=color, underline=False)
         text_widget.insert(tk.END, text, (color, tag))
         text_widget.tag_bind(tag, "<Button-1>", showLink)
@@ -193,7 +202,7 @@ try:
     map_trail_age = int(config.get('meshtastic', 'map_trail_age')) * 60
     metrics_age = int(config.get('meshtastic', 'metrics_age')) * 60
 except Exception as e :
-    print(str(e),' could not read configuration file')
+    logging.error("Error loading databases: %s", str(e))
     map_delete = 2700
     map_oldnode = 86400
     map_trail_age = 43200
@@ -219,6 +228,21 @@ def connect_meshtastic(force_connect=False):
     global meshtastic_client, MyLora, movement_log, loop
     if meshtastic_client and not force_connect:
         return meshtastic_client
+
+    # Initialize the event loop
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    pub.subscribe(on_meshtastic_message, "meshtastic.receive", loop=asyncio.get_event_loop())
+    pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
+    pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
+
     meshtastic_client = None
     # Initialize Meshtastic interface
     retry_limit = 3
@@ -229,7 +253,8 @@ def connect_meshtastic(force_connect=False):
     cnto = target_host
     if config.get('meshtastic', 'interface') != 'tcp':
         cnto = comport
-    print("Connecting to meshtastic on " + cnto + "...")
+    logging.debug("Connecting to meshtastic on " + cnto + "...")
+    
     insert_colored_text(text_box1, " Connecting to meshtastic on " + cnto + "...\n", "#00c983")
     while not successful and attempts <= retry_limit:
         try:
@@ -241,22 +266,26 @@ def connect_meshtastic(force_connect=False):
         except Exception as e:
             attempts += 1
             if attempts <= retry_limit:
-                print(f"Attempt #{attempts-1} failed. Retrying in 5 secs... {e}")
+                logging.error("Connect re-try: ", str(e))
                 time.sleep(1)
             else:
-                print("Could not connect: {e}")
+                logging.error("Could not connect: s", str(e))
                 return None
+    # Request Admmin Metadata
+    meshtastic_client.localNode.getMetadata()
 
     nodeInfo = meshtastic_client.getMyNodeInfo()
-    print("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
+    logging.debug("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
     insert_colored_text(text_box1, " Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
 
     MyLora = (nodeInfo['user']['id'])[1:]
+    print("MyLora: " + MyLora)
     root.wm_title("Meshtastic Lora Logger - " + unescape(LoraDB[MyLora][1]))
 
     logLora((nodeInfo['user']['id'])[1:], ['NODEINFO_APP', nodeInfo['user']['shortName'], nodeInfo['user']['longName'], nodeInfo['user']["macaddr"],nodeInfo['user']['hwModel']])
-    # Lets get the Local Node's channels
+
     nodeInfo = meshtastic_client.getNode('^local')
+    # Lets get the Local Node's channels
     lora_config = nodeInfo.localConfig.lora
     modem_preset_enum = lora_config.modem_preset
     modem_preset_string = config_pb2._CONFIG_LORACONFIG_MODEMPRESET.values_by_number[modem_preset_enum].name
@@ -277,22 +306,7 @@ def connect_meshtastic(force_connect=False):
                 insert_colored_text(text_box1, " Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n", "#00c983")
                 padding_frame.config(text="Send a message to channel " + mylorachan[0])
 
-    # Initialize the event loop
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
     updatesnodes()
-
-    pub.subscribe(on_meshtastic_message, "meshtastic.receive", loop=asyncio.get_event_loop())
-    pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
-    pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
-
     return meshtastic_client
 
 # Function to stop the event loop
@@ -303,7 +317,7 @@ def stop_event_loop():
 def on_lost_meshtastic_connection(interface):
     global root, loop, telemetry_thread, position_thread, trace_thread
     safedatabase()
-    print("Lost connection. Reconnecting...")
+    logging.error("Lost connection. Reconnecting...")
     insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
     insert_colored_text(text_box1, " Lost connection to node... Please wait...\n", "#db6544")
     if telemetry_thread != None and telemetry_thread.is_alive():
@@ -323,13 +337,7 @@ def on_lost_meshtastic_connection(interface):
         root.meshtastic_interface = connect_meshtastic(force_connect=True)
 
 def on_meshtastic_connection(interface, topic=pub.AUTO_TOPIC):
-    # called when we (re)connect to the radio
-    # defaults to broadcast, specify a destination ID if you wish
-    # interface.sendText("hello mesh")
-    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-    insert_colored_text(text_box1, " Connection Made...\n", "#db6544")
-    # for thread in threading.enumerate():
-    #     print(f"Thread Name: {thread.name}, Thread ID: {thread.ident}, Alive: {thread.is_alive()}")
+    print("Connected to meshtastic")
 
 def logLora(nodeID, info):
     global LoraDB
@@ -365,6 +373,16 @@ def idToHex(nodeId):
 def on_meshtastic_message(packet, interface, loop=None):
     # print(yaml.dump(packet))
     global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log, updatelist
+
+    if "decoded" in packet and "portnum" in packet["decoded"] and packet["decoded"]["portnum"] == "ADMIN_APP":
+        if "getDeviceMetadataResponse" in packet["decoded"]["admin"]:
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+            insert_colored_text(text_box2, f" Firmware version : {packet['decoded']['admin']['getDeviceMetadataResponse']['firmwareVersion']}", "#00c983")
+        else:
+            print('*** ADMIN_APP ***\n' + yaml.dump(packet))
+        # Admin local package, no need go on with this
+        return
+
     ischat = False
     tnow = int(time.time())
     rectime = tnow
@@ -418,7 +436,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_raws += 'AirUtilTX (DutyCycle): ' + str(round(device_metrics.get('airUtilTx', 0.00),2)) + '%'
                         if len(LoraDB[fromraw]) < 14:
                             LoraDB[fromraw].append(0)
-                            print(f"Node {fromraw} has no uptime and a length of {len(LoraDB[fromraw])}")
+                            logging.error(f"Node {fromraw} has no uptime and a length of {len(LoraDB[fromraw])}")
                         LoraDB[fromraw][13] = device_metrics.get('uptimeSeconds', 0)
                         text_raws += '\n' + (' ' * 11) + uptimmehuman(fromraw)
                         # Need store uptimme somwhere !
@@ -485,8 +503,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_msgs += 'latitude ' + str(round(nodelat,4)) + ' '
                 text_msgs += 'longitude ' + str(round(nodelon,4)) + ' '
                 text_msgs += 'altitude ' + str(position.get('altitude', 0)) + ' meter'
-                if "satsInView" in position:
-                    text_msgs += ' (' + str(position.get('satsInView', 0)) + ' satelites)'
                 if nodelat != -8.0 and nodelon != -8.0:
                     logLora(fromraw, ['POSITION_APP', nodelat, nodelon, position.get('altitude', 0)])
                     if MyLora != fromraw and LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0:
@@ -494,15 +510,18 @@ def on_meshtastic_message(packet, interface, loop=None):
                     if fromraw in MapMarkers:
                         MapMarkers[fromraw][0].set_position(nodelat, nodelon)
                         MapMarkers[fromraw][0].set_text(LoraDB[fromraw][1])
+
                     last_position = get_last_position(movement_log, fromraw)
                     if last_position and 'latitude' in position and 'longitude' in position:
                         if last_position['latitude'] != nodelat or last_position['longitude'] != nodelon:
                             movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
-                            if fromraw in MapMarkers:
-                                MapMarkers[fromraw][5] = 0
                             text_msgs += ' (Moved!)'
+                        if fromraw in MapMarkers:
+                            MapMarkers[fromraw][5] = 0
                     if not last_position and 'latitude' in position and 'longitude' in position:
                         movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
+                if "satsInView" in position:
+                    text_msgs += ' (' + str(position.get('satsInView', 0)) + ' satelites)'
                 text_raws = text_msgs
             elif data["portnum"] == "NODEINFO_APP":
                 node_info = packet['decoded'].get('user', {})
@@ -544,7 +563,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                             if nodeid not in MapMarkers:
                                 if LoraDB[nodeid][3] != -8.0 and LoraDB[nodeid][4] != -8.0:
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
-                                    MapMarkers[nodeid][0] = mapview.set_marker(round(LoraDB[nodeid][3],6), round(LoraDB[nodeid][4],6), text=unescape(LoraDB[nodeid][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=nodeid, command = click_command)
+                                    MapMarkers[nodeid][0] = mapview.set_marker(round(LoraDB[nodeid][3],6), round(LoraDB[nodeid][4],6), text=unescape(LoraDB[nodeid][1]), icon = tk_mqtt, text_color = '#02bae8', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                             else:
                                 MapMarkers[nodeid][2] = tnow
                             # Lets add to paths ass well if we are on map
@@ -673,7 +692,7 @@ def on_meshtastic_message(packet, interface, loop=None):
             else:
                 insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
         else:
-            print("No fromId in packet")
+            logging.debug("No fromId in packet")
             insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] No fromId in packet\n', "#c24400")
     else:
         if text_from != '':
@@ -699,6 +718,7 @@ def updatesnodes():
     info = ''
     itmp = 0
     tnow = int(time.time())
+    # a_while_back = tnow - int(timedelta(minutes=5).total_seconds())
     for nodes, info in meshtastic_client.nodes.items():
         if "user" in info:
             tmp = info['user']
@@ -709,10 +729,11 @@ def updatesnodes():
                     nodeLast = tnow
                     itmp = itmp + 1
 
-                    if "lastHeard" in info and info["lastHeard"] is not None: nodeLast = info['lastHeard']
+                    if "lastHeard" in info and info["lastHeard"] is not None:
+                        nodeLast = info['lastHeard']
 
                     if nodeID not in LoraDB:
-                        LoraDB[nodeID] = [nodeLast, nodeID[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '',-1, 0]
+                        LoraDB[nodeID] = [nodeLast, nodeID[-4:], '', -8.0, -8.0, 0, '', '', nodeLast, '0% 0.0v', '', '',-1, 0]
                         insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                         insert_colored_text(text_box3, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
 
@@ -729,7 +750,6 @@ def updatesnodes():
                     if "hwModel" in tmp: LoraDB[nodeID][7] = str(tmp['hwModel'])
                     LoraDB[nodeID][12] = -1
                     if "hopsAway" in info: LoraDB[nodeID][12] = info['hopsAway']
-
                     if "position" in info:
                         tmp2 = info['position']
                         if "latitude" in tmp2 and "longitude" in tmp2:
@@ -738,13 +758,17 @@ def updatesnodes():
                         if "altitude" in tmp:
                             LoraDB[nodeID][5] = tmp['altitude']
                         
-                        if nodeID == MyLora:
+                    if nodeID == MyLora:
+                        if LoraDB[MyLora][3] != -8.0 and LoraDB[MyLora][4] != -8.0:
                             if MyLora not in MapMarkers:
                                 MapMarkers[MyLora] = [None, False, nodeLast, None, None, 0, None]
                                 MapMarkers[MyLora][0] = mapview.set_marker(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6), text=unescape(LoraDB[MyLora][1]), icon = tk_icon, text_color = '#00c983', font = ('Fixedsys', 8), data=MyLora, command = click_command)
                                 MapMarkers[MyLora][0].text_color = '#00c983'
-                                mapview.set_position(round(LoraDB[nodeID][3],6), round(LoraDB[nodeID][4],6))
-                                mapview.set_zoom(10)
+                            mapview.set_position(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6))
+                            mapview.set_zoom(10)
+                        else:
+                            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+                            insert_colored_text(text_box2, " My Node has no position !!\n", "#e8643f")
 
                     if "viaMqtt" in info: LoraDB[nodeID][10] = ' via mqtt'
                     if "snr" in info and info['snr'] is not None: LoraDB[nodeID][11] = str(info['snr']) + 'dB'
@@ -851,13 +875,16 @@ def plot_metrics_log(metrics_log, node_id, frame, width=512, height=212):
         'utilization': [entry['utilization'] for entry in metrics],
         'airutiltx': [entry['airutiltx'] for entry in metrics]
     })
-    resample_interval = len(df) // 80 or 5
+    resample_interval = len(df) // 60 or 5
     df_resampled = df.set_index('time').resample(f'{resample_interval}min').mean().dropna().reset_index()
     times_resampled = df_resampled['time'].tolist()
     battery_levels_resampled = df_resampled['battery'].tolist()
     voltages_resampled = df_resampled['voltage'].tolist()
     utilizations_resampled = df_resampled['utilization'].tolist()
     airutiltxs_resampled = df_resampled['airutiltx'].tolist()
+
+    if len(battery_levels_resampled) < 5 or len(voltages_resampled) < 5 or len(utilizations_resampled) < 5 or len(airutiltxs_resampled) < 5:
+        return
 
     battery_levels_smooth = savgol_filter(battery_levels_resampled, window_length=5, polyorder=2)
     voltages_smooth = savgol_filter(voltages_resampled, window_length=5, polyorder=2)
@@ -926,6 +953,9 @@ def plot_environment_log(metrics_log, node_id, frame , width=512, height=184):
     temperatures_resampled = df_resampled['temperatures'].tolist()
     humidities_resampled = df_resampled['humidities'].tolist()
     pressures_resampled = df_resampled['pressures'].tolist()
+
+    if len(temperatures_resampled) < 5 or len(humidities_resampled) < 5 or len(pressures_resampled) < 5:
+        return
 
     temperatures = savgol_filter(temperatures_resampled, window_length=5, polyorder=2)
     humidities = savgol_filter(humidities_resampled, window_length=5, polyorder=2)
@@ -1038,7 +1068,7 @@ def destroy_overlay():
     try:
         overlay.destroy()
     except Exception as e:
-        print(f"Error destroying overlay: {repr(e)}")
+        logging.error("Error destroying overlay: ", str(e))
 
 #---------------------------------------------------------------- Start Mains -----------------------------------------------------------------------------
 
@@ -1046,7 +1076,6 @@ if __name__ == "__main__":
     os.system("")
 
     isLora = True
-    print("Loading meshtastic plugin...")
 
     def on_closing():
         global isLora
@@ -1054,7 +1083,8 @@ if __name__ == "__main__":
         if meshtastic_client is not None:
             meshtastic_client.close()
             safedatabase()
-            print('Saved Databases')
+            logging.debug('Saved Databases')
+        logging.debug("Closed Program")
         root.quit()
         sys.exit()
 
@@ -1086,6 +1116,7 @@ if __name__ == "__main__":
 
     def send_position(nodeid):
         global meshtastic_client, loop, stop_thread
+        print(f"Requesting Position Data from {nodeid}")
         try:
             meshtastic_client.sendPosition(destinationId=nodeid, wantResponse=True, channelIndex=0)
         except Exception as e:
@@ -1095,6 +1126,7 @@ if __name__ == "__main__":
 
     def send_telemetry(nodeid):
         global meshtastic_client, loop
+        print(f"Requesting Telemetry Data from {nodeid}")
         try:
             meshtastic_client.sendTelemetry(destinationId=nodeid, wantResponse=True, channelIndex=0)
         except Exception as e:
@@ -1104,6 +1136,7 @@ if __name__ == "__main__":
 
     def send_trace(nodeid):
         global meshtastic_client, loop
+        print(f"Requesting Traceroute Data from {nodeid}")
         try:
             meshtastic_client.sendTraceRoute(dest=nodeid, hopLimit=7, channelIndex=0)
         except Exception as e:
@@ -1115,7 +1148,7 @@ if __name__ == "__main__":
         global overlay
         playsound('Data' + os.path.sep + 'Button.mp3')
         if has_open_figures():
-            print("Closing open figures")
+            logging.debug("Closing open figures failed?")
         if overlay is not None:
             destroy_overlay()
         gc.collect()
@@ -1150,7 +1183,7 @@ if __name__ == "__main__":
         global LoraDB, MyLora, overlay, my_chat, chat_input
         playsound('Data' + os.path.sep + 'Button.mp3')
         if has_open_figures():
-            print("Closing open figures")
+            logging.debug("No fromId in packet")
         if overlay is not None:
             destroy_overlay()
 
@@ -1181,6 +1214,7 @@ if __name__ == "__main__":
         global my_chat
         playsound('Data' + os.path.sep + 'Button.mp3')
         my_chat.set("")
+        # !! Under Construction !! 
         print("Sending "+ nodeid + " message: " + message)
 
     def click_command(marker):
@@ -1188,11 +1222,11 @@ if __name__ == "__main__":
         # Destroy the existing overlay if it exists
         playsound('Data' + os.path.sep + 'Button.mp3')
         if has_open_figures():
-            print("Closing open figures")
+            logging.debug("Closing open figures failed?")
         if overlay is not None:
            destroy_overlay()
         if marker.data not in LoraDB:
-            print(f"Node {marker.data} not in database")
+            logging.error(f"Node {marker.data} not in database")
             return
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
@@ -1291,7 +1325,7 @@ if __name__ == "__main__":
 
         text_box_middle.delete("1.0", tk.END)
 
-        insert_colored_text(text_box_middle, "\n " + LoraDB[MyLora][1] + "\n", "#ff8f8f")
+        insert_colored_text(text_box_middle, "\n " + LoraDB[MyLora][1] + "\n", "#ff8f8f", tag=MyLora)
         if MyLoraText1 != '':
             insert_colored_text(text_box_middle, MyLoraText1, "#c1c1c1")
         if MyLoraText2 != '':
@@ -1311,8 +1345,7 @@ if __name__ == "__main__":
                 LoraDB[node_id][9] = '0% 0.0v'
             if len(node_info) < 14:
                 LoraDB[node_id].append(0)
-                print(f"Node {node_id} has no uptime and a length of {len(node_info)}")
-
+                logging.error(f"Node {node_id} has no uptime and a length of {len(node_info)}")
             if tnow - node_time >= map_oldnode and node_id != MyLora:
                 if node_id in MapMarkers:
                     if MapMarkers[node_id][3] != None:
@@ -1382,12 +1415,13 @@ if __name__ == "__main__":
         insert_colored_text(text_box_middle, '\n' + ('─' * 14), "#3d3d3d")
         time1 = (time.perf_counter() - start) * 1000
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms', "#9d9d9d")
-        tmp2 = threading.active_count()
-        insert_colored_text(text_box_middle, f"\n Threads : {tmp2}", "#9d9d9d")
+        # tmp2 = threading.active_count()
+        # insert_colored_text(text_box_middle, f"\n Threads : {tmp2}", "#9d9d9d")
         tmp2 = int(psutil.Process(os.getpid()).memory_info().rss)
         time1 = round(tmp2 / 1024 / 1024 * 100,2) / 100
         insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n\n", "#9d9d9d")
-        insert_colored_text(text_box_middle, " F11 Map Mode\n F5  Node DB\n", "#9d9d9d")
+
+        insert_colored_text(text_box_middle, " F5 View node DB\n F6 Map Extend Mode\n", "#9d9d9d")
 
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
@@ -1397,7 +1431,7 @@ if __name__ == "__main__":
             updatesnodes()
 
             if has_open_figures():
-                print("Closing open figures")
+                logging.debug("Closing open figures failed?")
 
             cutoff_time = tnow - map_trail_age
             movement_log[:] = [entry for entry in movement_log if not (entry['time'] < cutoff_time)]
@@ -1406,7 +1440,6 @@ if __name__ == "__main__":
             environment_log[:] = [entry for entry in environment_log if not (entry['time'] < cutoff_time)]
 
             safedatabase()
-            print('Saved Databases')
             gc.collect()
         root.after(1000, update_paths_nodes)
     ### end
@@ -1423,31 +1456,26 @@ if __name__ == "__main__":
                     MapMarkers[node_id][6].delete()
                     MapMarkers[node_id][6] = None
 
-                if MapMarkers[node_id][5] == 0:
-                    positions = get_data_for_node(movement_log, node_id)
-                    if MapMarkers[node_id][4] != None:
-                        MapMarkers[node_id][4].delete()
-                        MapMarkers[node_id][4] = None
-                    if len(positions) > 1 and tnow - node_info[0] <= map_oldnode / 2:
-                        last_position = get_last_position(positions, node_id)
-                        first_position = get_first_position(positions, node_id)
-                        checktime = first_position['time'] + last_position['time']
-                        if MapMarkers[node_id][5] != checktime:
-                            drawline = []
-                            # index = len(positions)
-                            for position in positions:
-                                # index -= 1
-                                pos = (position['latitude'], position['longitude'])
-                                drawline.append(pos)
-                                # if index != 0:
-                                #     MapMarkers[node_id][4] = mapview.set_marker(position['latitude'], position['longitude'], icon = tk_dot)
-                                #     marker = MapMarkers[node_id][4]
-                                #     mapview.canvas.lower(marker.canvas_icon, "marker")
-                            MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
-                            MapMarkers[node_id][5] = checktime
-                            print(f"Drawing trail for {LoraDB[node_id][1]}")
+                positions = get_data_for_node(movement_log, node_id)
+                if MapMarkers[node_id][4] != None and MapMarkers[node_id][5] <= 0:
+                    MapMarkers[node_id][4].delete()
+                    MapMarkers[node_id][4] = None
+                if len(positions) > 1 and tnow - node_info[0] <= map_oldnode:
+                    if MapMarkers[node_id][5] <= 0:
+                        drawline = []
+                        # index = len(positions)
+                        for position in positions:
+                            # index -= 1
+                            pos = (position['latitude'], position['longitude'])
+                            drawline.append(pos)
+                            # if index != 0:
+                            #     MapMarkers[node_id][4] = mapview.set_marker(position['latitude'], position['longitude'], icon = tk_dot)
+                            #     marker = MapMarkers[node_id][4]
+                            #     mapview.canvas.lower(marker.canvas_icon, "marker")
+                        MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
+                        MapMarkers[node_id][5] = 30
                     else:
-                        MapMarkers[node_id][5] = 1
+                        MapMarkers[node_id][5] -= 1
         root.after(1000, update_active_nodes)
 
     def start_mesh():
@@ -1458,9 +1486,9 @@ if __name__ == "__main__":
         # Maybe add this to a connect button later via a overlay window and button as no window is shown duuring connect
         root.meshtastic_interface = connect_meshtastic()
         if root.meshtastic_interface is None:
-            print("Failed to connect to meshtastic")
             insert_colored_text(text_box1, "\n*** Failed to connect to meshtastic did you edit the config.ini    ***", "#02bae8")
             insert_colored_text(text_box1, "\n*** and wrote down the correct ip for tcp or commport for serial ? ***", "#02bae8")
+            logging.error("Failed to connect to meshtastic")
         else:
             get_messages()
             root.after(1000, update_active_nodes)  # Schedule the next update in 30 seconds
@@ -1547,10 +1575,10 @@ if __name__ == "__main__":
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
     mapview.set_zoom(4)
 
-    is_fullscreen = False
-    def toggle_fullscreen(event=None):
-        global is_fullscreen
-        if is_fullscreen:
+    is_mapfullwindow = False
+    def toggle_map(event=None):
+        global is_mapfullwindow
+        if is_mapfullwindow:
             # Restore mapview to frame_right
             mapview.pack_forget()
             mapview.pack(fill=tk.BOTH, expand=True)
@@ -1560,8 +1588,8 @@ if __name__ == "__main__":
             mapview.pack_forget()
             mapview.pack(fill=tk.BOTH, expand=True)
             mapview.master.grid(row=0, column=0, rowspan=5, columnspan=3, padx=0, pady=0, sticky='nsew')
-        is_fullscreen = not is_fullscreen
-    root.bind('<F11>', toggle_fullscreen)
+        is_mapfullwindow = not is_mapfullwindow
+    root.bind('<F6>', toggle_map)
 
     def show_loradb():
         global LoraDB
@@ -1654,6 +1682,5 @@ if __name__ == "__main__":
         root.mainloop()
     except Exception as e:
         safedatabase()
-        print('Saved Databases')
+        logging.error("Error : ", str(e))
         sys.exit()
-        print(repr(e))
