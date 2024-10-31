@@ -252,7 +252,7 @@ def connect_meshtastic(force_connect=False):
     insert_colored_text(text_box1, " Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
 
     MyLora = (nodeInfo['user']['id'])[1:]
-    root.wm_title("Meshtastic Lora Logger - " + unescape(LoraDB[MyLora][1]))
+    root.wm_title("Meshtastic Lora Logger - " + unescape(MyLora))
 
     logLora((nodeInfo['user']['id'])[1:], ['NODEINFO_APP', nodeInfo['user']['shortName'], nodeInfo['user']['longName'], nodeInfo['user']["macaddr"],nodeInfo['user']['hwModel']])
     # Lets get the Local Node's channels
