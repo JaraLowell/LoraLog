@@ -1532,6 +1532,8 @@ if __name__ == "__main__":
 
     text_box4 = tk.Entry(padding_frame, textvariable=my_msg, width=68, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
     text_box4.grid(row=4, column=0, padx=(1, 0))
+    text_box4.bind("<Return>", lambda event: send_message(text_box4.get(), MyLora))   
+    text_box4.bind("<Return>", lambda event: send())
     send_box4 = tk.Button(padding_frame, image=btn_img, command=lambda: send(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
     send_box4.grid(row=4, column=1, padx=(0, 18))
 
