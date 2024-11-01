@@ -61,6 +61,7 @@ position_thread  = None
 trace_thread = None
 MapMarkers = {}
 ok2Send = 0
+isConnect = False
 MyLora = ''
 MyLoraText1 = ''
 MyLoraText2 = ''
@@ -108,14 +109,16 @@ def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend=False,
     if nodeid == MyLora: tcolor = "#02bae8"
     timestamp = datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
     text_widget.image_create("end", image=hr_img)
-    insert_colored_text(text_widget,'\n From ' + unescape(label) + '\n',tcolor)
+    insert_colored_text(text_widget,'\n From ' + unescape(label),tcolor)
+    if private:
+            insert_colored_text(text_widget,' [Direct Message]', "#c9a500")
     ptext = unescape(mtext).strip()
     ptext = textwrap.fill(ptext, 87)
     tcolor = "#d2d2d2"
     if bulk == True:
         tcolor = "#a1a1a1"
     ptext = textwrap.indent(text=ptext, prefix='  ', predicate=lambda line: True)
-    insert_colored_text(text_widget, ptext + '\n', tcolor)
+    insert_colored_text(text_widget, '\n' + ptext + '\n', tcolor)
     insert_colored_text(text_widget,timestamp.rjust(89) + '\n', "#818181")
     if bulk == False:
         # We might have to html it so we dont get any ' and " in text that would break the the db
@@ -234,21 +237,21 @@ def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
     return '└' + ''.join(graph) + '┘'
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, movement_log, loop, isLora
+    global meshtastic_client, MyLora, movement_log, loop, isLora, isConnect
     if meshtastic_client and not force_connect:
         return meshtastic_client
-    '''
+
     # Initialize the event loop
     try:
         loop = asyncio.get_event_loop()
-        loop.run_forever()
+        # loop.run_forever()
         if loop.is_closed():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    '''
+
 
     meshtastic_client = None
     # Initialize Meshtastic interface
@@ -279,13 +282,13 @@ def connect_meshtastic(force_connect=False):
                 logging.error("Could not connect: s", str(e))
                 isLora = False
                 return None
-
+    isConnect = True
     nodeInfo = meshtastic_client.getMyNodeInfo()
     logging.debug("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
     insert_colored_text(text_box1, " Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
     MyLora = (nodeInfo['user']['id'])[1:]
 
-    pub.subscribe(on_meshtastic_message, "meshtastic.receive") #, loop=asyncio.get_event_loop())
+    pub.subscribe(on_meshtastic_message, "meshtastic.receive", loop=asyncio.get_event_loop())
     pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
     pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
 
@@ -328,34 +331,29 @@ def req_meta():
     finally:
         print(f"Finished requesting metadata")
 
-# Function to stop the event loop
-def stop_event_loop():
-    print("Stopping event loop")
-    # if loop.is_running():
-    #    loop.stop()
-
 def on_lost_meshtastic_connection(interface):
-    global root, loop, telemetry_thread, position_thread, trace_thread
+    global root, loop, telemetry_thread, position_thread, trace_thread, isConnect
     safedatabase()
+    isConnect = False
     logging.error("Lost connection to Meshtastic Node.")
-    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-    insert_colored_text(text_box1, " Lost connection to node!", "#db6544")
     if telemetry_thread != None and telemetry_thread.is_alive():
         telemetry_thread.join()
     if  position_thread != None and position_thread.is_alive():
         position_thread.join()
     if  trace_thread != None and trace_thread.is_alive():
         trace_thread.join()
-    stop_event_loop()
+
     pub.unsubscribe(on_meshtastic_message, "meshtastic.receive")
     pub.unsubscribe(on_meshtastic_connection, "meshtastic.connection.established")
     pub.unsubscribe(on_lost_meshtastic_connection, "meshtastic.connection.lost")
-    if meshtastic_client is not None:
-        meshtastic_client.close()
+
+    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+    insert_colored_text(text_box1, " Lost connection to node!", "#db6544")
+
     root.meshtastic_interface = None
     if isLora:
         logging.error("Trying to re-connect...")
-        insert_colored_text(text_box1, ", Trying to re-connect...", "#db6544")
+        insert_colored_text(text_box1, ", Trying to re-connect...\n", "#db6544")
         time.sleep(3)
         root.meshtastic_interface = connect_meshtastic(force_connect=True)
 
@@ -395,7 +393,7 @@ def idToHex(nodeId):
     if len(in_hex)%2: in_hex = in_hex.replace("0x","0x0") # Need account for leading zero, wish hex removes if it has one
     return f"!{in_hex[2:]}"
 
-def on_meshtastic_message(packet, interface): # , loop=None
+def on_meshtastic_message(packet, interface, loop=None):
     # print(yaml.dump(packet))
     global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log
     if MyLora == '':
@@ -1459,7 +1457,7 @@ if __name__ == "__main__":
     ### end
 
     def update_paths_nodes():
-        global MyLora, LoraDB, movement_log, MapMarkers, tlast, pingcount
+        global MyLora, LoraDB, movement_log, MapMarkers, tlast, pingcount, isConnect
         tnow = int(time.time())
         sorted_nodes = sorted((item for item in LoraDB.items() if (tnow - item[1][0] <= map_oldnode)), key=lambda item: item[1][0], reverse=True)
         for node_id, node_info in sorted_nodes:
@@ -1499,14 +1497,15 @@ if __name__ == "__main__":
                     MapMarkers[node_id][4] = None
                     MapMarkers[node_id][5] = 0
 
-        pingcount += 1
-        if pingcount > 5:
-            pingcount = 0
-            try:
-                meshtastic_client.sendHeartbeat()
-            except Exception as e:
-                logging.error(f"Error sending Ping: {e}")
-                print(f"Error sending Ping: {e}")
+        if isConnect:
+            pingcount += 1
+            if pingcount > 5:
+                pingcount = 0
+                try:
+                    meshtastic_client.sendHeartbeat()
+                except Exception as e:
+                    logging.error(f"Error sending Ping: {e}")
+                    print(f"Error sending Ping: {e}")
 
         if tnow > tlast + 900:
             tlast = tnow
