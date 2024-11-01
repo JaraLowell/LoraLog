@@ -524,29 +524,30 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_msgs = 'Node Position '
                 text_msgs += 'latitude ' + str(round(nodelat,4)) + ' '
                 text_msgs += 'longitude ' + str(round(nodelon,4)) + ' '
-                text_msgs += 'altitude ' + str(position.get('altitude', 0)) + ' meter'
+                text_msgs += 'altitude ' + str(position.get('altitude', 0)) + ' meter\n' + (' ' * 11)
                 if nodelat != -8.0 and nodelon != -8.0:
                     logLora(fromraw, ['POSITION_APP', nodelat, nodelon, position.get('altitude', 0)])
                     if MyLora != fromraw and LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0:
-                        text_msgs += "\n" + (' ' * 11) + "Distance: ±" + calc_gc(nodelat, nodelon, LoraDB[MyLora][3], LoraDB[MyLora][4])
+                        text_msgs += "Distance: ±" + calc_gc(nodelat, nodelon, LoraDB[MyLora][3], LoraDB[MyLora][4]) + " "
                     if fromraw in MapMarkers:
                         MapMarkers[fromraw][0].set_position(nodelat, nodelon)
                         MapMarkers[fromraw][0].set_text(LoraDB[fromraw][1])
-
                     last_position = get_last_position(movement_log, fromraw)
                     if last_position and 'latitude' in position and 'longitude' in position:
                         if last_position['latitude'] != nodelat or last_position['longitude'] != nodelon:
                             movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
-                            text_msgs += ' (Moved!)'
+                            text_msgs += '(Moved!) '
                             if fromraw in MapMarkers and MapMarkers[fromraw][3] is not None:
                                 MapMarkers[fromraw][3].delete()
                                 MapMarkers[fromraw][3] = None
                         if fromraw in MapMarkers:
                             MapMarkers[fromraw][5] = 0
+                    if 'precisionBits' in position and position.get('precisionBits', 0) > 0:
+                        text_msgs += '(Precision ' + str(position.get('precisionBits', 0)) + 'Bits) '
                     if not last_position and 'latitude' in position and 'longitude' in position:
                         movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                 if "satsInView" in position:
-                    text_msgs += ' (' + str(position.get('satsInView', 0)) + ' satelites)'
+                    text_msgs += '(' + str(position.get('satsInView', 0)) + ' satelites)'
                 text_raws = text_msgs
             elif data["portnum"] == "NODEINFO_APP":
                 node_info = packet['decoded'].get('user', {})
@@ -783,14 +784,14 @@ def updatesnodes():
                     if "hwModel" in tmp: LoraDB[nodeID][7] = str(tmp['hwModel'])
                     LoraDB[nodeID][12] = -1
                     if "hopsAway" in info: LoraDB[nodeID][12] = info['hopsAway']
-                    if "position" in info:
+                    if "position" in info and LoraDB[nodeID][3] == -8.0 and LoraDB[nodeID][4] == -8.0:
                         tmp2 = info['position']
                         if "latitude" in tmp2 and "longitude" in tmp2:
-                            LoraDB[nodeID][3] = tmp2['latitude']
-                            LoraDB[nodeID][4] = tmp2['longitude']
+                            LoraDB[nodeID][3] = tmp2.get(round('latitude',6), -8.0)
+                            LoraDB[nodeID][4] = tmp2.get(round('longitude',6), -8.0)
                         if "altitude" in tmp:
-                            LoraDB[nodeID][5] = tmp['altitude']
-                        
+                            LoraDB[nodeID][5] = tmp2.get('altitude', 0)
+
                     if nodeID == MyLora:
                         LoraDB[MyLora][0] = tnow
                         if LoraDB[MyLora][3] != -8.0 and LoraDB[MyLora][4] != -8.0:
@@ -1483,7 +1484,7 @@ if __name__ == "__main__":
                         drawline = []
                         # index = len(positions)
                         for position in positions:
-                            # index -= 1
+                            # index -= 1 round(LoraDB[nodeid][3],6)
                             pos = (position['latitude'], position['longitude'])
                             drawline.append(pos)
                             # if index != 0:
