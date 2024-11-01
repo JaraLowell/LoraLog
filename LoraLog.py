@@ -538,6 +538,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                         if last_position['latitude'] != nodelat or last_position['longitude'] != nodelon:
                             movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                             text_msgs += ' (Moved!)'
+                            if fromraw in MapMarkers and MapMarkers[fromraw][3] is not None:
+                                MapMarkers[fromraw][3].delete()
+                                MapMarkers[fromraw][3] = None
                         if fromraw in MapMarkers:
                             MapMarkers[fromraw][5] = 0
                     if not last_position and 'latitude' in position and 'longitude' in position:
@@ -579,6 +582,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                     text = data["neighborinfo"]["neighbors"]
                     for neighbor in text:
                         nodeid = hex(neighbor["nodeId"])[2:]
+                        if fromraw in MapMarkers and MapMarkers[fromraw][3] is not None:
+                            MapMarkers[fromraw][3].delete()
+                            MapMarkers[fromraw][3] = None
                         if nodeid in LoraDB and LoraDB[nodeid][1] != '':
                             LoraDB[nodeid][0] = tnow
                             # Lets add to map ass well if we are not on map abd our db knows the station
