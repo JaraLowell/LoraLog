@@ -106,7 +106,7 @@ def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend=False,
     tcolor = "#00c983"
     if nodeid == MyLora: tcolor = "#02bae8"
     timestamp = datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
-    insert_colored_text(text_widget,' From ' + unescape(label) + '\n',tcolor)
+    insert_colored_text(text_widget,'\n From ' + unescape(label) + '\n',tcolor)
     ptext = unescape(mtext).strip()
     ptext = textwrap.fill(ptext, 87)
     tcolor = "#d1d1d1"
@@ -273,7 +273,7 @@ def connect_meshtastic(force_connect=False):
                 isLora = False
                 return None
 
-    pub.subscribe(on_meshtastic_message, "meshtastic.receive", loop=asyncio.get_event_loop())
+    pub.subscribe(on_meshtastic_message, "meshtastic.receive") # , loop=asyncio.get_event_loop() 
     pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
     pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
 
@@ -388,7 +388,7 @@ def logLora(nodeID, info):
 def idToHex(nodeId):
     return '!' + hex(nodeId)[2:]
 
-def on_meshtastic_message(packet, interface, loop=None):
+def on_meshtastic_message(packet, interface): # , loop=None
     # print(yaml.dump(packet))
     global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log, updatelist
 
@@ -399,6 +399,9 @@ def on_meshtastic_message(packet, interface, loop=None):
         else:
             print('*** ADMIN_APP ***\n' + yaml.dump(packet))
         # Admin local package, no need go on with this
+        return
+    if MyLora == '':
+        print('*** MyLora is empty ***\n' + yaml.dump(packet))
         return
 
     ischat = False
@@ -784,7 +787,7 @@ def updatesnodes():
                                 MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None]
                                 MapMarkers[MyLora][0] = mapview.set_marker(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6), text=unescape(LoraDB[MyLora][1]), icon = tk_icon, text_color = '#00c983', font = ('Fixedsys', 8), data=MyLora, command = click_command)
                                 MapMarkers[MyLora][0].text_color = '#00c983'
-                            mapview.set_position(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6))
+                                mapview.set_position(round(LoraDB[MyLora][3],6), round(LoraDB[MyLora][4],6))
                         else:
                             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                             insert_colored_text(text_box2, " My Node has no position !!\n", "#e8643f")
