@@ -67,6 +67,7 @@ MyLoraText2 = ''
 mylorachan = {}
 tlast = int(time.time())
 loop = None
+pingcount = 0
 
 def showLink(event):
     idx= event.widget.tag_names("current")[1]
@@ -83,7 +84,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
     parent_frame = str(text_widget.winfo_parent())
     if "frame5" not in parent_frame:
         text_widget.configure(state="normal")
-        if color == '#d1d1d1' and "frame3" not in parent_frame:
+        if color == '#d1d1d1': # and "frame3" not in parent_frame:
             text_widget.image_create("end", image=hr_img)
     text_widget.tag_configure(color, foreground=color)
 
@@ -106,16 +107,16 @@ def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend=False,
     tcolor = "#00c983"
     if nodeid == MyLora: tcolor = "#02bae8"
     timestamp = datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
+    text_widget.image_create("end", image=hr_img)
     insert_colored_text(text_widget,'\n From ' + unescape(label) + '\n',tcolor)
     ptext = unescape(mtext).strip()
     ptext = textwrap.fill(ptext, 87)
-    tcolor = "#d1d1d1"
+    tcolor = "#d2d2d2"
     if bulk == True:
         tcolor = "#a1a1a1"
     ptext = textwrap.indent(text=ptext, prefix='  ', predicate=lambda line: True)
     insert_colored_text(text_widget, ptext + '\n', tcolor)
     insert_colored_text(text_widget,timestamp.rjust(89) + '\n', "#818181")
-    text_widget.image_create("end", image=hr_img)
     if bulk == False:
         # We might have to html it so we dont get any ' and " in text that would break the the db
         chat_log.append({'nodeID': nodeid, 'time': msgtime, 'private': private, 'send': msend, 'ackn': ackn, 'seen': False, 'text': str(mtext.encode('ascii', 'xmlcharrefreplace'), 'ascii')})
@@ -163,6 +164,9 @@ if os.path.exists(ChatPath):
     with open(ChatPath, 'rb') as f:
         chat_log = pickle.load(f)
 
+if len(LoraDB) > 1:
+    logging.error("Loaded LoraDB with " + str(len(LoraDB)) + " entries")
+
 def get_last_position(database, nodeID):
     for entry in reversed(database):
         if entry['nodeID'] == nodeID:
@@ -196,6 +200,7 @@ def safedatabase():
         pickle.dump(environment_log, f)
     with open(ChatPath, 'wb') as f:
         pickle.dump(chat_log, f)
+    logging.error("Database saved!")
 
 
 #----------------------------------------------------------- Meshtastic Lora Con ------------------------------------------------------------------------
@@ -232,16 +237,18 @@ def connect_meshtastic(force_connect=False):
     global meshtastic_client, MyLora, movement_log, loop, isLora
     if meshtastic_client and not force_connect:
         return meshtastic_client
-
+    '''
     # Initialize the event loop
     try:
         loop = asyncio.get_event_loop()
+        loop.run_forever()
         if loop.is_closed():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+    '''
 
     meshtastic_client = None
     # Initialize Meshtastic interface
@@ -273,14 +280,14 @@ def connect_meshtastic(force_connect=False):
                 isLora = False
                 return None
 
-    pub.subscribe(on_meshtastic_message, "meshtastic.receive") # , loop=asyncio.get_event_loop() 
-    pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
-    pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
-
     nodeInfo = meshtastic_client.getMyNodeInfo()
     logging.debug("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
     insert_colored_text(text_box1, " Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
     MyLora = (nodeInfo['user']['id'])[1:]
+
+    pub.subscribe(on_meshtastic_message, "meshtastic.receive") #, loop=asyncio.get_event_loop())
+    pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
+    pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
 
     print("MyLora: " + MyLora)
     root.wm_title("Meshtastic Lora Logger - " + unescape(LoraDB[MyLora][1]))
@@ -310,11 +317,6 @@ def connect_meshtastic(force_connect=False):
                 padding_frame.config(text="Send a message to channel " + mylorachan[0])
 
     updatesnodes()
-
-    # Request Admmin Metadata
-    req_meta_thread = threading.Thread(target=req_meta)
-    req_meta_thread.start()
-
     return meshtastic_client
 
 def req_meta():
@@ -328,15 +330,16 @@ def req_meta():
 
 # Function to stop the event loop
 def stop_event_loop():
-    if loop.is_running():
-        loop.stop()
+    print("Stopping event loop")
+    # if loop.is_running():
+    #    loop.stop()
 
 def on_lost_meshtastic_connection(interface):
     global root, loop, telemetry_thread, position_thread, trace_thread
     safedatabase()
-    logging.error("Lost connection. Reconnecting...")
+    logging.error("Lost connection to Meshtastic Node.")
     insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-    insert_colored_text(text_box1, " Lost connection to node... Please wait...\n", "#db6544")
+    insert_colored_text(text_box1, " Lost connection to node!", "#db6544")
     if telemetry_thread != None and telemetry_thread.is_alive():
         telemetry_thread.join()
     if  position_thread != None and position_thread.is_alive():
@@ -351,6 +354,8 @@ def on_lost_meshtastic_connection(interface):
         meshtastic_client.close()
     root.meshtastic_interface = None
     if isLora:
+        logging.error("Trying to re-connect...")
+        insert_colored_text(text_box1, ", Trying to re-connect...", "#db6544")
         time.sleep(3)
         root.meshtastic_interface = connect_meshtastic(force_connect=True)
 
@@ -364,8 +369,8 @@ def logLora(nodeID, info):
         LoraDB[nodeID][0] = tnow # time last seen
     else:
         LoraDB[nodeID] = [tnow, nodeID[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '',-1, 0]
-        insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-        insert_colored_text(text_box3, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
+        insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+        insert_colored_text(text_box1, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
 
     if info[0] == 'NODEINFO_APP':
         tmp = str(info[1].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "") # short name
@@ -386,20 +391,13 @@ def logLora(nodeID, info):
         LoraDB[nodeID][5] = info[3] # altitude
 
 def idToHex(nodeId):
-    return '!' + hex(nodeId)[2:]
+    in_hex = hex(nodeId)
+    if len(in_hex)%2: in_hex = in_hex.replace("0x","0x0") # Need account for leading zero, wish hex removes if it has one
+    return f"!{in_hex[2:]}"
 
 def on_meshtastic_message(packet, interface): # , loop=None
     # print(yaml.dump(packet))
-    global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log, updatelist
-
-    if "decoded" in packet and "portnum" in packet["decoded"] and packet["decoded"]["portnum"] == "ADMIN_APP":
-        if "getDeviceMetadataResponse" in packet["decoded"]["admin"]:
-            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-            insert_colored_text(text_box2, f" Firmware version : {packet['decoded']['admin']['getDeviceMetadataResponse']['firmwareVersion']}", "#00c983")
-        else:
-            print('*** ADMIN_APP ***\n' + yaml.dump(packet))
-        # Admin local package, no need go on with this
-        return
+    global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log
     if MyLora == '':
         print('*** MyLora is empty ***\n' + yaml.dump(packet))
         return
@@ -427,8 +425,8 @@ def on_meshtastic_message(packet, interface): # , loop=None
                     text_from = LoraDB[text_from][1] + " (" + LoraDB[text_from][2] + ")"
             else:
                 LoraDB[text_from] = [tnow, text_from[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '', -1, 0]
-                insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-                insert_colored_text(text_box3, " New Node Logged [!" + text_from + "]\n", "#e8643f", tag=text_from)
+                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+                insert_colored_text(text_box1, " New Node Logged [!" + text_from + "]\n", "#e8643f", tag=text_from)
                 playsound('Data' + os.path.sep + 'NewNode.mp3')
 
             if "viaMqtt" in packet:
@@ -441,7 +439,12 @@ def on_meshtastic_message(packet, interface): # , loop=None
             if "hopStart" in packet: LoraDB[fromraw][12] = packet['hopStart']
 
             # Lets Work the Msgs
-            if data["portnum"] == "TELEMETRY_APP":
+            if data["portnum"] == "ADMIN_APP":
+                if "getDeviceMetadataResponse" in data["admin"]:
+                    text_raws = f"Firmware version : {data['admin']['getDeviceMetadataResponse']['firmwareVersion']}"
+                else:
+                    text_raws = 'Admin Data'
+            elif data["portnum"] == "TELEMETRY_APP":
                 text_raws = 'Node Telemetry'
                 telemetry = packet['decoded'].get('telemetry', {})
                 if telemetry:
@@ -650,6 +653,10 @@ def on_meshtastic_message(packet, interface): # , loop=None
                 text_raws += TraceTo
                 if snr and snr[index] != -128 and snr[index] != 0:
                     text_raws += f" ({snr[index] / 4:.2f}dB)"
+            elif data["portnum"] == "ROUTING_APP":
+                text_raws = 'Node Routing'
+                if "errorReason" in data["routing"]:
+                    text_raws += ' - Error : ' + data["routing"]["errorReason"]
             else:
                 # Unknown Packet
                 if 'portnum' in data:
@@ -756,8 +763,8 @@ def updatesnodes():
 
                     if nodeID not in LoraDB:
                         LoraDB[nodeID] = [nodeLast, nodeID[-4:], '', -8.0, -8.0, 0, '', '', nodeLast, '0% 0.0v', '', '',-1, 0]
-                        insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-                        insert_colored_text(text_box3, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
+                        insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+                        insert_colored_text(text_box1, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
 
                     if "shortName" in tmp and "longName" in tmp:
                         lora_sn = str(tmp['shortName'].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "")
@@ -1452,7 +1459,7 @@ if __name__ == "__main__":
     ### end
 
     def update_paths_nodes():
-        global MyLora, LoraDB, movement_log, MapMarkers, tlast
+        global MyLora, LoraDB, movement_log, MapMarkers, tlast, pingcount
         tnow = int(time.time())
         sorted_nodes = sorted((item for item in LoraDB.items() if (tnow - item[1][0] <= map_oldnode)), key=lambda item: item[1][0], reverse=True)
         for node_id, node_info in sorted_nodes:
@@ -1492,6 +1499,15 @@ if __name__ == "__main__":
                     MapMarkers[node_id][4] = None
                     MapMarkers[node_id][5] = 0
 
+        pingcount += 1
+        if pingcount > 5:
+            pingcount = 0
+            try:
+                meshtastic_client.sendHeartbeat()
+            except Exception as e:
+                logging.error(f"Error sending Ping: {e}")
+                print(f"Error sending Ping: {e}")
+
         if tnow > tlast + 900:
             tlast = tnow
             updatesnodes()
@@ -1522,6 +1538,9 @@ if __name__ == "__main__":
             insert_colored_text(text_box1, "\n*** and wrote down the correct ip for tcp or commport for serial ? ***", "#02bae8")
             logging.error("Failed to connect to meshtastic")
         else:
+            # Request Admmin Metadata
+            req_meta_thread = threading.Thread(target=req_meta)
+            req_meta_thread.start()
             # mmtext ='“Have you ever noticed that anybody driving slower than you is an idiot, and anyone going faster than you is a maniac?”'
             get_messages()
             # add_message(text_box3, MyLora, mmtext, int(time.time()), private=False, msend=True)
