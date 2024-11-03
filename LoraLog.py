@@ -103,7 +103,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
         text_widget.see(tk.END)
         text_widget.configure(state="disabled")
 
-def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend=False, ackn=True, bulk=False):
+def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend='all', ackn=True, bulk=False):
     label = LoraDB[nodeid][1] + " (" + LoraDB[nodeid][2] + ")"
     tcolor = "#00c983"
     if nodeid == MyLora: tcolor = "#02bae8"
@@ -138,7 +138,7 @@ movement_log    = [] # movement_log = [{'nodeID': '1', 'time': 1698163200, 'lati
 metrics_log     = [] # metrics_log  = [{'nodeID': '1', 'time': 1698163200, 'battery': 100, 'voltage': 3.7, 'utilization': 0.0, 'airutiltx': 0.0}, ...]
 environment_log = [] # environment  = [{'nodeID': '1', 'time': 1698163200, 'temperature': 1.0, 'humidity': 20.0, 'pressure': 1010.0}, ...]
 LoraDB          = {} # LoraDB       = {'nodeID': [timenow, ShortName, LongName, latitude, longitude, altitude, macaddr, hardware, timefirst, rightbarstats, mmqtt, snr, hops], ...}
-chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': True, 'ackn' : True, seen': False, 'text': 'Hello World!'}, ...]
+chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': 'nodeid or ch', 'ackn' : True, seen': False, 'text': 'Hello World!'}, ...]
 
 # database_path = 'DataBase' + os.path.sep + "tiles.db"
 
@@ -186,8 +186,8 @@ def count_entries_for_node(database, nodeID):
     return len([entry for entry in database if entry['nodeID'] == nodeID])
 
 def get_data_for_node(database, nodeID):
-    positions = [entry for entry in database if entry['nodeID'] == nodeID]
-    return positions
+    data = [entry for entry in database if entry['nodeID'] == nodeID]
+    return data
 
 def safedatabase():
     global LoraDB, LoraDBPath, movement_log, MoveDBPath, metrics_log, MetricsPath, environment_log, EnviPath
@@ -435,9 +435,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if LoraDB[text_from][1] != '':
                     text_from = LoraDB[text_from][1] + " (" + LoraDB[text_from][2] + ")"
             else:
-                LoraDB[text_from] = [tnow, text_from[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '', -1, 0]
+                LoraDB[text_from] = [tnow, fromraw[-4:], '', -8.0, -8.0, 0, '', '', tnow, '0% 0.0v', '', '', -1, 0]
                 insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-                insert_colored_text(text_box1, " New Node Logged [!" + text_from + "]\n", "#e8643f", tag=text_from)
+                insert_colored_text(text_box1, " New Node Logged [!" + fromraw + "]\n", "#e8643f", tag=fromraw)
                 playsound('Data' + os.path.sep + 'NewNode.mp3')
 
             if "viaMqtt" in packet:
@@ -761,8 +761,8 @@ def on_meshtastic_message(packet, interface, loop=None):
         if fromraw not in MapMarkers and fromraw in LoraDB:
             if LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0:
                 MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None]
-                MapMarkers[fromraw][0] = mapview.set_marker(LoraDB[fromraw][3], LoraDB[fromraw][4], text=unescape(LoraDB[fromraw][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=fromraw, command = click_command)
-                MapMarkers[fromraw][0].text_color = '#6d6d6d'
+                MapMarkers[fromraw][0] = mapview.set_marker(LoraDB[fromraw][3], LoraDB[fromraw][4], text=unescape(LoraDB[fromraw][1]), icon = tk_old, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=fromraw, command = click_command)
+                MapMarkers[fromraw][0].text_color = '#aaaaaa'
                 MapMarkers[fromraw][6] = mapview.set_marker(LoraDB[fromraw][3], LoraDB[fromraw][4], icon = snd_icon, data=fromraw, command = click_command)
         elif fromraw in MapMarkers and MapMarkers[fromraw][0] == None:
             MapMarkers[fromraw][6] = mapview.set_marker(LoraDB[fromraw][3], LoraDB[fromraw][4], icon = snd_icon, data=fromraw, command = click_command)
@@ -1159,12 +1159,15 @@ if __name__ == "__main__":
 
     def send(event=None):
         text2send = my_msg.get().rstrip()
-        if text2send != '':
+        if len(text2send.encode('utf-8')) > 220:
+            # neeed check max, some seem to say 237 ?
+            insert_colored_text(text_box3, "Text message to long, keep it under 220 bytes\n", "#d1d1d1")
+        elif text2send != '':
             meshtastic_client.sendText(text2send)
             text_from = LoraDB[MyLora][1] + " (" + LoraDB[MyLora][2] + ")"
-            add_message(text_box3, MyLora, text2send, int(time.time()), msend=True)
-            # insert_colored_text(text_box3, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
-            # insert_colored_text(text_box3, (' ' * 11) + '[' + str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii') +'] ' + text2send + '\n', "#02bae8")
+            add_message(text_box3, MyLora, text2send, int(time.time()), msend=str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii'))
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
+            insert_colored_text(text_box2, (' ' * 11) + '[to ' + str(mylorachan[0]) +'] ' + text2send + '\n', "#00c983")
             my_msg.set("")
             playsound('Data' + os.path.sep + 'NewChat.mp3')
 
@@ -1250,8 +1253,18 @@ if __name__ == "__main__":
         chat_box.pack(side="top", fill="both", expand=True, padx=10, pady=3)
 
         # And here we need use and utalize chat_log
-        # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
-        insert_colored_text(chat_box, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] Not yet working, Working on it !!\n", "#dddddd")
+        # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'sendto': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
+        # node_text = [entry for entry in chat_log if entry['nodeID'] == nodeID]
+        node_text = [entry for entry in chat_log if (entry['nodeID'] == nodeid or entry['send'] == nodeid) and entry['private'] == True]
+        node_text.sort(key=lambda x: x['time']) # might be , reverse=True
+        # Insert sorted entries into chat_box
+        for entry in node_text:
+            # datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry['time']))
+            insert_colored_text(chat_box, f"[{timestamp}] {unescape(LoraDB[nodeid][1])}\n", "#d1d1d1")
+            insert_colored_text(chat_box, f" {unescape(entry['text'])}\n", "#818181")
+
+        insert_colored_text(chat_box, "\n  Not yet working, Working on it !!\n", "#dddddd")
 
         chat_input = tk.Entry(overlay, textvariable=my_chat, width=50, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
         chat_input.pack(side="top", fill="x", padx=10, pady=3)
@@ -1358,8 +1371,10 @@ if __name__ == "__main__":
         button6.pack(side=tk.LEFT, padx=1)
 
     # Function to update the middle frame with the last 30 active nodes
+    peekmem = 0
+
     def update_active_nodes():
-        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send, movement_log, metrics_log
+        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send, movement_log, metrics_log, peekmem
         start = time.perf_counter()
         tnow = int(time.time())
 
@@ -1410,7 +1425,7 @@ if __name__ == "__main__":
                     del MapMarkers[node_id]
             elif tnow - node_time >= map_delete and node_id != MyLora:
                 if node_id in MapMarkers:
-                    if MapMarkers[node_id][0].text_color != '#6d6d6d':
+                    if MapMarkers[node_id][0].text_color != '#aaaaaa':
                         if MapMarkers[node_id][3] is not None:
                             MapMarkers[node_id][3].delete()
                             MapMarkers[node_id][3] = None
@@ -1420,15 +1435,15 @@ if __name__ == "__main__":
                             MapMarkers[node_id].pop()
                         MapMarkers[node_id][0].delete()
                         MapMarkers[node_id][0] = None
-                        MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                        MapMarkers[node_id][0].text_color = '#6d6d6d'
+                        MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                        MapMarkers[node_id][0].text_color = '#aaaaaa'
                 else:
                     if 'Meshtastic' in LoraDB[node_id][1]:
                         LoraDB[node_id][1] = (LoraDB[node_id][1])[-4:]
                     if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
                         MapMarkers[node_id] = [None, True, tnow, None, None, 0, None]
-                        MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                        MapMarkers[node_id][0].text_color = '#6d6d6d'
+                        MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                        MapMarkers[node_id][0].text_color = '#aaaaaa'
             elif tnow - node_time < map_delete or node_id != MyLora:
                 node_name = unescape(node_info[1]).ljust(9)
                 node_wtime = ez_date(tnow - node_time).rjust(10)
@@ -1477,7 +1492,10 @@ if __name__ == "__main__":
         # insert_colored_text(text_box_middle, f"\n Threads : {tmp2}", "#9d9d9d")
         tmp2 = int(psutil.Process(os.getpid()).memory_info().rss)
         time1 = round(tmp2 / 1024 / 1024 * 100,2) / 100
-        insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n\n", "#9d9d9d")
+        if peekmem < time1:
+            peekmem = time1
+        insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n", "#9d9d9d")
+        insert_colored_text(text_box_middle, f" Mem Max : {peekmem:.1f}MB\n\n", "#9d9d9d")
 
         insert_colored_text(text_box_middle, " F5 View node DB\n F6 Map Extend Mode\n", "#9d9d9d")
 

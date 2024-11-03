@@ -1,6 +1,7 @@
 import tkinter
 import sys
 from typing import TYPE_CHECKING, Callable
+from tkinter import PhotoImage
 
 if TYPE_CHECKING:
     from .map_widget import TkinterMapView
@@ -43,8 +44,11 @@ class CanvasPositionMarker:
         self.polygon = None
         self.big_circle = None
         self.canvas_text = None
+        self.canvas_text_bg = None
         self.canvas_image = None
         self.canvas_icon = None
+
+        self.text_background_image = PhotoImage(file='Data\\txbck.png')
 
         if font is None:
             if sys.platform == "darwin":
@@ -79,7 +83,7 @@ class CanvasPositionMarker:
         self.map_widget.canvas.delete(self.canvas_icon)
         self.map_widget.canvas.delete(self.canvas_image)
 
-        self.polygon, self.big_circle, self.canvas_text, self.canvas_image, self.canvas_icon = None, None, None, None, None
+        self.polygon, self.big_circle, self.canvas_text, self.canvas_text_bg, self.canvas_image, self.canvas_icon = None, None, None, None, None, None
         self.deleted = True
         self.map_widget.canvas.update()
 
@@ -182,6 +186,11 @@ class CanvasPositionMarker:
 
                 if self.text is not None:
                     if self.canvas_text is None:
+                        # txbck.png
+                        self.canvas_text_bg = self.map_widget.canvas.create_image(canvas_pos_x, canvas_pos_y + (self.text_y_offset + 1),
+                                                                                image=self.text_background_image,
+                                                                                anchor=tkinter.S,
+                                                                                tag=("marker", "marker_text_bg"))
                         self.canvas_text = self.map_widget.canvas.create_text(canvas_pos_x, canvas_pos_y + self.text_y_offset,
                                                                               anchor=tkinter.S,
                                                                               text=self.text,
@@ -193,11 +202,14 @@ class CanvasPositionMarker:
                             self.map_widget.canvas.tag_bind(self.canvas_text, "<Leave>", self.mouse_leave)
                             self.map_widget.canvas.tag_bind(self.canvas_text, "<Button-1>", self.click)
                     else:
+                        self.map_widget.canvas.coords(self.canvas_text_bg, canvas_pos_x, canvas_pos_y + (self.text_y_offset + 1))
                         self.map_widget.canvas.coords(self.canvas_text, canvas_pos_x, canvas_pos_y + self.text_y_offset)
                         self.map_widget.canvas.itemconfig(self.canvas_text, text=self.text)
                 else:
                     if self.canvas_text is not None:
                         self.map_widget.canvas.delete(self.canvas_text)
+                    if self.canvas_text_bg is not None:
+                        self.map_widget.canvas.delete(self.canvas_text_bg)
 
                 if self.image is not None and self.image_zoom_visibility[0] <= self.map_widget.zoom <= self.image_zoom_visibility[1]\
                         and not self.image_hidden:
@@ -216,9 +228,10 @@ class CanvasPositionMarker:
             else:
                 self.map_widget.canvas.delete(self.canvas_icon)
                 self.map_widget.canvas.delete(self.canvas_text)
+                self.map_widget.canvas.delete(self.canvas_text_bg)
                 self.map_widget.canvas.delete(self.polygon)
                 self.map_widget.canvas.delete(self.big_circle)
                 self.map_widget.canvas.delete(self.canvas_image)
-                self.canvas_text, self.polygon, self.big_circle, self.canvas_image, self.canvas_icon = None, None, None, None, None
+                self.canvas_text, self.polygon, self.big_circle, self.canvas_text_bg,  self.canvas_image, self.canvas_icon = None, None, None, None, None, None
 
             self.map_widget.manage_z_order()
