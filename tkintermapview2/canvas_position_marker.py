@@ -1,5 +1,6 @@
 import tkinter
 import sys
+import os
 from typing import TYPE_CHECKING, Callable
 from tkinter import PhotoImage
 
@@ -10,6 +11,20 @@ from .utility_functions import decimal_to_osm, osm_to_decimal
 
 
 class CanvasPositionMarker:
+    iconspack = []
+
+    @classmethod
+    def initialize_icons(cls):
+        cls.iconspack = [
+            None,
+            PhotoImage(file='Data' + os.path.sep + 'marker.png'),
+            PhotoImage(file='Data' + os.path.sep + 'marker-green.png'),
+            PhotoImage(file='Data' + os.path.sep + 'marker-orange.png'),
+            PhotoImage(file='Data' + os.path.sep + 'marker-grey.png'),
+            PhotoImage(file='Data' + os.path.sep + 'signal.png'),
+            PhotoImage(file='Data' + os.path.sep + 'txbck.png')
+        ]
+
     text_background_image = None  # Class variable
 
     def __init__(self,
@@ -22,11 +37,16 @@ class CanvasPositionMarker:
                  marker_color_outside: str = "#C5542D",
                  command: Callable = None,
                  image: tkinter.PhotoImage = None,
-                 icon: tkinter.PhotoImage = None,
+                 icon_index: int = 0,
                  icon_anchor: str = "center",
                  image_zoom_visibility: tuple = (0, float("inf")),
                  data: any = None):
 
+        # Ensure icons are initialized
+        if not CanvasPositionMarker.iconspack:
+            CanvasPositionMarker.initialize_icons()
+
+        self.icon_index = icon_index
         self.map_widget = map_widget
         self.position = position
         self.text_color = text_color
@@ -35,13 +55,14 @@ class CanvasPositionMarker:
         self.text = text
         self.text_y_offset = 0  # vertical offset pf text from marker position in px
         self.image = image
-        self.icon = icon
+        self.icon = CanvasPositionMarker.iconspack[icon_index]
         self.icon_anchor = icon_anchor  # can be center, n, nw, w, sw, s, ew, e, ne
         self.image_hidden = False
         self.image_zoom_visibility = image_zoom_visibility
         self.deleted = False
         self.command = command
         self.data = data
+        self.text_background_image = CanvasPositionMarker.iconspack[6]
 
         self.polygon = None
         self.big_circle = None
@@ -49,10 +70,6 @@ class CanvasPositionMarker:
         self.canvas_text_bg = None
         self.canvas_image = None
         self.canvas_icon = None
-
-        if CanvasPositionMarker.text_background_image is None:
-            CanvasPositionMarker.text_background_image = PhotoImage(file='Data\\txbck.png')
-        self.text_background_image = CanvasPositionMarker.text_background_image
 
         if font is None:
             if sys.platform == "darwin":
@@ -84,6 +101,7 @@ class CanvasPositionMarker:
         self.map_widget.canvas.delete(self.polygon)
         self.map_widget.canvas.delete(self.big_circle)
         self.map_widget.canvas.delete(self.canvas_text)
+        self.map_widget.canvas.delete(self.canvas_text_bg)
         self.map_widget.canvas.delete(self.canvas_icon)
         self.map_widget.canvas.delete(self.canvas_image)
 

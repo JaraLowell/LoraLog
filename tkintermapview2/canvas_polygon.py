@@ -86,7 +86,7 @@ class CanvasPolygon:
         if not self.deleted:
             x, y = self.get_canvas_pos(self.position)
             zoom_level = self.map_widget.zoom
-            if zoom_level > 11.5:
+            if zoom_level > 12.5:
                 pixels_per_meter = round((256 * (2 ** zoom_level)) / 40075016.686, 6) # 256 is the tile size, 40075016.686 is the earth circumference
                 radius_in_pixels = round(self.range_in_meters * pixels_per_meter, 6)
                 if self.canvas_polygon is None:
