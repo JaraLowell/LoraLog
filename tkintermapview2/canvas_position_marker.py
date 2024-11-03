@@ -10,6 +10,8 @@ from .utility_functions import decimal_to_osm, osm_to_decimal
 
 
 class CanvasPositionMarker:
+    text_background_image = None  # Class variable
+
     def __init__(self,
                  map_widget: "TkinterMapView",
                  position: tuple,
@@ -48,7 +50,9 @@ class CanvasPositionMarker:
         self.canvas_image = None
         self.canvas_icon = None
 
-        self.text_background_image = PhotoImage(file='Data\\txbck.png')
+        if CanvasPositionMarker.text_background_image is None:
+            CanvasPositionMarker.text_background_image = PhotoImage(file='Data\\txbck.png')
+        self.text_background_image = CanvasPositionMarker.text_background_image
 
         if font is None:
             if sys.platform == "darwin":
