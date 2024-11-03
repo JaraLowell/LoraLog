@@ -376,8 +376,8 @@ class TkinterMapView(tkinter.Frame):
         self.canvas_path_list.append(path)
         return path
 
-    def set_polygon(self, position_list: list, **kwargs) -> CanvasPolygon:
-        polygon = CanvasPolygon(self, position_list, **kwargs)
+    def set_polygon(self, position: tuple, **kwargs) -> CanvasPolygon:
+        polygon = CanvasPolygon(self, position, **kwargs)
         polygon.draw()
         self.canvas_polygon_list.append(polygon)
         return polygon
@@ -409,6 +409,23 @@ class TkinterMapView(tkinter.Frame):
         self.canvas.lift("corner")
         self.canvas.lift("button")
 
+    # Lets see if we can reduce the memory footprint by removing the tile_image_cache that we are not using
+    def is_within_viewport(self, x, y, zoom, viewport_bounds):
+        """ Check if the tile (x, y, zoom) is within the viewport bounds. """
+        min_x, max_x, min_y, max_y = viewport_bounds
+        return min_x <= x <= max_x and min_y <= y <= max_y
+
+    def update_cache(self, zoom, viewport_bounds):
+        """ Update the cache by removing tiles outside the viewport. """
+        keys_to_delete = []
+        for key in self.tile_image_cache.keys():
+            key_zoom, key_x, key_y = map(int, key.split('_'))
+            if key_zoom == zoom and not self.is_within_viewport(key_x, key_y, zoom, viewport_bounds):
+                keys_to_delete.append(key)
+
+        for key in keys_to_delete:
+            del self.tile_image_cache[key]
+
     def pre_cache(self):
         """ single threaded pre-chache tile images in area of self.pre_cache_position """
 
@@ -429,6 +446,19 @@ class TkinterMapView(tkinter.Frame):
                 radius = 1
 
             if last_pre_cache_position is not None and radius <= 8:
+
+                # Example usage within your existing code
+                viewport_bounds = (
+                    self.pre_cache_position[0] - radius, 
+                    self.pre_cache_position[0] + radius, 
+                    self.pre_cache_position[1] - radius, 
+                    self.pre_cache_position[1] + radius
+                )
+
+                # Update the cache to remove images outside the viewport
+                self.update_cache(zoom, viewport_bounds)
+
+                # Continue with the rest of your code
 
                 # pre cache top and bottom row
                 for x in range(self.pre_cache_position[0] - radius, self.pre_cache_position[0] + radius + 1):
@@ -474,7 +504,7 @@ class TkinterMapView(tkinter.Frame):
                 if result is not None:
                     image = Image.open(io.BytesIO(result[0]))
                     image_tk = ImageTk.PhotoImage(image)
-                    self.tile_image_cache[f"{zoom}{x}{y}"] = image_tk
+                    self.tile_image_cache[f"{zoom}_{x}_{y}"] = image_tk
                     return image_tk
                 elif self.use_database_only:
                     return self.empty_tile_image
@@ -511,11 +541,11 @@ class TkinterMapView(tkinter.Frame):
             else:
                 return self.empty_tile_image
 
-            self.tile_image_cache[f"{zoom}{x}{y}"] = image_tk
+            self.tile_image_cache[f"{zoom}_{x}_{y}"] = image_tk
             return image_tk
 
         except PIL.UnidentifiedImageError:  # image does not exist for given coordinates
-            self.tile_image_cache[f"{zoom}{x}{y}"] = self.empty_tile_image
+            self.tile_image_cache[f"{zoom}_{x}_{y}"] = self.empty_tile_image
             return self.empty_tile_image
 
         except requests.exceptions.ConnectionError:
@@ -525,10 +555,10 @@ class TkinterMapView(tkinter.Frame):
             return self.empty_tile_image
 
     def get_tile_image_from_cache(self, zoom: int, x: int, y: int):
-        if f"{zoom}{x}{y}" not in self.tile_image_cache:
+        if f"{zoom}_{x}_{y}" not in self.tile_image_cache:
             return False
         else:
-            return self.tile_image_cache[f"{zoom}{x}{y}"]
+            return self.tile_image_cache[f"{zoom}_{x}_{y}"]
 
     def load_images_background(self):
         if self.database_path is not None:

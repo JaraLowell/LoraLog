@@ -388,6 +388,19 @@ def logLora(nodeID, info):
         LoraDB[nodeID][4] = info[2] # longitude
         LoraDB[nodeID][5] = info[3] # altitude
 
+def print_range(range_in_meters):
+    if range_in_meters < 1:
+        # Convert to centimeters
+        range_in_cm = range_in_meters * 100
+        return f"{range_in_cm:.0f}cm"
+    elif range_in_meters < 1000:
+        # Print in meters
+        return f"{range_in_meters:.0f}meter"
+    else:
+        # Convert to kilometers
+        range_in_km = range_in_meters / 1000
+        return f"{range_in_km:.0f}km"
+
 def idToHex(nodeId):
     in_hex = hex(nodeId)
     if len(in_hex)%2: in_hex = in_hex.replace("0x","0x0") # Need account for leading zero, wish hex removes if it has one
@@ -543,7 +556,14 @@ def on_meshtastic_message(packet, interface, loop=None):
                         if fromraw in MapMarkers:
                             MapMarkers[fromraw][5] = 0
                     if 'precisionBits' in position and position.get('precisionBits', 0) > 0:
-                        text_msgs += '(Precision ' + str(position.get('precisionBits', 0)) + 'Bits) '
+                        AcMeters = round(23905787.925008 * math.pow(0.5, position.get('precisionBits', 0)), 2)
+                        if AcMeters > 1.0:
+                            text_msgs += '(Accuracy ±' + print_range(AcMeters) + ') '
+                            if fromraw in MapMarkers and AcMeters >= 30.0 and AcMeters <= 5000.0:
+                                # Lets draw only a circle if distance bigger then 30m or smaller then 5km
+                                if len(MapMarkers[fromraw]) == 7:
+                                    MapMarkers[fromraw].append(None)
+                                    MapMarkers[fromraw][7] = mapview.set_polygon(position=(nodelat, nodelon), range_in_meters=AcMeters ,fill_color="gray25")
                     if not last_position and 'latitude' in position and 'longitude' in position:
                         movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                 if "satsInView" in position:
@@ -581,11 +601,11 @@ def on_meshtastic_message(packet, interface, loop=None):
 
                 if "neighborinfo" in data and "neighbors" in data["neighborinfo"]:
                     text = data["neighborinfo"]["neighbors"]
+                    if fromraw in MapMarkers and MapMarkers[fromraw][3] is not None:
+                        MapMarkers[fromraw][3].delete()
+                        MapMarkers[fromraw][3] = None
                     for neighbor in text:
                         nodeid = hex(neighbor["nodeId"])[2:]
-                        if fromraw in MapMarkers and MapMarkers[fromraw][3] is not None:
-                            MapMarkers[fromraw][3].delete()
-                            MapMarkers[fromraw][3] = None
                         if nodeid in LoraDB and LoraDB[nodeid][1] != '':
                             LoraDB[nodeid][0] = tnow
                             # Lets add to map ass well if we are not on map abd our db knows the station
@@ -884,7 +904,7 @@ def calc_gc(end_lat, end_long, start_lat, start_long):
 
     c = math.atan(x/y)
 
-    return f"{round(EARTH_R*c,1)}Km"
+    return f"{round(EARTH_R*c,1)}km"
 
 #-------------------------------------------------------------- Plot Functions ---------------------------------------------------------------------------
 
@@ -1394,6 +1414,10 @@ if __name__ == "__main__":
                         if MapMarkers[node_id][3] is not None:
                             MapMarkers[node_id][3].delete()
                             MapMarkers[node_id][3] = None
+                        if len(MapMarkers[node_id]) > 7:
+                            MapMarkers[node_id][7].delete()
+                            MapMarkers[node_id][7] = None
+                            MapMarkers[node_id].pop()
                         MapMarkers[node_id][0].delete()
                         MapMarkers[node_id][0] = None
                         MapMarkers[node_id][0] = mapview.set_marker(round(LoraDB[node_id][3],6), round(LoraDB[node_id][4],6), text=unescape(LoraDB[node_id][1]), icon = tk_old, text_color = '#6d6d6d', font = ('Fixedsys', 8), data=node_id, command = click_command)
@@ -1533,7 +1557,7 @@ if __name__ == "__main__":
         root.after(1000, update_active_nodes)
 
     def start_mesh():
-        global overlay, root
+        global overlay, root, ok2Send
         playsound('Data' + os.path.sep + 'Button.mp3')
         if overlay is not None:
             destroy_overlay()
@@ -1545,6 +1569,7 @@ if __name__ == "__main__":
             logging.error("Failed to connect to meshtastic")
         else:
             # Request Admmin Metadata
+            ok2Send = 15
             req_meta_thread = threading.Thread(target=req_meta)
             req_meta_thread.start()
             # mmtext ='“Have you ever noticed that anybody driving slower than you is an idiot, and anyone going faster than you is a maniac?”'
