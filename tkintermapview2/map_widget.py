@@ -521,7 +521,13 @@ class TkinterMapView(tkinter.Frame):
         # try to get the tile from the server
         try:
             url = self.tile_server.replace("{x}", str(x)).replace("{y}", str(y)).replace("{z}", str(zoom))
-            image = Image.open(requests.get(url, stream=True, headers={"User-Agent": "TkinterMapView"}).raw)
+            # image = Image.open(requests.get(url, stream=True, headers={"User-Agent": "TkinterMapView"}).raw)
+            response = requests.get(url, stream=True, headers={"User-Agent": "TkinterMapView"})
+            image_org = Image.open(io.BytesIO(response.content))
+            if image_org.mode != 'RGB': image_org = image_org.convert('RGB')
+            output = io.BytesIO()
+            image_org.save(output, format="JPEG", quality=74)  # Adjust the quality as needed
+            image = Image.open(io.BytesIO(output.getvalue()))
 
             if self.overlay_tile_server is not None:
                 url = self.overlay_tile_server.replace("{x}", str(x)).replace("{y}", str(y)).replace("{z}", str(zoom))
