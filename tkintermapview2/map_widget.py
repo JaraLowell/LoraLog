@@ -31,7 +31,7 @@ class TkinterMapView(tkinter.Frame):
                  bg_color: str = None,
                  database_path: str = None,
                  use_database_only: bool = False,
-                 max_zoom: int = 19,
+                 max_zoom: int = 20,
                  **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -42,6 +42,7 @@ class TkinterMapView(tkinter.Frame):
         self.height = height
         self.corner_radius = corner_radius if corner_radius <= 30 else 30  # corner_radius can't be greater than 30
         self.configure(width=self.width, height=self.height)
+        self.db_cursor = None
 
         # detect color of master widget for rounded corners
         if bg_color is None:
@@ -164,6 +165,9 @@ class TkinterMapView(tkinter.Frame):
 
     def destroy(self):
         self.running = False
+        if self.db_cursor is not None:
+            self.db_cursor.connection.commit()
+            self.db_cursor.connection.close()
         super().destroy()
 
     def draw_rounded_corners(self):
@@ -440,9 +444,41 @@ class TkinterMapView(tkinter.Frame):
 
         if self.database_path is not None:
             db_connection = sqlite3.connect(self.database_path)
-            db_cursor = db_connection.cursor()
+            self.db_cursor = db_connection.cursor()
+            # create tables if it not exists
+            create_server_table = """CREATE TABLE IF NOT EXISTS server (
+                                            url VARCHAR(300) PRIMARY KEY NOT NULL,
+                                            max_zoom INTEGER NOT NULL);"""
+
+            create_tiles_table = """CREATE TABLE IF NOT EXISTS tiles (
+                                            zoom INTEGER NOT NULL,
+                                            x INTEGER NOT NULL,
+                                            y INTEGER NOT NULL,
+                                            server VARCHAR(300) NOT NULL,
+                                            tile_image BLOB NOT NULL,
+                                            CONSTRAINT fk_server FOREIGN KEY (server) REFERENCES server (url),
+                                            CONSTRAINT pk_tiles PRIMARY KEY (zoom, x, y, server));"""
+
+            create_sections_table = """CREATE TABLE IF NOT EXISTS sections (
+                                                position_a VARCHAR(100) NOT NULL,
+                                                position_b VARCHAR(100) NOT NULL,
+                                                zoom_a INTEGER NOT NULL,
+                                                zoom_b INTEGER NOT NULL,
+                                                server VARCHAR(300) NOT NULL,
+                                                CONSTRAINT fk_server FOREIGN KEY (server) REFERENCES server (url),
+                                                CONSTRAINT pk_tiles PRIMARY KEY (position_a, position_b, zoom_a, zoom_b, server));"""
+
+            self.db_cursor.execute(create_server_table)
+            self.db_cursor.execute(create_tiles_table)
+            self.db_cursor.execute(create_sections_table)
+            self.db_cursor.connection.commit()
+
+            self.db_cursor.execute(f"SELECT * FROM server s WHERE s.url='{self.tile_server}';")
+            if len(self.db_cursor.fetchall()) == 0:
+                self.db_cursor.execute(f"INSERT INTO server (url, max_zoom) VALUES (?, ?);", (self.tile_server, self.max_zoom))
+                self.db_cursor.connection.commit()
         else:
-            db_cursor = None
+            self.db_cursor = None
 
         while self.running:
             if last_pre_cache_position != self.pre_cache_position:
@@ -454,16 +490,16 @@ class TkinterMapView(tkinter.Frame):
                 # pre cache top and bottom row
                 for x in range(self.pre_cache_position[0] - radius, self.pre_cache_position[0] + radius + 1):
                     if f"{zoom}{x}{self.pre_cache_position[1] + radius}" not in self.tile_image_cache:
-                        self.request_image(zoom, x, self.pre_cache_position[1] + radius, db_cursor=db_cursor)
+                        self.request_image(zoom, x, self.pre_cache_position[1] + radius, db_cursor=self.db_cursor)
                     if f"{zoom}{x}{self.pre_cache_position[1] - radius}" not in self.tile_image_cache:
-                        self.request_image(zoom, x, self.pre_cache_position[1] - radius, db_cursor=db_cursor)
+                        self.request_image(zoom, x, self.pre_cache_position[1] - radius, db_cursor=self.db_cursor)
 
                 # pre cache left and right column
                 for y in range(self.pre_cache_position[1] - radius, self.pre_cache_position[1] + radius + 1):
                     if f"{zoom}{self.pre_cache_position[0] + radius}{y}" not in self.tile_image_cache:
-                        self.request_image(zoom, self.pre_cache_position[0] + radius, y, db_cursor=db_cursor)
+                        self.request_image(zoom, self.pre_cache_position[0] + radius, y, db_cursor=self.db_cursor)
                     if f"{zoom}{self.pre_cache_position[0] - radius}{y}" not in self.tile_image_cache:
-                        self.request_image(zoom, self.pre_cache_position[0] - radius, y, db_cursor=db_cursor)
+                        self.request_image(zoom, self.pre_cache_position[0] - radius, y, db_cursor=self.db_cursor)
 
                 # Example usage within your existing code
                 self.viewport_bounds = (
@@ -490,44 +526,50 @@ class TkinterMapView(tkinter.Frame):
                 for key in keys_to_delete:
                     del self.tile_image_cache[key]
 
-    def request_image(self, zoom: int, x: int, y: int, db_cursor=None) -> ImageTk.PhotoImage:
+    def execute_with_retry(tmp, db_cursor, zoom, x, y, server, data):
+        insert_tile_cmd = """INSERT INTO tiles (zoom, x, y, server, tile_image) VALUES (?, ?, ?, ?, ?);"""
+        for attempt in range(3):
+            try:
+                db_cursor.execute(insert_tile_cmd, (zoom, x, y, server, data))
+                db_cursor.connection.commit()
+                return
+            except sqlite3.OperationalError as err:
+                if "database is locked" in str(err):
+                    time.sleep(0.25)
+                else:
+                    raise
+        raise sqlite3.OperationalError("Failed to execute command after retries due to database lock.")
 
+    def request_image(self, zoom: int, x: int, y: int, db_cursor=None) -> ImageTk.PhotoImage:
         # if database is available check first if tile is in database, if not try to use server
         if db_cursor is not None:
             try:
                 db_cursor.execute("SELECT t.tile_image FROM tiles t WHERE t.zoom=? AND t.x=? AND t.y=? AND t.server=?;",
                                   (zoom, x, y, self.tile_server))
                 result = db_cursor.fetchone()
-
                 if result is not None:
                     image = Image.open(io.BytesIO(result[0]))
                     image_tk = ImageTk.PhotoImage(image)
                     self.tile_image_cache[f"{zoom}_{x}_{y}"] = image_tk
                     return image_tk
-                elif self.use_database_only:
-                    return self.empty_tile_image
-                else:
-                    pass
-
-            except sqlite3.OperationalError:
-                if self.use_database_only:
-                    return self.empty_tile_image
-                else:
-                    pass
-
             except Exception:
-                return self.empty_tile_image
+                print("Error loading tile from database")
 
         # try to get the tile from the server
         try:
             url = self.tile_server.replace("{x}", str(x)).replace("{y}", str(y)).replace("{z}", str(zoom))
-            # image = Image.open(requests.get(url, stream=True, headers={"User-Agent": "TkinterMapView"}).raw)
             response = requests.get(url, stream=True, headers={"User-Agent": "TkinterMapView"})
             image_org = Image.open(io.BytesIO(response.content))
             if image_org.mode != 'RGB': image_org = image_org.convert('RGB')
             output = io.BytesIO()
             image_org.save(output, format="JPEG", quality=74)  # Adjust the quality as needed
             image = Image.open(io.BytesIO(output.getvalue()))
+
+            if db_cursor is not None and output is not None:
+                try:
+                    self.execute_with_retry(db_cursor, zoom, x, y, str(self.tile_server), output.getvalue())
+                except Exception as err:
+                    print(f"Error inserting tile into database: {err}")
 
             if self.overlay_tile_server is not None:
                 url = self.overlay_tile_server.replace("{x}", str(x)).replace("{y}", str(y)).replace("{z}", str(zoom))

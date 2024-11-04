@@ -806,9 +806,9 @@ def updatesnodes():
                     if "hopsAway" in info: LoraDB[nodeID][12] = info['hopsAway']
                     if "position" in info and LoraDB[nodeID][3] == -8.0 and LoraDB[nodeID][4] == -8.0:
                         tmp2 = info['position']
-                        if "latitude" in tmp2 and "longitude" in tmp2:
-                            LoraDB[nodeID][3] = tmp2.get(round('latitude',6), -8.0)
-                            LoraDB[nodeID][4] = tmp2.get(round('longitude',6), -8.0)
+                        if "latitude" in tmp2 and "longitude" in tmp2 and tmp2['latitude'] != '' and tmp2['longitude'] != '':
+                            LoraDB[nodeID][3] = round(tmp2.get('latitude', -8.0),6)
+                            LoraDB[nodeID][4] = round(tmp2.get('longitude', -8.0),6)
                         if "altitude" in tmp:
                             LoraDB[nodeID][5] = tmp2.get('altitude', 0)
 
@@ -1665,8 +1665,11 @@ if __name__ == "__main__":
     frame_right.grid(row=0, column=1, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
     frame_right.grid_rowconfigure(0, weight=1)
     frame_right.grid_columnconfigure(0, weight=1)
-
-    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6) # database_path=database_path, use_database_only=True
+    database_path = None
+    if config.has_option('meshtastic', 'map_cache') and config.get('meshtastic', 'map_cache') == 'True':
+        print("Using offline map cache")
+        database_path = 'DataBase' + os.path.sep + 'offline_tiles.db'
+    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6, database_path=database_path)
     mapview.pack(fill=tk.BOTH, expand=True) # grid(row=0, column=0, sticky='nsew')
     mapview.set_position(48.860381, 2.338594)
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
