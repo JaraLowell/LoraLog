@@ -816,6 +816,7 @@ def updatesnodes():
                         LoraDB[MyLora][0] = tnow
                         if LoraDB[MyLora][3] != -8.0 and LoraDB[MyLora][4] != -8.0:
                             if MyLora not in MapMarkers:
+                                mapview.set_zoom(11)
                                 MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None]
                                 MapMarkers[MyLora][0] = mapview.set_marker(LoraDB[MyLora][3], LoraDB[MyLora][4], text=unescape(LoraDB[MyLora][1]), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 8), data=MyLora, command = click_command)
                                 MapMarkers[MyLora][0].text_color = '#e67a7f'
@@ -1556,7 +1557,7 @@ if __name__ == "__main__":
                     logging.error(f"Error sending Ping: {e}")
                     print(f"Error sending Ping: {e}")
 
-        if tnow > tlast + 900:
+        if tnow > tlast + 600:
             tlast = tnow
             updatesnodes()
 
@@ -1669,7 +1670,7 @@ if __name__ == "__main__":
     mapview.pack(fill=tk.BOTH, expand=True) # grid(row=0, column=0, sticky='nsew')
     mapview.set_position(48.860381, 2.338594)
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
-    mapview.set_zoom(10)
+    mapview.set_zoom(1)
 
     is_mapfullwindow = False
     def toggle_map(event=None):

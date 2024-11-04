@@ -36,7 +36,8 @@ class TkinterMapView(tkinter.Frame):
         super().__init__(*args, **kwargs)
 
         self.running = True
-
+        self.pausecount = 0
+        self.viewport_bounds = (0, 0, 0, 0)
         self.width = width
         self.height = height
         self.corner_radius = corner_radius if corner_radius <= 30 else 30  # corner_radius can't be greater than 30
@@ -410,21 +411,25 @@ class TkinterMapView(tkinter.Frame):
         self.canvas.lift("button")
 
     # Lets see if we can reduce the memory footprint by removing the tile_image_cache that we are not using
-    def is_within_viewport(self, x, y, zoom, viewport_bounds):
+    def is_within_viewport(self, x, y):
         """ Check if the tile (x, y, zoom) is within the viewport bounds. """
-        min_x, max_x, min_y, max_y = viewport_bounds
+        min_x, max_x, min_y, max_y = self.viewport_bounds
         return min_x <= x <= max_x and min_y <= y <= max_y
 
-    def update_cache(self, zoom, viewport_bounds):
+    def update_cache(self):
         """ Update the cache by removing tiles outside the viewport. """
         keys_to_delete = []
         for key in self.tile_image_cache.keys():
             key_zoom, key_x, key_y = map(int, key.split('_'))
-            if key_zoom == zoom and not self.is_within_viewport(key_x, key_y, zoom, viewport_bounds):
+            if key_zoom == self.zoom and not self.is_within_viewport(key_x, key_y):
                 keys_to_delete.append(key)
 
-        for key in keys_to_delete:
-            del self.tile_image_cache[key]
+        if len(keys_to_delete):
+            print(f"Deleting {len(keys_to_delete)} tiles from cache")
+            for key in keys_to_delete:
+                image = self.tile_image_cache[key]
+                del image
+                del self.tile_image_cache[key]
 
     def pre_cache(self):
         """ single threaded pre-chache tile images in area of self.pre_cache_position """
@@ -446,20 +451,6 @@ class TkinterMapView(tkinter.Frame):
                 radius = 1
 
             if last_pre_cache_position is not None and radius <= 8:
-
-                # Example usage within your existing code
-                viewport_bounds = (
-                    self.pre_cache_position[0] - radius, 
-                    self.pre_cache_position[0] + radius, 
-                    self.pre_cache_position[1] - radius, 
-                    self.pre_cache_position[1] + radius
-                )
-
-                # Update the cache to remove images outside the viewport
-                self.update_cache(zoom, viewport_bounds)
-
-                # Continue with the rest of your code
-
                 # pre cache top and bottom row
                 for x in range(self.pre_cache_position[0] - radius, self.pre_cache_position[0] + radius + 1):
                     if f"{zoom}{x}{self.pre_cache_position[1] + radius}" not in self.tile_image_cache:
@@ -474,9 +465,16 @@ class TkinterMapView(tkinter.Frame):
                     if f"{zoom}{self.pre_cache_position[0] - radius}{y}" not in self.tile_image_cache:
                         self.request_image(zoom, self.pre_cache_position[0] - radius, y, db_cursor=db_cursor)
 
+                # Example usage within your existing code
+                self.viewport_bounds = (
+                    self.pre_cache_position[0] - radius, 
+                    self.pre_cache_position[0] + radius, 
+                    self.pre_cache_position[1] - radius, 
+                    self.pre_cache_position[1] + radius
+                )
+
                 # raise the radius
                 radius += 1
-
             else:
                 time.sleep(0.1)
 
@@ -590,7 +588,7 @@ class TkinterMapView(tkinter.Frame):
                 time.sleep(0.01)
 
     def update_canvas_tile_images(self):
-
+        menow = int(time.time())
         while len(self.image_load_queue_results) > 0 and self.running:
             # result queue structure: [((zoom, x, y), corresponding canvas tile object, tile image), ... ]
             result = self.image_load_queue_results.pop(0)
@@ -602,6 +600,13 @@ class TkinterMapView(tkinter.Frame):
             # check if zoom level of result is still up to date, otherwise don't update image
             if zoom == round(self.zoom):
                 canvas_tile.set_image(image)
+            
+            self.pausecount = menow
+
+        if len(self.image_load_queue_results) == 0 and self.running:
+            if self.pausecount == 0 or menow - self.pausecount > 200:
+                self.pausecount = menow
+                self.update_cache()
 
         # This function calls itself every 10 ms with tk.after() so that the image updates come
         # from the main GUI thread, because tkinter can only be updated from the main thread.
