@@ -406,6 +406,26 @@ def idToHex(nodeId):
     if len(in_hex)%2: in_hex = in_hex.replace("0x","0x0") # Need account for leading zero, wish hex removes if it has one
     return f"!{in_hex[2:]}"
 
+def MapMarkerDelete(node_id):
+    global MapMarkers
+    if node_id in MapMarkers:
+        # Mheard
+        if MapMarkers[node_id][3] != None:
+            MapMarkers[node_id][3].delete()
+            MapMarkers[node_id][3] = None
+        # Move Trail
+        if MapMarkers[node_id][4] != None:
+            MapMarkers[node_id][4].delete()
+            MapMarkers[node_id][4] = None
+        # Check Trail
+        MapMarkers[node_id][5] = 0
+        # Range Circle
+        if len(MapMarkers[node_id]) == 8:
+            if MapMarkers[node_id][7] != None:
+                MapMarkers[node_id][7].delete()
+                MapMarkers[node_id][7] = None
+            MapMarkers[node_id].pop()
+
 def on_meshtastic_message(packet, interface, loop=None):
     # print(yaml.dump(packet))
     global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log
@@ -548,13 +568,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                     last_position = get_last_position(movement_log, fromraw)
                     if last_position and 'latitude' in position and 'longitude' in position:
                         if last_position['latitude'] != nodelat or last_position['longitude'] != nodelon:
+                            MapMarkerDelete(fromraw)
                             movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                             text_msgs += '(Moved!) '
-                            if fromraw in MapMarkers and MapMarkers[fromraw][3] is not None:
-                                MapMarkers[fromraw][3].delete()
-                                MapMarkers[fromraw][3] = None
-                        if fromraw in MapMarkers:
-                            MapMarkers[fromraw][5] = 0
                     if 'precisionBits' in position and position.get('precisionBits', 0) > 0:
                         AcMeters = round(23905787.925008 * math.pow(0.5, position.get('precisionBits', 0)), 2)
                         if AcMeters > 1.0:
@@ -563,7 +579,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                                 # Lets draw only a circle if distance bigger then 30m or smaller then 5km
                                 if len(MapMarkers[fromraw]) == 7:
                                     MapMarkers[fromraw].append(None)
-                                    MapMarkers[fromraw][7] = mapview.set_polygon(position=(nodelat, nodelon), range_in_meters=AcMeters ,fill_color="gray25")
+                                    MapMarkers[fromraw][7] = mapview.set_polygon(position=(nodelat, nodelon), range_in_meters=(AcMeters * 2),fill_color="gray25")
                     if not last_position and 'latitude' in position and 'longitude' in position:
                         movement_log.append({'nodeID': fromraw, 'time': rectime, 'latitude': nodelat, 'longitude': nodelon, 'altitude': position.get('altitude', 0)})
                 if "satsInView" in position:
@@ -1418,22 +1434,14 @@ if __name__ == "__main__":
                 logging.error(f"Node {node_id} has no uptime and a length of {len(node_info)}")
             if tnow - node_time >= map_oldnode and node_id != MyLora:
                 if node_id in MapMarkers:
-                    if MapMarkers[node_id][3] != None:
-                        MapMarkers[node_id][3].delete()
-                    if MapMarkers[node_id][4] != None:
-                        MapMarkers[node_id][4].delete()
+                    MapMarkerDelete(node_id)
                     MapMarkers[node_id][0].delete()
+                    MapMarkers[node_id][0] = None
                     del MapMarkers[node_id]
             elif tnow - node_time >= map_delete and node_id != MyLora:
                 if node_id in MapMarkers:
                     if MapMarkers[node_id][0].text_color != '#aaaaaa':
-                        if MapMarkers[node_id][3] is not None:
-                            MapMarkers[node_id][3].delete()
-                            MapMarkers[node_id][3] = None
-                        if len(MapMarkers[node_id]) > 7:
-                            MapMarkers[node_id][7].delete()
-                            MapMarkers[node_id][7] = None
-                            MapMarkers[node_id].pop()
+                        MapMarkerDelete(node_id)
                         MapMarkers[node_id][0].delete()
                         MapMarkers[node_id][0] = None
                         MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)

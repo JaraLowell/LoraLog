@@ -31,7 +31,7 @@ class TkinterMapView(tkinter.Frame):
                  bg_color: str = None,
                  database_path: str = None,
                  use_database_only: bool = False,
-                 max_zoom: int = 20,
+                 max_zoom: int = 19,
                  **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -126,7 +126,7 @@ class TkinterMapView(tkinter.Frame):
         self.not_loaded_tile_image = ImageTk.PhotoImage(Image.new("RGB", (self.tile_size, self.tile_size), (250, 250, 250)))  # only used when image not found on tile server
 
         # tile server and database
-        self.tile_server = "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        self.tile_server = ""
         self.database_path = database_path
         self.use_database_only = use_database_only
         self.overlay_tile_server: Union[str, None] = None
@@ -429,7 +429,7 @@ class TkinterMapView(tkinter.Frame):
                 keys_to_delete.append(key)
 
         if len(keys_to_delete):
-            print(f"Deleting {len(keys_to_delete)} tiles from cache")
+            print(f"Deleting {len(keys_to_delete)} / {len(self.tile_image_cache)} tiles from cache")
             for key in keys_to_delete:
                 image = self.tile_image_cache[key]
                 del image
@@ -486,7 +486,7 @@ class TkinterMapView(tkinter.Frame):
                 zoom = round(self.zoom)
                 radius = 1
 
-            if last_pre_cache_position is not None and radius <= 8:
+            if last_pre_cache_position is not None and radius <= 3:
                 # pre cache top and bottom row
                 for x in range(self.pre_cache_position[0] - radius, self.pre_cache_position[0] + radius + 1):
                     if f"{zoom}{x}{self.pre_cache_position[1] + radius}" not in self.tile_image_cache:
@@ -554,6 +554,9 @@ class TkinterMapView(tkinter.Frame):
                     return image_tk
             except Exception:
                 print("Error loading tile from database")
+
+        if self.tile_server == "":
+            return self.empty_tile_image
 
         # try to get the tile from the server
         try:
