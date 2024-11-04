@@ -701,10 +701,10 @@ def on_meshtastic_message(packet, interface, loop=None):
                     MapMarkers[fromraw][2] = tnow
                     if viaMqtt == True and MapMarkers[fromraw][1] == False:
                         MapMarkers[fromraw][1] = True
-                        MapMarkers[fromraw][0].change_icon(tk_mqtt)
+                        MapMarkers[fromraw][0].change_icon(3)
                     elif viaMqtt == False and MapMarkers[fromraw][1] == True:
                         MapMarkers[fromraw][1] = False
-                        MapMarkers[fromraw][0].change_icon(tk_direct)
+                        MapMarkers[fromraw][0].change_icon(2)
                 elif LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0 and viaMqtt == True:
                     MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
                     MapMarkers[fromraw][0] = mapview.set_marker(LoraDB[fromraw][3], LoraDB[fromraw][4], text=unescape(LoraDB[fromraw][1]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=fromraw, command = click_command)
@@ -741,7 +741,7 @@ def on_meshtastic_message(packet, interface, loop=None):
 
                     insert_colored_text(text_box1, (' ' * 11) + text_raws + text_from + '\n', "#00c983")
             elif text_raws != '' and MyLora == fromraw:
-                insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
+                insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + LoraDB[fromraw][10] + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
             else:
                 insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)

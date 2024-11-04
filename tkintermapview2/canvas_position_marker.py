@@ -117,11 +117,11 @@ class CanvasPositionMarker:
         self.text = text
         self.draw()
 
-    def change_icon(self, new_icon: tkinter.PhotoImage):
-        if self.icon is None:
+    def change_icon(self, new_icon: int = 0):
+        if new_icon == 0:
             raise AttributeError("CanvasPositionMarker: marker needs icon image in constructor to change icon image later")
         else:
-            self.icon = new_icon
+            self.icon = CanvasPositionMarker.iconspack[new_icon]
             self.calculate_text_y_offset()
             self.map_widget.canvas.itemconfigure(self.canvas_icon, image=self.icon)
 
