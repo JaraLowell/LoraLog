@@ -100,7 +100,7 @@ class CanvasPath:
                 self.canvas_line_positions.append(canvas_position[0])
                 self.canvas_line_positions.append(canvas_position[1])
 
-        if not self.deleted:
+        if not self.deleted and ((self.path_color == "#006642" and self.map_widget.draw_heard == True) or (self.path_color != "#006642" and self.map_widget.draw_trail == True)):
             if self.canvas_line is None:
                 self.map_widget.canvas.delete(self.canvas_line)
                 # Custom code to have 2 type of paths

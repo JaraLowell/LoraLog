@@ -22,7 +22,6 @@ from .canvas_button import CanvasButton
 from .canvas_path import CanvasPath
 from .canvas_polygon import CanvasPolygon
 
-
 class TkinterMapView(tkinter.Frame):
     def __init__(self, *args,
                  width: int = 300,
@@ -43,6 +42,11 @@ class TkinterMapView(tkinter.Frame):
         self.corner_radius = corner_radius if corner_radius <= 30 else 30  # corner_radius can't be greater than 30
         self.configure(width=self.width, height=self.height)
         self.db_cursor = None
+
+        self.draw_trail = False
+        self.draw_range = False
+        self.draw_heard = True
+        self.draw_oldnodes = False
 
         # detect color of master widget for rounded corners
         if bg_color is None:
@@ -89,6 +93,12 @@ class TkinterMapView(tkinter.Frame):
         # zoom buttons
         self.button_zoom_in = CanvasButton(self, (20, 20), text="+", command=self.button_zoom_in)
         self.button_zoom_out = CanvasButton(self, (20, 60), text="-", command=self.button_zoom_out)
+
+        # Canvas Buttons Extra
+        self.btoggle_trail  = CanvasButton(self, (20, 120), text="☈", command=self.toggle_trail)
+        self.btoggle_heard  = CanvasButton(self, (20, 160), text="⇢", command=self.toggle_heard, fg="#00c27e")
+        self.btoggle_range  = CanvasButton(self, (20, 200), text="⚆", command=self.toggle_range)
+        self.btoggle_oldnodes = CanvasButton(self, (20, 240), text="☠", command=self.toggle_oldnodes)
 
         # bind events for mouse button pressed, mouse movement, and scrolling
         self.canvas.bind("<B1-Motion>", self.mouse_move)
@@ -1021,3 +1031,35 @@ class TkinterMapView(tkinter.Frame):
     def button_zoom_out(self):
         # zoom out of middle of map
         self.set_zoom(self.zoom - 1, relative_pointer_x=0.5, relative_pointer_y=0.5)
+
+    def toggle_trail(self):
+        self.draw_trail = not self.draw_trail
+        if self.draw_trail:
+            self.btoggle_trail.config(fg="#e63030")
+        else:
+            self.btoggle_trail.config(fg="gray")
+        self.draw_move()
+
+    def toggle_range(self):
+        self.draw_range = not self.draw_range
+        if self.draw_range:
+            self.btoggle_range.config(fg="#e08700")
+        else:
+            self.btoggle_range.config(fg="gray")
+        self.draw_move()
+
+    def toggle_heard(self):
+        self.draw_heard = not self.draw_heard
+        if self.draw_heard:
+            self.btoggle_heard.config(fg="#00c27e")
+        else:
+            self.btoggle_heard.config(fg="gray")
+        self.draw_move()
+    
+    def toggle_oldnodes(self):
+        self.draw_oldnodes = not self.draw_oldnodes
+        if self.draw_oldnodes:
+            self.btoggle_oldnodes.config(fg="white")
+        else:
+            self.btoggle_oldnodes.config(fg="gray")
+        self.draw_move()

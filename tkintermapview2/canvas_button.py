@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 class CanvasButton:
-    def __init__(self, map_widget: "TkinterMapView", canvas_position, text="", command=None):
+    def __init__(self, map_widget: "TkinterMapView", canvas_position, text="", command=None, fg="grey"):
         self.map_widget = map_widget
         self.canvas_position = canvas_position
 
@@ -23,11 +23,17 @@ class CanvasButton:
 
         self.text = text
         self.command = command
-
+        self.fg = fg
         self.canvas_rect = None
         self.canvas_text = None
 
         self.draw()
+
+    def config(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+            if key == "fg" and self.canvas_text is not None:
+                self.map_widget.canvas.itemconfig(self.canvas_text, fill=value)
 
     def click(self, event):
         if self.command is not None:
@@ -47,7 +53,7 @@ class CanvasButton:
     def hover_off(self, event):
         if self.canvas_rect is not None:
             self.map_widget.canvas.itemconfig(self.canvas_rect, fill="gray20", outline="gray20")
-
+        
         self.map_widget.canvas.config(cursor="arrow")
 
     def draw(self):
@@ -64,7 +70,7 @@ class CanvasButton:
                                                               math.floor(self.canvas_position[1] + self.height / 2),
                                                               anchor=tkinter.CENTER,
                                                               text=self.text,
-                                                              fill="white",
+                                                              fill=self.fg,
                                                               font="Tahoma 16",
                                                               tag="button")
 

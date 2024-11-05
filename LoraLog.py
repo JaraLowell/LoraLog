@@ -1418,6 +1418,7 @@ if __name__ == "__main__":
             insert_colored_text(text_box_middle, MyLoraText2, "#c1c1c1")
         text_box_middle.mark_set(LoraDB[MyLora][1], "1.0")
 
+        drawoldnodes = mapview.draw_oldnodes
         for node_id, node_info in sorted_nodes:
             node_time = node_info[0]
 
@@ -1440,15 +1441,16 @@ if __name__ == "__main__":
                     del MapMarkers[node_id]
             elif tnow - node_time >= map_delete and node_id != MyLora:
                 if node_id in MapMarkers:
-                    if MapMarkers[node_id][0].text_color != '#aaaaaa':
+                    if MapMarkers[node_id][0].text_color != '#aaaaaa' or drawoldnodes == False:
                         MapMarkerDelete(node_id)
                         MapMarkers[node_id][0].delete()
                         MapMarkers[node_id][0] = None
-                        MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                        MapMarkers[node_id][0].text_color = '#aaaaaa'
-                else:
-                    if 'Meshtastic' in LoraDB[node_id][1]:
-                        LoraDB[node_id][1] = (LoraDB[node_id][1])[-4:]
+                        if drawoldnodes:
+                            MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                            MapMarkers[node_id][0].text_color = '#aaaaaa'
+                        else:
+                            del MapMarkers[node_id]
+                elif drawoldnodes == True:
                     if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
                         MapMarkers[node_id] = [None, True, tnow, None, None, 0, None]
                         MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
@@ -1526,34 +1528,36 @@ if __name__ == "__main__":
                     MapMarkers[node_id][6].delete()
                     MapMarkers[node_id][6] = None
 
-                positions = get_data_for_node(movement_log, node_id)
                 if MapMarkers[node_id][4] != None and MapMarkers[node_id][5] <= 0:
                     MapMarkers[node_id][4].delete()
                     MapMarkers[node_id][4] = None
-                if len(positions) > 1 and tnow - node_info[0] <= map_oldnode:
-                    if MapMarkers[node_id][5] <= 0:
-                        drawline = []
-                        # index = len(positions)
-                        for position in positions:
-                            # index -= 1 round(LoraDB[nodeid][3],6)
-                            pos = (position['latitude'], position['longitude'])
-                            drawline.append(pos)
-                            # if index != 0:
-                            #     MapMarkers[node_id][4] = mapview.set_marker(position['latitude'], position['longitude'], icon = tk_dot)
-                            #     marker = MapMarkers[node_id][4]
-                            #     mapview.canvas.lower(marker.canvas_icon, "marker")
-                        MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
-                        MapMarkers[node_id][5] = 30
-                    else:
-                        MapMarkers[node_id][5] -= 1
-                # Lets delete some old mars and paths if we to old...
-                if tnow - node_time > map_delete and MapMarkers[node_id][3] != None:
-                    MapMarkers[node_id][3].delete()
-                    MapMarkers[node_id][3] = None
-                if tnow - node_time > map_oldnode and MapMarkers[node_id][4] != None:
-                    MapMarkers[node_id][4].delete()
-                    MapMarkers[node_id][4] = None
-                    MapMarkers[node_id][5] = 0
+
+                if mapview.draw_trail:
+                    positions = get_data_for_node(movement_log, node_id)
+                    if len(positions) > 1 and tnow - node_info[0] <= map_oldnode:
+                        if MapMarkers[node_id][5] <= 0:
+                            drawline = []
+                            # index = len(positions)
+                            for position in positions:
+                                # index -= 1 round(LoraDB[nodeid][3],6)
+                                pos = (position['latitude'], position['longitude'])
+                                drawline.append(pos)
+                                # if index != 0:
+                                #     MapMarkers[node_id][4] = mapview.set_marker(position['latitude'], position['longitude'], icon = tk_dot)
+                                #     marker = MapMarkers[node_id][4]
+                                #     mapview.canvas.lower(marker.canvas_icon, "marker")
+                            MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
+                            MapMarkers[node_id][5] = 30
+                        else:
+                            MapMarkers[node_id][5] -= 1
+                    # Lets delete some old mars and paths if we to old...
+                    if tnow - node_time > map_delete and MapMarkers[node_id][3] != None:
+                        MapMarkers[node_id][3].delete()
+                        MapMarkers[node_id][3] = None
+                    if tnow - node_time > map_oldnode and MapMarkers[node_id][4] != None:
+                        MapMarkers[node_id][4].delete()
+                        MapMarkers[node_id][4] = None
+                        MapMarkers[node_id][5] = 0
 
         if isConnect:
             pingcount += 1
