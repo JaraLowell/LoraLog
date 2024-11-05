@@ -1151,6 +1151,7 @@ if __name__ == "__main__":
     def on_closing():
         global isLora
         isLora = False
+        mapview.destroy()
         if meshtastic_client is not None:
             meshtastic_client.close()
             safedatabase()
