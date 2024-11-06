@@ -323,13 +323,14 @@ def connect_meshtastic(force_connect=False):
     return meshtastic_client
 
 def req_meta():
-    global meshtastic_client, loop
+    global meshtastic_client, loop, ok2Send
     try:
         meshtastic_client.localNode.getMetadata()
     except Exception as e:
         logging.error("Error requesting metadata: %s", str(e))
     finally:
         print(f"Finished requesting metadata")
+        ok2Send = 0
 
 def on_lost_meshtastic_connection(interface):
     global root, loop, telemetry_thread, position_thread, trace_thread, isConnect
@@ -562,7 +563,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                     logLora(fromraw, ['POSITION_APP', nodelat, nodelon, position.get('altitude', 0)])
                     if MyLora != fromraw and LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0:
                         text_msgs += "Distance: ±" + calc_gc(nodelat, nodelon, LoraDB[MyLora][3], LoraDB[MyLora][4]) + " "
-                    if fromraw in MapMarkers:
+                    if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
                         MapMarkers[fromraw][0].set_position(nodelat, nodelon)
                         MapMarkers[fromraw][0].set_text(LoraDB[fromraw][1])
                     last_position = get_last_position(movement_log, fromraw)
@@ -706,9 +707,12 @@ def on_meshtastic_message(packet, interface, loop=None):
                     text_raws = 'Node Unknown Packet'
 
             if "snr" in packet and packet['snr'] is not None:
+                print('snr ' + text_from + ' ' + str(packet['snr']) + 'dB')
+                print(yaml.dump(packet))
                 LoraDB[fromraw][11] = str(packet['snr']) + 'dB'
 
             if "rxSnr" in packet and packet['rxSnr'] is not None:
+                # we want rxRssi / rxSnr
                 LoraDB[fromraw][11] = str(packet['rxSnr']) + 'dB'
 
             # Lets work the map
@@ -1151,13 +1155,13 @@ if __name__ == "__main__":
     def on_closing():
         global isLora
         isLora = False
+        safedatabase()
+        logging.debug('Saved Databases (Exit)')
         mapview.destroy()
-        if meshtastic_client is not None:
-            meshtastic_client.close()
-            safedatabase()
-            logging.debug('Saved Databases')
+        time.sleep(0.1)
         logging.debug("Closed Program")
         root.quit()
+        time.sleep(0.1)
         sys.exit()
 
     # Initialize the main window
@@ -1190,7 +1194,7 @@ if __name__ == "__main__":
             playsound('Data' + os.path.sep + 'NewChat.mp3')
 
     def send_position(nodeid):
-        global meshtastic_client, loop, stop_thread
+        global meshtastic_client, loop, ok2Send
         print(f"Requesting Position Data from {nodeid}")
         try:
             meshtastic_client.sendPosition(destinationId=nodeid, wantResponse=True, channelIndex=0)
@@ -1198,9 +1202,10 @@ if __name__ == "__main__":
             print(f"Error sending Position: {e}")
         finally:
             print(f"Finished sending Position")
+            ok2Send = 0
 
     def send_telemetry(nodeid):
-        global meshtastic_client, loop
+        global meshtastic_client, loop, ok2Send
         print(f"Requesting Telemetry Data from {nodeid}")
         try:
             meshtastic_client.sendTelemetry(destinationId=nodeid, wantResponse=True, channelIndex=0)
@@ -1208,9 +1213,10 @@ if __name__ == "__main__":
             print(f"Error sending Telemetry: {e}")
         finally:
             print(f"Finished sending Telemetry")
+            ok2Send = 0
 
     def send_trace(nodeid):
-        global meshtastic_client, loop
+        global meshtastic_client, loop, ok2Send
         print(f"Requesting Traceroute Data from {nodeid}")
         try:
             meshtastic_client.sendTraceRoute(dest=nodeid, hopLimit=7, channelIndex=0)
@@ -1218,6 +1224,7 @@ if __name__ == "__main__":
             print(f"Error sending Traceroute: {e}")
         finally:
             print(f"Finished sending Traceroute")
+            ok2Send = 0
 
     def close_overlay():
         global overlay
@@ -1434,6 +1441,7 @@ if __name__ == "__main__":
             if len(node_info) < 14:
                 LoraDB[node_id].append(0)
                 logging.error(f"Node {node_id} has no uptime and a length of {len(node_info)}")
+            
             if tnow - node_time >= map_oldnode and node_id != MyLora:
                 if node_id in MapMarkers:
                     MapMarkerDelete(node_id)
@@ -1442,15 +1450,19 @@ if __name__ == "__main__":
                     del MapMarkers[node_id]
             elif tnow - node_time >= map_delete and node_id != MyLora:
                 if node_id in MapMarkers:
-                    if MapMarkers[node_id][0].text_color != '#aaaaaa' or drawoldnodes == False:
-                        MapMarkerDelete(node_id)
-                        MapMarkers[node_id][0].delete()
-                        MapMarkers[node_id][0] = None
+                    if MapMarkers[node_id][0] != None:
                         if drawoldnodes:
+                            MapMarkers[node_id][0].delete()
+                            MapMarkers[node_id][0] = None
                             MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
                             MapMarkers[node_id][0].text_color = '#aaaaaa'
                         else:
-                            del MapMarkers[node_id]
+                            MapMarkers[node_id][0].delete()
+                            MapMarkers[node_id][0] = None
+                    if MapMarkers[node_id][0] == None:
+                        if drawoldnodes:
+                            MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
+                            MapMarkers[node_id][0].text_color = '#aaaaaa'
                 elif drawoldnodes == True:
                     if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
                         MapMarkers[node_id] = [None, True, tnow, None, None, 0, None]
@@ -1524,6 +1536,11 @@ if __name__ == "__main__":
         for node_id, node_info in sorted_nodes:
             if node_id in MapMarkers:
                 node_time = node_info[0]
+
+                # Lets remove mheard if time bigger then 15 minutes
+                if tnow - node_time >= 900 and MapMarkers[node_id][3] != None:
+                    MapMarkers[node_id][3].delete()
+                    MapMarkers[node_id][3] = None
 
                 if MapMarkers[node_id][6] != None and (tnow - node_time) >= 3:
                     MapMarkers[node_id][6].delete()

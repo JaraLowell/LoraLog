@@ -19,7 +19,7 @@ class CanvasButton:
         else:
             self.width = 29
             self.height = 29
-            self.border_width = 3
+            self.border_width = 1
 
         self.text = text
         self.command = command
@@ -41,7 +41,8 @@ class CanvasButton:
 
     def hover_on(self, event):
         if self.canvas_rect is not None:
-            self.map_widget.canvas.itemconfig(self.canvas_rect, fill="gray50", outline="gray50")
+            self.map_widget.canvas.itemconfig(self.canvas_rect, fill="gray50", outline="gray10")
+            self.map_widget.canvas.itemconfig(self.canvas_text, fill="grey10")
 
             if sys.platform == "darwin":
                 self.map_widget.canvas.config(cursor="pointinghand")
@@ -52,7 +53,8 @@ class CanvasButton:
 
     def hover_off(self, event):
         if self.canvas_rect is not None:
-            self.map_widget.canvas.itemconfig(self.canvas_rect, fill="gray20", outline="gray20")
+            self.map_widget.canvas.itemconfig(self.canvas_rect, fill="gray20", outline="gray10")
+            self.map_widget.canvas.itemconfig(self.canvas_text, fill=self.fg)
         
         self.map_widget.canvas.config(cursor="arrow")
 
@@ -63,7 +65,7 @@ class CanvasButton:
                                                                  self.canvas_position[1] + self.height,
                                                                  self.canvas_position[0], self.canvas_position[1] + self.height,
                                                                  width=self.border_width,
-                                                                 fill="gray20", outline="gray20",
+                                                                 fill="gray20", outline="gray10",
                                                                  tag="button")
 
         self.canvas_text = self.map_widget.canvas.create_text(math.floor(self.canvas_position[0] + self.width / 2),
