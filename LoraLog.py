@@ -140,6 +140,8 @@ environment_log = [] # environment  = [{'nodeID': '1', 'time': 1698163200, 'temp
 LoraDB          = {} # LoraDB       = {'nodeID': [timenow, ShortName, LongName, latitude, longitude, altitude, macaddr, hardware, timefirst, rightbarstats, mmqtt, snr, hops], ...}
 chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': 'nodeid or ch', 'ackn' : True, seen': False, 'text': 'Hello World!'}, ...]
 
+# Eventually we need push this all in to sqlite3
+
 # database_path = 'DataBase' + os.path.sep + "tiles.db"
 
 LoraDBPath = 'DataBase' + os.path.sep + 'LoraDB.pkl'
@@ -721,10 +723,12 @@ def on_meshtastic_message(packet, interface, loop=None):
                     MapMarkers[fromraw][2] = tnow
                     if viaMqtt == True and MapMarkers[fromraw][1] == False:
                         MapMarkers[fromraw][1] = True
-                        MapMarkers[fromraw][0].change_icon(3)
+                        if MapMarkers[fromraw][0] != None:
+                            MapMarkers[fromraw][0].change_icon(3)
                     elif viaMqtt == False and MapMarkers[fromraw][1] == True:
                         MapMarkers[fromraw][1] = False
-                        MapMarkers[fromraw][0].change_icon(2)
+                        if MapMarkers[fromraw][0] != None:
+                            MapMarkers[fromraw][0].change_icon(2)
                 elif LoraDB[fromraw][3] != -8.0 and LoraDB[fromraw][4] != -8.0 and viaMqtt == True:
                     MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
                     MapMarkers[fromraw][0] = mapview.set_marker(LoraDB[fromraw][3], LoraDB[fromraw][4], text=unescape(LoraDB[fromraw][1]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=fromraw, command = click_command)
@@ -1157,11 +1161,13 @@ if __name__ == "__main__":
         isLora = False
         safedatabase()
         logging.debug('Saved Databases (Exit)')
+        if meshtastic_client is not None:
+            meshtastic_client.close()
         mapview.destroy()
-        time.sleep(0.1)
+        time.sleep(0.200)
         logging.debug("Closed Program")
         root.quit()
-        time.sleep(0.1)
+        time.sleep(0.200)
         sys.exit()
 
     # Initialize the main window
@@ -1398,6 +1404,39 @@ if __name__ == "__main__":
     # Function to update the middle frame with the last 30 active nodes
     peekmem = 0
 
+    def checknode(node_id, icon, color, drawme=True):
+        global MapMarkers, LoraDB, mapview
+        if node_id in MapMarkers:
+            if (drawme == False and icon != 4) or drawme == True:
+                if MapMarkers[node_id][0] != None:
+                    if hasattr(MapMarkers[node_id][0], 'text_color'):
+                        if MapMarkers[node_id][0].text_color != color:
+                            MapMarkers[node_id][0].delete()
+                            MapMarkers[node_id][0] = None
+                            MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=icon, text_color = color, font = ('Fixedsys', 8), data=node_id, command = click_command)
+                            MapMarkers[node_id][0].text_color = color
+                    else:
+                        MapMarkers[node_id][0].delete()
+                        MapMarkers[node_id][0] = None
+                        MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=icon, text_color = color, font = ('Fixedsys', 8), data=node_id, command = click_command)
+                        MapMarkers[node_id][0].text_color = color
+                else:
+                    MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=icon, text_color = color, font = ('Fixedsys', 8), data=node_id, command = click_command)
+                    MapMarkers[node_id][0].text_color = color
+            else:
+                if MapMarkers[node_id][0] != None:
+                    MapMarkers[node_id][0].delete()
+                    MapMarkers[node_id][0] = None
+                if MapMarkers[node_id][3] != None:
+                    MapMarkers[node_id][3].delete()
+                    MapMarkers[node_id][3] = None
+        else:
+            if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
+                if (drawme == False and icon != 4) or drawme == True:
+                    MapMarkers[node_id] = [None, False, int(time.time()), None, None, 0, None]
+                    MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=icon, text_color = color, font = ('Fixedsys', 8), data=node_id, command = click_command)
+                    MapMarkers[node_id][0].text_color = color
+
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, LoraDB, ok2Send, movement_log, metrics_log, peekmem
         start = time.perf_counter()
@@ -1449,25 +1488,7 @@ if __name__ == "__main__":
                     MapMarkers[node_id][0] = None
                     del MapMarkers[node_id]
             elif tnow - node_time >= map_delete and node_id != MyLora:
-                if node_id in MapMarkers:
-                    if MapMarkers[node_id][0] != None:
-                        if drawoldnodes:
-                            MapMarkers[node_id][0].delete()
-                            MapMarkers[node_id][0] = None
-                            MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                            MapMarkers[node_id][0].text_color = '#aaaaaa'
-                        else:
-                            MapMarkers[node_id][0].delete()
-                            MapMarkers[node_id][0] = None
-                    if MapMarkers[node_id][0] == None:
-                        if drawoldnodes:
-                            MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                            MapMarkers[node_id][0].text_color = '#aaaaaa'
-                elif drawoldnodes == True:
-                    if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
-                        MapMarkers[node_id] = [None, True, tnow, None, None, 0, None]
-                        MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                        MapMarkers[node_id][0].text_color = '#aaaaaa'
+                checknode(node_id, 4, '#aaaaaa', drawoldnodes)
             elif tnow - node_time < map_delete or node_id != MyLora:
                 node_name = unescape(node_info[1]).ljust(9)
                 node_wtime = ez_date(tnow - node_time).rjust(10)
@@ -1482,31 +1503,15 @@ if __name__ == "__main__":
                         insert_colored_text(text_box_middle, f" {node_name}", "#c9a500", tag=node_id)
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
                         insert_colored_text(text_box_middle, f" {node_dist}\n", "#9d9d9d")
-                        if node_id not in MapMarkers:
-                            if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
-                                MapMarkers[node_id] = [None, True, tnow, None, None, 0, None]
-                                MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                                MapMarkers[node_id][0].text_color = '#2bd5ff'
-                        elif MapMarkers[node_id][0].text_color != '#2bd5ff':
-                            MapMarkers[node_id][0].delete()
-                            MapMarkers[node_id][0] = None
-                            MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                            MapMarkers[node_id][0].text_color = '#2bd5ff'
+
+                        checknode(node_id, 3, '#2bd5ff', drawoldnodes)
                     else:
                         insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#3d3d3d")
                         insert_colored_text(text_box_middle, f" {node_name}","#00c983", tag=node_id)
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
                         insert_colored_text(text_box_middle, f" {node_dist}{node_sig}\n", "#9d9d9d")
-                        if node_id not in MapMarkers:
-                            if LoraDB[node_id][3] != -8.0 and LoraDB[node_id][4] != -8.0:
-                                MapMarkers[node_id] = [None, False, tnow, None, None, 0, None]
-                                MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=2, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                                MapMarkers[node_id][0].text_color = '#2bd5ff'
-                        elif MapMarkers[node_id][0].text_color != '#2bd5ff':
-                            MapMarkers[node_id][0].delete()
-                            MapMarkers[node_id][0] = None
-                            MapMarkers[node_id][0] = mapview.set_marker(LoraDB[node_id][3], LoraDB[node_id][4], text=unescape(LoraDB[node_id][1]), icon_index=2, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=node_id, command = click_command)
-                            MapMarkers[node_id][0].text_color = '#2bd5ff'
+
+                        checknode(node_id, 2, '#2bd5ff', drawoldnodes)
 
         # Just some stats for checks
         insert_colored_text(text_box_middle, '\n' + ('─' * 14), "#3d3d3d")
@@ -1666,7 +1671,7 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.36 By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.37.b2 By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Lybrary : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.image_create("end", image=hr_img)
     insert_colored_text(text_box1, "\n", "#2bd5ff")
