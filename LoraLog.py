@@ -15,7 +15,7 @@ from html import unescape
 from pygame import mixer
 import threading
 import copy
-import yaml
+# import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -111,7 +111,7 @@ def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend='all',
     text_widget.image_create("end", image=hr_img)
     insert_colored_text(text_widget,'\n From ' + unescape(label),tcolor)
     if private:
-            insert_colored_text(text_widget,' [Direct Message]', "#c9a500")
+            insert_colored_text(text_widget,' [Ch ' + private + ']', "#c9a500")
     ptext = unescape(mtext).strip()
     ptext = textwrap.fill(ptext, 87)
     tcolor = "#d2d2d2"
@@ -140,10 +140,7 @@ environment_log = [] # environment  = [{'nodeID': '1', 'time': 1698163200, 'temp
 LoraDB          = {} # LoraDB       = {'nodeID': [timenow, ShortName, LongName, latitude, longitude, altitude, macaddr, hardware, timefirst, rightbarstats, mmqtt, snr, hops], ...}
 chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': 'nodeid or ch', 'ackn' : True, seen': False, 'text': 'Hello World!'}, ...]
 
-# Eventually we need push this all in to sqlite3
-
-# database_path = 'DataBase' + os.path.sep + "tiles.db"
-
+# Load the databases
 LoraDBPath = 'DataBase' + os.path.sep + 'LoraDB.pkl'
 if os.path.exists(LoraDBPath):
     with open(LoraDBPath, 'rb') as f:
@@ -433,7 +430,7 @@ def on_meshtastic_message(packet, interface, loop=None):
     # print(yaml.dump(packet))
     global MyLora, MyLoraText1, MyLoraText2, LoraDB, MapMarkers, movement_log
     if MyLora == '':
-        print('*** MyLora is empty ***\n' + yaml.dump(packet))
+        print('*** MyLora is empty ***\n')
         return
 
     ischat = False
@@ -708,11 +705,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                 else:
                     text_raws = 'Node Unknown Packet'
 
-            if "snr" in packet and packet['snr'] is not None:
-                print('snr ' + text_from + ' ' + str(packet['snr']) + 'dB')
-                print(yaml.dump(packet))
-                LoraDB[fromraw][11] = str(packet['snr']) + 'dB'
-
             if "rxSnr" in packet and packet['rxSnr'] is not None:
                 # we want rxRssi / rxSnr
                 LoraDB[fromraw][11] = str(packet['rxSnr']) + 'dB'
@@ -748,9 +740,7 @@ def on_meshtastic_message(packet, interface, loop=None):
             if text_raws != '' and MyLora != fromraw:
                 insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + LoraDB[fromraw][10] + "\n", "#d1d1d1", tag=fromraw)
                 if ischat == True:
-                    prv = False
-                    if text_chns == 'Private': prv = True
-                    add_message(text_box3, fromraw, text_raws, tnow, private=prv)
+                    add_message(text_box3, fromraw, text_raws, tnow, private=text_chns)
                 if viaMqtt == True:
                     insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
                 else:
@@ -1157,7 +1147,7 @@ if __name__ == "__main__":
     isLora = True
 
     def on_closing():
-        global isLora
+        global isLora, meshtastic_client, mapview, root
         isLora = False
         safedatabase()
         logging.debug('Saved Databases (Exit)')
