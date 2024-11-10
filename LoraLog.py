@@ -430,6 +430,7 @@ def on_meshtastic_message(packet, interface, loop=None):
 
     tnow = int(time.time())
     rectime = tnow
+
     if 'rxTime' in packet: rectime = packet['rxTime']
     text_from = ''
     if 'fromId' in packet and packet['fromId'] is not None:
@@ -583,11 +584,19 @@ def on_meshtastic_message(packet, interface, loop=None):
                 elif data["portnum"] == "NODEINFO_APP":
                     node_info = packet['decoded'].get('user', {})
                     if node_info:
-                        lora_sn = str(node_info.get('shortName', str(fromraw)[:-4]).encode('ascii', 'xmlcharrefreplace'), 'ascii')
-                        lora_ln = str(node_info.get('longName', 'N/A').encode('ascii', 'xmlcharrefreplace'), 'ascii')
+                        tmp = node_info.get('shortName', str(fromraw)[:-4])
+                        if tmp == str(fromraw)[:-4]:
+                            if result[5] != tmp and result[5] != '':
+                                tmp = result[5]
+                        lora_sn = str(tmp.encode('ascii', 'xmlcharrefreplace'), 'ascii')
+                        tmp = node_info.get('longName', 'Meshtastic ' + str(fromraw)[:-4])
+                        if tmp == 'Meshtastic ' + str(fromraw)[:-4]:
+                            if result[4] != tmp and result[4] != '':
+                                tmp = result[4]
+                        lora_ln = str(tmp.encode('ascii', 'xmlcharrefreplace'), 'ascii')
                         lora_mc = node_info.get('macaddr', 'N/A')
                         lora_mo = node_info.get('hwModel', 'N/A')
-                        if fromraw in MapMarkers:
+                        if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
                             MapMarkers[fromraw][0].set_text(unescape(lora_sn))
                         text_raws = "Node Info using hardware " + lora_mo
                         nodelicense = False
@@ -620,13 +629,14 @@ def on_meshtastic_message(packet, interface, loop=None):
                             MapMarkers[fromraw][3] = None
                         for neighbor in text:
                             nodeid = idToHex(neighbor["nodeId"])[1:]
-                            tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ? AND latitude != -8.0 AND longitude != -8.0", (nodeid,)).fetchone()
+                            tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ? AND latitude != -8 AND longitude != -8", (nodeid,)).fetchone()
                             nbNide = '!' + nodeid
                             if tmp is not None:
                                 nbNide = unescape(tmp[5])
                                 if nodeid not in MapMarkers:
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
-                                    MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(tmp[5]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=nodeid, command = click_command)
+                                    MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=nodeid, command = click_command)
+                                    print(f"Added {nbNide} to map")
                                 if fromraw in MapMarkers:
                                     listmaps = []
                                     pos = (result[9], result[10])
@@ -804,7 +814,7 @@ def updatesnodes():
             result = cursor.execute("SELECT * FROM node_info WHERE node_id = ?", (info["num"],)).fetchone()
             if result is None:
                 print(f"Node {nodeID} not in DB")
-                cursor.execute("INSERT INTO node_info (node_id, hex_id, short_name, long_name) VALUES (?, ?, ?, ?)", (info["num"], nodeID,nodeID[-4:],'Meshtastic ' + nodeID[-4:]))
+                cursor.execute("INSERT INTO node_info (node_id, hex_id, short_name, long_name, timefirst) VALUES (?, ?, ?, ?. ?)", (info["num"], nodeID,nodeID[-4:],'Meshtastic ' + nodeID[-4:], tnow))
                 insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                 insert_colored_text(text_box1, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
                 result = cursor.execute("SELECT * FROM node_info WHERE node_id = ?", (info["num"],)).fetchone()
@@ -819,7 +829,9 @@ def updatesnodes():
                             if "shortName" in tmp and "longName" in tmp:
                                 lora_sn = str(tmp['shortName'].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "")
                                 lora_ln = str(tmp['longName'].encode('ascii', 'xmlcharrefreplace'), 'ascii').replace("\n", "")
-                                if lora_sn == '': lora_sn = str(nodeID[-4:])
+                                if lora_sn == '':
+                                    lora_sn = str(nodeID[-4:])
+                                    lora_ln = "Meshtastic " + str(nodeID[-4:])
                                 cursor.execute("UPDATE node_info SET mac_id = ?, long_name = ?, short_name = ?, hw_model_id = ?, is_licensed = ? WHERE hex_id = ?", (tmp.get('macaddr', 'N/A'), lora_ln, lora_sn, tmp.get('hwModel', 'N/A'), tmp.get('isLicensed', False) ,nodeID))
 
                         if "position" in info:
@@ -831,7 +843,6 @@ def updatesnodes():
                                 cursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, hopstart = ? WHERE hex_id = ?", (nodelat, nodelon, nodealt, info.get('hopsAway', -1), nodeID))
 
                         if nodeID == MyLora:
-
                             if MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
                                 if MyLora not in MapMarkers:
                                     mapview.set_zoom(11)
@@ -949,7 +960,7 @@ def plot_rssi_log(node_id, frame, width=512, height=96):
         metrics = [{'time': int(row[9]), 'snr': row[7], 'rssi': row[8]} for row in result]
 
     if len(metrics) < 5:
-        return
+        return None
 
     df = DataFrame({
         'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
@@ -963,11 +974,11 @@ def plot_rssi_log(node_id, frame, width=512, height=96):
     rssi_levels_resampled = df_resampled['rssi'].tolist()
 
     if all(value == 0 for value in snr_resampled):
-        return
+        return None
     if all(value == 0 for value in rssi_levels_resampled):
-        return
+        return None
     if len(snr_resampled) < 5 or len(rssi_levels_resampled) < 5:
-        return
+        return None
 
     snr_levels_smooth = savgol_filter(snr_resampled, window_length=5, polyorder=2)
     rssi_smooth = savgol_filter(rssi_levels_resampled, window_length=5, polyorder=2)
@@ -1010,7 +1021,8 @@ def plot_rssi_log(node_id, frame, width=512, height=96):
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
-    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    # canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    return canvas.get_tk_widget()
 
 def plot_metrics_log(node_id, frame, width=512, height=162):
     global MyLora, dbconnection
@@ -1021,7 +1033,7 @@ def plot_metrics_log(node_id, frame, width=512, height=162):
         metrics = [{'time': int(row[9]), 'battery': row[3], 'voltage': row[4], 'utilization': row[5], 'airutiltx': row[6]} for row in result]
 
     if len(metrics) < 5:
-        return
+        return None
 
     df = DataFrame({
         'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
@@ -1039,7 +1051,7 @@ def plot_metrics_log(node_id, frame, width=512, height=162):
     airutiltxs_resampled = df_resampled['airutiltx'].tolist()
 
     if len(battery_levels_resampled) < 5 or len(voltages_resampled) < 5 or len(utilizations_resampled) < 5 or len(airutiltxs_resampled) < 5:
-        return
+        return None
 
     battery_levels_smooth = savgol_filter(battery_levels_resampled, window_length=5, polyorder=2)
     voltages_smooth = savgol_filter(voltages_resampled, window_length=5, polyorder=2)
@@ -1096,7 +1108,8 @@ def plot_metrics_log(node_id, frame, width=512, height=162):
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
-    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    # canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    return canvas.get_tk_widget()
 
 def plot_environment_log(node_id, frame , width=512, height=106):
     metrics = []
@@ -1105,7 +1118,7 @@ def plot_environment_log(node_id, frame , width=512, height=106):
         metrics = [{'time': int(row[8]), 'temperatures': row[3], 'humidities': row[4], 'pressures': row[5]} for row in result]
 
     if len(metrics) < 5:
-        return
+        return None
 
     df = DataFrame({
         'time': [datetime.fromtimestamp(entry['time']) for entry in metrics],
@@ -1121,7 +1134,7 @@ def plot_environment_log(node_id, frame , width=512, height=106):
     pressures_resampled = df_resampled['pressures'].tolist()
 
     if len(temperatures_resampled) < 5 or len(humidities_resampled) < 5 or len(pressures_resampled) < 5:
-        return
+        return None
 
     temperatures = savgol_filter(temperatures_resampled, window_length=5, polyorder=2)
     humidities = savgol_filter(humidities_resampled, window_length=5, polyorder=2)
@@ -1174,16 +1187,17 @@ def plot_environment_log(node_id, frame , width=512, height=106):
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
-    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    # canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    return canvas.get_tk_widget()
 
-def plot_movment_curve(node_id, frame, width=512, height=88):
+def plot_movment_curve(node_id, frame, width=512, height=102):
     positions = []
     result = get_data_for_node('movement_log', node_id)
     if result:
         positions = [{'time': int(row[2]), 'altitude': row[8]} for row in result]
 
     if len(positions) < 5:
-        return
+        return None
 
     times = [entry['time'] for entry in positions]
     altitudes = [entry['altitude'] for entry in positions]
@@ -1222,7 +1236,8 @@ def plot_movment_curve(node_id, frame, width=512, height=88):
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
-    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    # canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    return canvas.get_tk_widget()
 
 '''
 # Test for later on to add image like signal strength as an emoticon
@@ -1443,26 +1458,27 @@ if __name__ == "__main__":
             logging.error(f"Node {marker.data} not in database")
             return
 
-        overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
+        overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1, takefocus=True)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
 
-        info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=11)
-        info_label.pack(pady=3)
-        insert_colored_text(info_label, "⬢ ", "#" + marker.data[-6:],  center=True)
+        # info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=11)
+        # info_label.pack(pady=3)
+        info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=13)
+        info_label.grid(row=0, column=0, columnspan=2, padx=1, pady=1, sticky='nsew')
 
+        insert_colored_text(info_label, "⬢ ", "#" + marker.data[-6:],  center=True)
         if result[4] != '':
             text_loc = unescape(result[5]) + '\n' + unescape(result[4]) + '\n'
         else:
             text_loc = unescape(result[5]) + '\n'
         insert_colored_text(info_label, text_loc, "#2bd5ff",  center=True)
-
         if result[9] != -8.0 and result[10] != -8.0:
-            text_loc = '  Position : ' + str(result[9]) + ' / ' + str(result[10]) + ' (' + LatLon2qth(result[9],result[10])[:-2] + ')'
+            text_loc = '\n  Position : ' + str(result[9]) + ' / ' + str(result[10]) + ' (' + LatLon2qth(result[9],result[10])[:-2] + ')'
             text_loc += ' Altitude ' + str(result[11]) + 'm\n'
         else:
             text_loc = '  Position : Unknown\n'
-        insert_colored_text(info_label, text_loc, "#d1d1d1")
-        text_loc = '  HW Model : ' + str(result[6]) + '\n'
+        insert_colored_text(info_label, text_loc, "#d1d1d1",  center=True)
+        text_loc = '\n  HW Model : ' + str(result[6]) + '\n'
         text_loc += '  Hex ID   : ' + '!' + str(result[3]).ljust(18)
         text_loc += 'MAC Addr  : ' + str(result[2]) + '\n'
         # Add uptime back
@@ -1488,39 +1504,47 @@ if __name__ == "__main__":
 
         insert_colored_text(info_label, text_loc, "#d1d1d1")
 
-        plot_metrics_log(marker.data, overlay)
-        plot_environment_log(marker.data, overlay)
-        plot_movment_curve(marker.data, overlay)
-        if result[3] != MyLora:
-            plot_rssi_log(marker.data, overlay)
+        plot_frame = Frame(overlay, bg='#242424')
+        plot_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
+
+        plot_functions = [plot_metrics_log, plot_rssi_log, plot_environment_log, plot_movment_curve]
+        row, col = 0, 0
+        for plot_func in plot_functions:
+            plot_widget = plot_func(marker.data, plot_frame, width=448, height=164)
+            if plot_widget:
+                plot_widget.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
+                col += 1
+                if col > 1:
+                    col = 0
+                    row += 1
 
         # Create a frame to hold the buttons
+        button_frame = Frame(overlay, bg='#242424')
+        button_frame.grid(row=2, column=0, columnspan=2, pady=2, sticky='nsew')
         if result[3] != MyLora:
-            button_frame = Frame(overlay, bg='#242424')
-            button_frame.pack(pady=2)
-
             button1 = tk.Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqInfo', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Info", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-            button1.pack(side=tk.LEFT, padx=1)
-
+            button1.grid(row=0, column=0, padx=(0, 1), sticky='e')
             button2 = tk.Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqPos', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Pos", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-            button2.pack(side=tk.LEFT, padx=1)
-
+            button2.grid(row=0, column=1, padx=(0, 0), sticky='ew')
             button3 = tk.Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqTrace', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Trace Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-            button3.pack(side=tk.LEFT, padx=1)
+            button3.grid(row=0, column=2, padx=(1, 0), sticky='w')
 
         button_frame2 = Frame(overlay, bg='#242424')
-        button_frame2.pack(pady=2)
-        if result[9] != -8.0 and result[10] != -8.0:
-            button4 = tk.Button(button_frame2, image=btn_img, command=lambda: mapview.set_position(result[9], result[10]), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Zoom", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-        else:
-            button4 = tk.Button(button_frame2, image=btn_img, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Zoom", compound="center", fg='#616161', font=('Fixedsys', 10))
-        button4.pack(side=tk.LEFT, padx=1)
+        button_frame2.grid(row=3, column=0, columnspan=2, pady=2, sticky='nsew')
 
+        button4 = tk.Button(button_frame2, image=btn_img, command=lambda: mapview.set_position(result[9], result[10]) if result[9] != -8.0 and result[10] != -8.0 else None, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Zoom", compound="center", fg='#d1d1d1' if result[9] != -8.0 and result[10] != -8.0 else '#616161', font=('Fixedsys', 10))
+        button4.grid(row=0, column=0, padx=(0, 1), sticky='e')
         button5 = tk.Button(button_frame2, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-        button5.pack(side=tk.LEFT, padx=1)
+        button5.grid(row=0, column=1, padx=(0, 0), sticky='ew')
+        button6 = tk.Button(button_frame2, image=btn_img, command=lambda: chatbox(result[3], result[5], result[4]), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button6.grid(row=0, column=2, padx=(1, 0), sticky='w')
 
-        button6 = tk.Button(button_frame2, image=btn_img, command=lambda: chatbox(result[3],result[5],result[4]), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-        button6.pack(side=tk.LEFT, padx=1)
+        button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(1, weight=1)
+        button_frame.grid_columnconfigure(2, weight=1)
+        button_frame2.grid_columnconfigure(0, weight=1)
+        button_frame2.grid_columnconfigure(1, weight=1)
+        button_frame2.grid_columnconfigure(2, weight=1)
 
     # Function to update the middle frame with the last 30 active nodes
     peekmem = 0
@@ -1712,6 +1736,7 @@ if __name__ == "__main__":
             # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
             with dbconnection:
                 cutoff_time = tnow - metrics_age
+                print(f"Optimizing database, deleting entries older than {cutoff_time}")
                 tables = ['naibor_info', 'device_metrics', 'environment_metrics', 'chat_log']
 
                 cursor = dbconnection.cursor()
@@ -1822,7 +1847,7 @@ if __name__ == "__main__":
     database_path = None
     if config.has_option('meshtastic', 'map_cache') and config.get('meshtastic', 'map_cache') == 'True':
         print("Using offline map cache")
-        database_path = 'DataBase' + os.path.sep + 'offline_tiles.db'
+        database_path = 'DataBase' + os.path.sep + 'MapTiles.db3'
     mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6, database_path=database_path)
     mapview.pack(fill=tk.BOTH, expand=True) # grid(row=0, column=0, sticky='nsew')
     mapview.set_position(48.860381, 2.338594)
