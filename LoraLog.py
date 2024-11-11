@@ -52,14 +52,13 @@ import logging
 logging.basicConfig(filename='LoraLog.log', level=logging.ERROR, format='%(asctime)s : %(message)s', datefmt='%m-%d %H:%M', filemode='w')
 logging.error("Startin Up")
 
-config = ConfigParser()
-config.read('config.ini')
 telemetry_thread = None
 position_thread  = None
 trace_thread = None
 MapMarkers = {}
 ok2Send = 0
 isConnect = False
+chan2send = ''
 MyLora = ''
 MyLora_SN = ''
 MyLora_LN = ''
@@ -103,7 +102,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
         text_widget.see(tk.END)
         text_widget.configure(state="disabled")
 
-def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend='all', ackn=True, bulk=False):
+def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=True, bulk=False):
     global dbconnection
     dbcursor = dbconnection.cursor()
     result = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (nodeid,)).fetchone()
@@ -111,6 +110,11 @@ def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend='all',
     if result is None:
         logging.error(f"Node {nodeid} not in database")
         return
+
+    if str(private) in text_boxes:
+        text_widget = text_boxes[str(private)]
+    else:
+        text_widget = text_boxes['Direct Message']
 
     label = result[5] + " (" + result[4] + ")"
     tcolor = "#00c983"
@@ -139,7 +143,7 @@ def add_message(text_widget, nodeid, mtext, msgtime, private=False, msend='all',
 def get_messages():
     sorted_data = chat_log[-10:] # for now retrieve only the last 10 messages
     for entry in sorted_data:
-        add_message(text_box3, entry['nodeID'], unescape(entry['text']), entry['time'], private=entry['private'], msend=entry['send'], ackn=entry['ackn'], bulk=True)
+        add_message(entry['nodeID'], unescape(entry['text']), entry['time'], private=entry['private'], msend=entry['send'], ackn=entry['ackn'], bulk=True)
 
 #------------------------------------------------------------- Movment Tracker --------------------------------------------------------------------------
 chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': 'nodeid or ch', 'ackn' : True, seen': False, 'text': 'Hello World!'}, ...]
@@ -175,7 +179,8 @@ create_tmp = """CREATE TABLE IF NOT EXISTS node_info (
                             "last_sats" integer DEFAULT 0,
                             "ChUtil" real DEFAULT 0.0,
                             "AirUtilTX" real DEFAULT 0.0,
-                            "hopstart" integer DEFAULT 0
+                            "hopstart" integer DEFAULT 0,
+                            "distance" real DEFAULT 0.0
                         );"""
 dbcursor.execute(create_tmp)
 
@@ -218,9 +223,28 @@ def safedatabase():
         pickle.dump(chat_log, f)
     logging.error("Database saved!")
 
-#----------------------------------------------------------- Meshtastic Lora Con ------------------------------------------------------------------------
-meshtastic_client = None
+#----------------------------------------------------------- Config File Handle ------------------------------------------------------------------------
+config = ConfigParser()
+config['meshtastic'] = {
+    'interface': 'tcp',
+    'host': '127.0.0.1',
+    'serial_port': 'COM1',
+    'map_delete_time': '60',
+    'map_oldnode_time': '10080',
+    'map_trail_age': '12',
+    'metrics_age': '7',
+    'max_lines': '1000',
+    'map_tileserver': 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+    'map_cache': 'False',
+}
+
+if not os.path.exists('config.ini'):
+    logging.error("No config file found, creating a new one")
+    with open('config.ini', 'w') as configfile:
+        config.write(configfile)
+
 try:
+    config.read('config.ini')
     map_delete = int(config.get('meshtastic', 'map_delete_time')) * 60
     map_oldnode = int(config.get('meshtastic', 'map_oldnode_time')) * 60
     map_trail_age = int(config.get('meshtastic', 'map_trail_age')) # In Hours !
@@ -228,11 +252,9 @@ try:
     max_lines = int(config.get('meshtastic', 'max_lines')) # Max lines in log box 1 and 2
 except Exception as e :
     logging.error("Error loading databases: %s", str(e))
-    map_delete = 2700
-    map_oldnode = 86400
-    map_trail_age = 12
-    metrics_age = 7
-    max_lines = 1000
+
+#----------------------------------------------------------- Meshtastic Lora Con ------------------------------------------------------------------------    
+meshtastic_client = None
 
 mixer.init()
 sound_cache = {}
@@ -251,7 +273,7 @@ def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
     return '└' + ''.join(graph) + '┘'
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, isConnect, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan
+    global meshtastic_client, MyLora, loop, isLora, isConnect, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -323,24 +345,63 @@ def connect_meshtastic(force_connect=False):
     modem_preset_enum = lora_config.modem_preset
     modem_preset_string = config_pb2._CONFIG_LORACONFIG_MODEMPRESET.values_by_number[modem_preset_enum].name
     channels = nodeInfo.channels
+    addtotab = False
+    mylorachan = {}
     if channels:
         for channel in channels:
             psk_base64 = base64.b64encode(channel.settings.psk).decode('utf-8')
             
             if channel.settings.name == '':
                 mylorachan[channel.index] = str(channel.index)
+                addtotab = False
             else:
-                mylorachan[channel.index] = unidecode(channel.settings.name)
+                mylorachan[channel.index] = channame(channel.settings.name)
+                addtotab = True
             
             if channel.index == 0 and mylorachan[channel.index] == '0':
-                mylorachan[channel.index] = modem_preset_string
+                mylorachan[channel.index] = channame(modem_preset_string)
+                addtotab = True
 
             if channel.index == 0:
                 insert_colored_text(text_box1, " Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n", "#00c983")
-                padding_frame.config(text="Send a message to channel " + mylorachan[0])
+                chan2send = mylorachan[0]
+
+            # Need add to tabs for each channel
+            if mylorachan[channel.index] != '' and addtotab:
+                if mylorachan[channel.index] not in text_boxes: # Reconnected ?
+                    tab = tk.Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
+                    tab.grid_rowconfigure(0, weight=1)
+                    tab.grid_columnconfigure(0, weight=1)
+                    tabControl.add(tab, text=mylorachan[channel.index], padding=(0, 0, 0, 0))
+                    text_area = tk.Text(tab, wrap=tk.WORD, width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
+                    text_area.grid(sticky='nsew')
+                    text_area.configure(state="disabled")
+                    text_boxes[mylorachan[channel.index]] = text_area
+
+    if 'Direct Message' not in text_boxes:
+        tab = tk.Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
+        tab.grid_rowconfigure(0, weight=1)
+        tab.grid_columnconfigure(0, weight=1)
+        tabControl.add(tab, text='Direct Message', padding=(0, 0, 0, 0))
+        text_area = tk.Text(tab, wrap=tk.WORD, width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
+        text_area.grid(sticky='nsew')
+        text_area.configure(state="disabled")
+        text_boxes['Direct Message'] = text_area
 
     updatesnodes()
     return meshtastic_client
+
+def channame(s):
+    if '_' in s:
+        parts = s.lower().split('_')
+        return ''.join(part.capitalize() for part in parts)
+    return s
+
+# Function to reset the tab's background color
+def reset_tab_highlight(event):
+    global chan2send
+    selected_tab = event.widget.tab('current')['text']
+    chan2send = selected_tab
 
 def req_meta():
     global meshtastic_client, loop, ok2Send
@@ -538,10 +599,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_chns = 'Private'
                         if "toId" in packet:
                             if packet["toId"] == '^all':
-                                text_chns = 'Ch ' + str(mylorachan[0])
-
+                                text_chns = str(mylorachan[0])
                         if "channel" in packet:
-                            text_chns = 'Ch ' + str(mylorachan[packet["channel"]])
+                            text_chns = str(mylorachan[packet["channel"]])
 
                         ischat = True
                         playsound('Data' + os.path.sep + 'NewChat.mp3')
@@ -559,14 +619,15 @@ def on_meshtastic_message(packet, interface, loop=None):
                             dbcursor.execute("INSERT INTO movement_log (node_hex, node_id, time, from_latitude, from_longitude, from_altitude, to_latitude, to_longitude, to_altitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (fromraw, packet["from"], tnow, result[9], result[10], result[11], nodelat, nodelon, nodealt))
                             extra = '(Moved!) '
                             MapMarkerDelete(fromraw)
-                        dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, precision_bits = ?, last_sats = ? WHERE node_id = ?", (nodelat, nodelon, position.get('altitude', 0), position.get('precisionBits', 0), position.get('satsInView', 0), packet["from"]))
+                        node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
+                        dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, precision_bits = ?, last_sats = ?, distance = ? WHERE node_id = ?", (nodelat, nodelon, position.get('altitude', 0), position.get('precisionBits', 0), position.get('satsInView', 0), node_dist, packet["from"]))
                     text_msgs = 'Node Position '
                     text_msgs += 'latitude ' + str(round(nodelat,4)) + ' '
                     text_msgs += 'longitude ' + str(round(nodelon,4)) + ' '
                     text_msgs += 'altitude ' + str(nodealt) + ' meter\n' + (' ' * 11)
                     if nodelat != -8.0 and nodelon != -8.0:
                         if MyLora != fromraw and nodelat != -8.0 and nodelon != -8.0:
-                            text_msgs += "Distance: ±" + calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon) + " "
+                            text_msgs += "Distance: ±" + str(node_dist) + "km "
                         if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
                             MapMarkers[fromraw][0].set_position(nodelat, nodelon)
                             MapMarkers[fromraw][0].set_text(result[5])
@@ -773,7 +834,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if text_raws != '' and MyLora != fromraw:
                     insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
                     if ischat == True:
-                        add_message(text_box3, fromraw, text_raws, tnow, private=text_chns)
+                        add_message(fromraw, text_raws, tnow, private=text_chns)
                     if viaMqtt == True:
                         insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
                     else:
@@ -943,7 +1004,7 @@ def calc_gc(end_lat, end_long, start_lat, start_long):
 
     c = math.atan(x/y)
 
-    return f"{round(EARTH_R*c,1)}km"
+    return round(EARTH_R*c,1)
 
 #-------------------------------------------------------------- Plot Functions ---------------------------------------------------------------------------
 
@@ -1327,11 +1388,11 @@ if __name__ == "__main__":
         text2send = my_msg.get().rstrip()
         if len(text2send.encode('utf-8')) > 220:
             # neeed check max, some seem to say 237 ?
-            insert_colored_text(text_box3, "Text message to long, keep it under 220 bytes\n", "#d1d1d1")
+            insert_colored_text(text_box2, "Text message to long, keep it under 220 bytes\n", "#d1d1d1")
         elif text2send != '':
             meshtastic_client.sendText(text2send)
             text_from = MyLora_SN + " (" + MyLora_Lon + ")"
-            add_message(text_box3, MyLora, text2send, int(time.time()), msend=str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii'))
+            add_message(MyLora, text2send, int(time.time()), msend=str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii'))
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
             insert_colored_text(text_box2, (' ' * 11) + '[to ' + str(mylorachan[0]) +'] ' + text2send + '\n', "#00c983")
             my_msg.set("")
@@ -1497,8 +1558,8 @@ if __name__ == "__main__":
         text_loc += 'Last Seen : ' + ez_date(int(time.time()) - result[1]) + '\n'
         text_loc += '  Power    : ' + str(result[19]).ljust(19)
         text_loc += 'First Seen: ' + datetime.fromtimestamp(result[13]).strftime('%b %#d \'%y') + '\n'
-        if result[9] != -8.0 and result[10] != -8.0:
-            text_loc += '  Distance : ' + calc_gc(MyLora_Lat, MyLora_Lon, result[9], result[10]).ljust(19)
+        if result[24] != 0.0:
+            text_loc += '  Distance : ' + (str(result[24]) + 'km').ljust(19)
         else:
             text_loc += '  Distance : ' + ('Unknown').ljust(19)
 
@@ -1603,59 +1664,69 @@ if __name__ == "__main__":
         start = time.perf_counter()
         tnow = int(time.time())
 
-        if ok2Send != 0:
-            ok2Send -= 1
-            if ok2Send < 0: ok2Send = 0
-
-        # Reset Node Frame
         text_box_middle.configure(state="normal")
         current_view = text_box_middle.yview()
+        
         # Unbind all tags from text_box_middle
         for tag in text_box_middle.tag_names():
             text_box_middle.tag_unbind(tag, "<Button-1>")
         text_box_middle.delete("1.0", tk.END)
 
-        insert_colored_text(text_box_middle, "\n " + MyLora_SN + "\n", "#e67a7f", tag=MyLora) # Need locally store a lil more about our own self
-        if MyLoraText1 != '':
+        insert_colored_text(text_box_middle, "\n " + MyLora_SN + "\n", "#e67a7f", tag=MyLora)
+        if MyLoraText1:
             insert_colored_text(text_box_middle, MyLoraText1, "#c1c1c1")
-        if MyLoraText2 != '':
+        if MyLoraText2:
             insert_colored_text(text_box_middle, MyLoraText2, "#c1c1c1")
 
         try:
             cursor = dbconnection.cursor()
-            result = cursor.execute("SELECT * FROM node_info  WHERE (? - time) <= ? ORDER BY time DESC", (tnow, map_oldnode)).fetchall()
+            result = cursor.execute(
+                "SELECT * FROM node_info WHERE (? - time) <= ? ORDER BY time DESC",
+                (tnow, map_oldnode)
+            ).fetchall()
             cursor.close()
+            
             drawoldnodes = mapview.draw_oldnodes
+            nodes_to_delete = []
+            nodes_to_update = []
+
             for row in result:
                 node_id = row[3]
                 node_time = row[1]
                 node_name = unescape(row[5]).strip()
                 timeoffset = tnow - node_time
+
                 if timeoffset >= map_oldnode and node_id != MyLora:
                     if node_id in MapMarkers:
-                        MapMarkerDelete(node_id)
-                        MapMarkers[node_id][0].delete()
-                        MapMarkers[node_id][0] = None
-                        del MapMarkers[node_id]
-                elif timeoffset >= map_delete and node_id != MyLora:
-                    checknode(node_id, 4, '#aaaaaa', row[9], row[10], node_name, drawoldnodes)
+                        nodes_to_delete.append(node_id)
                 elif timeoffset < map_delete and node_id != MyLora:
-                    node_wtime = ez_date(tnow - row[1]).rjust(10)
-                    node_dist = ' '.ljust(9)
-                    if row[9] != -8.0 and row[10] != -8.0: node_dist = calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon).ljust(9)
-                    insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#3d3d3d")
-                    if row[15] != False:
-                        insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
-                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {node_dist}\n", "#9d9d9d")
-                        checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
-                    else:
-                        node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
-                        insert_colored_text(text_box_middle, f" {node_name.ljust(9)}","#00c983", tag=str(node_id))
-                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {node_dist}{node_sig}\n", "#9d9d9d")
-                        checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
-            result = None
+                    nodes_to_update.append((node_id, node_time, node_name, row))
+
+            # Batch delete nodes
+            for node_id in nodes_to_delete:
+                MapMarkerDelete(node_id)
+                MapMarkers[node_id][0].delete()
+                MapMarkers[node_id][0] = None
+                del MapMarkers[node_id]
+
+            # Batch update nodes
+            for node_id, node_time, node_name, row in nodes_to_update:
+                node_wtime = ez_date(tnow - node_time).rjust(10)
+                node_dist = ' '
+                if row[24] != 0.0:
+                    node_dist = f"{row[24]}km"
+                insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#3d3d3d")
+                if row[15]:
+                    insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
+                    insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
+                    insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}\n", "#9d9d9d")
+                    checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                else:
+                    node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
+                    insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#00c983", tag=str(node_id))
+                    insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
+                    insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}{node_sig}\n", "#9d9d9d")
+                    checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
         except Exception as e:
             logging.error(f"Error updating active nodes: {e}")
 
@@ -1792,6 +1863,18 @@ if __name__ == "__main__":
             logging.error("Failed to connect to meshtastic")
         else:
             # Request Admmin Metadata
+            '''
+            with dbconnection:
+                dbcursor = dbconnection.cursor()
+                result = dbcursor.execute("SELECT * FROM node_info ORDER BY time DESC").fetchall()
+                if result:
+                    for row in result:
+                        if row[9] != -8.0 and row[10] != -8.0:
+                            node_dist = calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon)
+                            dbcursor.execute("UPDATE node_info SET distance = ? WHERE node_id = ?", (node_dist, row[0]))
+                            print(f"Updated distance for {row[3]} to {node_dist}")
+                dbcursor.close()
+            '''
             ok2Send = 15
             req_meta_thread = threading.Thread(target=req_meta)
             req_meta_thread.start()
@@ -1806,6 +1889,7 @@ if __name__ == "__main__":
     root.resizable(True, True)
     root.iconbitmap('Data' + os.path.sep + 'mesh.ico')
     root.protocol('WM_DELETE_WINDOW', on_closing)
+    root.tk_setPalette("#242424")
     overlay = None
 
     # Map Marker Images
@@ -1814,8 +1898,8 @@ if __name__ == "__main__":
 
     my_msg = tk.StringVar()  # For the messages to be sent.
     my_msg.set("")
-    my_label = tk.StringVar()
-    my_label.set("Send a message to channel")
+    # my_label = tk.StringVar()
+    # my_label.set("Send a message to channel")
     my_chat = tk.StringVar()
     my_chat.set("")
     chat_input = None
@@ -1849,12 +1933,23 @@ if __name__ == "__main__":
     # Left Middle Window
     text_box2 = create_text(frame, 1, 0, 10, 90)
     text_box2.configure(state="disabled")
+
     # Left Bottom Window
-    text_box3 = create_text(frame, 2, 0, 15, 90)
-    text_box3.configure(state="disabled")
+    style = ttk.Style()
+    style.theme_use('classic') # classic
+    style.layout("TNotebook", [])
+    style.configure("TNotebook", background="#242424", tabposition=tk.NW, borderwidth=1, highlightcolor="#121212", highlightbackground="#121212")
+    style.configure("TNotebook.Tab", background="#242424", foreground="#d1d1d1", borderwidth=1, highlightbackground="#121212", highlightcolor="#121212")
+    # style.configure('TFrame', background="#242424", borderwidth=0, highlightthickness=0)
+    style.map("TNotebook.Tab", background=[("selected", "#242424")], foreground=[("selected", "#2bd5ff")], font=[("selected", ('Fixedsys', 10))])
+
+    tabControl = ttk.Notebook(frame, style='TNotebook')
+    tabControl.grid(row=2, column=0, padx=2, pady=2, sticky='nsew')
+    text_boxes = {}
+    tabControl.bind("<<NotebookTabChanged>>", reset_tab_highlight)
 
     # Left Box Chat input
-    padding_frame = tk.LabelFrame(frame, background="#242424", padx=0, pady=4, text=my_label.get(), bg='#242424', fg='#999999', font=('Fixedsys', 10), borderwidth=0, highlightthickness=0, labelanchor='n')
+    padding_frame = tk.LabelFrame(frame, background="#242424", padx=0, pady=4, bg='#242424', fg='#999999', font=('Fixedsys', 10), borderwidth=0, highlightthickness=0, labelanchor='n') # text=my_label.get()
     padding_frame.grid(row=4, column=0, rowspan=1, columnspan=1, padx=0, pady=0, sticky="nsew")
     padding_frame.grid_rowconfigure(1, weight=1)
     padding_frame.grid_columnconfigure(0, weight=1)
