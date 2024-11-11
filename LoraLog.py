@@ -87,7 +87,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
         if color == '#d1d1d1': # and "frame3" not in parent_frame:
             text_widget.image_create("end", image=hr_img)
 
-    if tag: # and tag != MyLora:
+    if tag != None: # and tag != MyLora:
         text_widget.tag_configure(tag, foreground=color, underline=False)
         text_widget.insert(tk.END, text, (color, tag))
         text_widget.tag_bind(tag, "<Button-1>", showLink)
@@ -563,8 +563,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                     text_msgs += 'longitude ' + str(round(nodelon,4)) + ' '
                     text_msgs += 'altitude ' + str(nodealt) + ' meter\n' + (' ' * 11)
                     if nodelat != -8.0 and nodelon != -8.0:
-                        if MyLora != fromraw and result[9] != -8.0 and result[10] != -8.0:
-                            text_msgs += "Distance: ±" + calc_gc(result[9], result[10], MyLora_Lat, MyLora_Lon) + " "
+                        if MyLora != fromraw and nodelat != -8.0 and nodelon != -8.0:
+                            text_msgs += "Distance: ±" + calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon) + " "
                         if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
                             MapMarkers[fromraw][0].set_position(nodelat, nodelon)
                             MapMarkers[fromraw][0].set_text(result[5])
@@ -624,6 +624,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                     if "neighborinfo" in data and "neighbors" in data["neighborinfo"]:
                         text = data["neighborinfo"]["neighbors"]
                         tosql = ''
+                        is_mqtt = True
+                        if fromraw == MyLora:
+                            is_mqtt = False
                         if fromraw in MapMarkers and MapMarkers[fromraw][3] is not None:
                             MapMarkers[fromraw][3].delete()
                             MapMarkers[fromraw][3] = None
@@ -636,7 +639,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                                 if nodeid not in MapMarkers:
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
                                     MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=nodeid, command = click_command)
-                                    print(f"Added {nbNide} to map")
                                 if fromraw in MapMarkers:
                                     listmaps = []
                                     pos = (result[9], result[10])
@@ -645,14 +647,17 @@ def on_meshtastic_message(packet, interface, loop=None):
                                     listmaps.append(pos)
                                     MapMarkers[fromraw][3] = mapview.set_path(listmaps, color="#006642", width=2)
                                     if fromraw == MyLora: viaMqtt = False # We missed the initial packet so we need to log it
+                                dbcursor.execute("UPDATE node_info SET time = ?, ismqtt = ? WHERE hex_id = ?", (tnow, is_mqtt, nodeid))
                                 nodeid = tmp[5]
-                                dbcursor.execute("UPDATE node_info SET time = ? WHERE hex_id = ?", (tnow, nodeid))
                             else:
                                 nodeid = '!' + nodeid
                             text_raws += '\n' + (' ' * 11) + nodeid
                             if "snr" in neighbor:
                                 text_raws += ' (' + str(neighbor["snr"]) + 'dB)'
-                            tosql += '(' + nbNide + ',' + str(neighbor["snr"]) + '),'
+                            tmp = neighbor.get('snr', 0)
+                            tosql += '(' + nbNide
+                            if tmp != 0: tosql += ',' + str(neighbor["snr"]) 
+                            tosql += '),'
                         if tosql != '':
                             tosql = tosql[:-1]
                             dbcursor.execute("INSERT OR REPLACE INTO naibor_info (node_id, hex_id, time, neighbor_text) VALUES (?, ?, ?, ?)", (packet["from"], fromraw, tnow, tosql))
@@ -1284,17 +1289,21 @@ if __name__ == "__main__":
     isLora = True
 
     def on_closing():
-        global isLora, meshtastic_client, mapview, root
+        global isLora, meshtastic_client, mapview, root, dbconnection
         isLora = False
         safedatabase()
         logging.debug('Saved Databases (Exit)')
         if meshtastic_client is not None:
             meshtastic_client.close()
+        if dbconnection is not None:
+            try:
+                dbconnection.execute("VACUUM")
+                dbconnection.close()
+            except sqlite3.Error as e:
+                logging.error("Error closing database connection: ", str(e))
         mapview.destroy()
-        time.sleep(0.200)
-        logging.debug("Closed Program")
+        logging.debug("Exit :: Closed Program, Bye!")
         root.quit()
-        time.sleep(0.200)
         sys.exit()
 
     # Initialize the main window
@@ -1308,7 +1317,7 @@ if __name__ == "__main__":
         padding_frame.grid_columnconfigure(0, weight=1)
         
         # Create a text widget inside the frame
-        text_area = tk.Text(padding_frame, wrap=tk.WORD, width=frwidth, height=frheight, bg='#242424', fg='#dddddd', font=('Fixedsys', 10))
+        text_area = tk.Text(padding_frame, wrap=tk.WORD, width=frwidth, height=frheight, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False)
         text_area.grid(row=0, column=0, sticky='nsew')
         return text_area
 
@@ -1461,8 +1470,6 @@ if __name__ == "__main__":
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1, takefocus=True)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
 
-        # info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=11)
-        # info_label.pack(pady=3)
         info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=13)
         info_label.grid(row=0, column=0, columnspan=2, padx=1, pady=1, sticky='nsew')
 
@@ -1476,7 +1483,7 @@ if __name__ == "__main__":
             text_loc = '\n  Position : ' + str(result[9]) + ' / ' + str(result[10]) + ' (' + LatLon2qth(result[9],result[10])[:-2] + ')'
             text_loc += ' Altitude ' + str(result[11]) + 'm\n'
         else:
-            text_loc = '  Position : Unknown\n'
+            text_loc = '\n  Position : Unknown\n'
         insert_colored_text(info_label, text_loc, "#d1d1d1",  center=True)
         text_loc = '\n  HW Model : ' + str(result[6]) + '\n'
         text_loc += '  Hex ID   : ' + '!' + str(result[3]).ljust(18)
@@ -1729,6 +1736,18 @@ if __name__ == "__main__":
             tlast = tnow
             updatesnodes()
 
+            # Clear up text_box1 so it max has 1000 lines
+            line_count = text_box1.count("1.0", "end-1c", "lines")[0]
+            if line_count > 1000:
+                text_box1.delete("1.0", "1000.0")
+                print(f"Clearing Frame 1 ({line_count} lines)")
+
+            # Clear up text_box1 so it max has 1000 lines
+            line_count = text_box2.count("1.0", "end-1c", "lines")[0]
+            if line_count > 1000:
+                text_box2.delete("1.0", "1000.0")
+                print(f"Clearing Frame 2 ({line_count} lines)")
+
             if overlay is None:
                 if has_open_figures():
                     logging.debug("Closing open figures failed?")
@@ -1736,18 +1755,16 @@ if __name__ == "__main__":
             # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
             with dbconnection:
                 cutoff_time = tnow - metrics_age
-                print(f"Optimizing database, deleting entries older than {cutoff_time}")
                 tables = ['naibor_info', 'device_metrics', 'environment_metrics', 'chat_log']
 
                 cursor = dbconnection.cursor()
                 for table in tables:
-                    cursor.execute(f"DELETE FROM {table} WHERE time < ?", (cutoff_time,))
+                    cursor.execute(f"DELETE FROM {table} WHERE time <= date('now','-7 day')")
 
-                cutoff_time = tnow - map_trail_age
-                cursor.execute(f"DELETE FROM movement_log WHERE time < ?", (cutoff_time,))
-
+                # Lets clean up movement_log a bit
+                query = f"DELETE FROM movement_log WHERE time <= date('now', '-12 hour')"
+                cursor.execute(query)
                 cursor.close()
-            print("Database optimized")
 
             safedatabase()
             gc.collect()
