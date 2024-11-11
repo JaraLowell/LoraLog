@@ -223,14 +223,16 @@ meshtastic_client = None
 try:
     map_delete = int(config.get('meshtastic', 'map_delete_time')) * 60
     map_oldnode = int(config.get('meshtastic', 'map_oldnode_time')) * 60
-    map_trail_age = int(config.get('meshtastic', 'map_trail_age')) * 60
-    metrics_age = int(config.get('meshtastic', 'metrics_age')) * 60
+    map_trail_age = int(config.get('meshtastic', 'map_trail_age')) # In Hours !
+    metrics_age = int(config.get('meshtastic', 'metrics_age')) # In Days !
+    max_lines = int(config.get('meshtastic', 'max_lines')) # Max lines in log box 1 and 2
 except Exception as e :
     logging.error("Error loading databases: %s", str(e))
     map_delete = 2700
     map_oldnode = 86400
-    map_trail_age = 43200
-    metrics_age = 86400
+    map_trail_age = 12
+    metrics_age = 7
+    max_lines = 1000
 
 mixer.init()
 sound_cache = {}
@@ -450,7 +452,7 @@ def on_meshtastic_message(packet, interface, loop=None):
         if text_from != '':
             result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
             if result is None:
-                print(f"Node !{text_from} not in DB")
+                print(f"on_message > Node !{text_from} not in DB")
                 sn = str(fromraw[-4:])
                 ln = "Meshtastic " + sn
                 dbcursor.execute("INSERT INTO node_info (node_id, time, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], tnow, text_from, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), tnow, sn, ln))
@@ -818,7 +820,7 @@ def updatesnodes():
             if nodeID == '': nodeID = idToHex(info["num"])[1:]
             result = cursor.execute("SELECT * FROM node_info WHERE node_id = ?", (info["num"],)).fetchone()
             if result is None:
-                print(f"Node {nodeID} not in DB")
+                print(f"updatesnodes > Node {nodeID} not in DB")
                 cursor.execute("INSERT INTO node_info (node_id, hex_id, short_name, long_name, timefirst) VALUES (?, ?, ?, ?. ?)", (info["num"], nodeID,nodeID[-4:],'Meshtastic ' + nodeID[-4:], tnow))
                 insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                 insert_colored_text(text_box1, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
@@ -1676,7 +1678,7 @@ if __name__ == "__main__":
     ### end
 
     def update_paths_nodes():
-        global MyLora, MapMarkers, tlast, pingcount, isConnect, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete
+        global MyLora, MapMarkers, tlast, pingcount, isConnect, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age
         tnow = int(time.time())
         try:
             cursor = dbconnection.cursor()
@@ -1738,15 +1740,21 @@ if __name__ == "__main__":
 
             # Clear up text_box1 so it max has 1000 lines
             line_count = text_box1.count("1.0", "end-1c", "lines")[0]
-            if line_count > 1000:
-                text_box1.delete("1.0", "1000.0")
-                print(f"Clearing Frame 1 ({line_count} lines)")
+            if line_count > max_lines:
+                delete_count = (line_count - max_lines) + 10
+                text_box1.configure(state="normal")
+                text_box1.delete("1.0", f"{delete_count}.0")
+                text_box1.configure(state="disabled")
+                print(f"Clearing Frame 1 ({delete_count} lines)")
 
-            # Clear up text_box1 so it max has 1000 lines
+            # Clear up text_box2 so it max has 1000 lines
             line_count = text_box2.count("1.0", "end-1c", "lines")[0]
-            if line_count > 1000:
-                text_box2.delete("1.0", "1000.0")
-                print(f"Clearing Frame 2 ({line_count} lines)")
+            if line_count > max_lines:
+                delete_count = (line_count - max_lines) + 10
+                text_box2.configure(state="normal")
+                text_box2.delete("1.0", f"{delete_count}.0")
+                text_box2.configure(state="disabled")
+                print(f"Clearing Frame 2 ({delete_count} lines)")
 
             if overlay is None:
                 if has_open_figures():
@@ -1754,15 +1762,15 @@ if __name__ == "__main__":
 
             # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
             with dbconnection:
-                cutoff_time = tnow - metrics_age
                 tables = ['naibor_info', 'device_metrics', 'environment_metrics', 'chat_log']
 
                 cursor = dbconnection.cursor()
                 for table in tables:
-                    cursor.execute(f"DELETE FROM {table} WHERE time <= date('now','-7 day')")
+                    query = f"DELETE FROM {table} WHERE time <= date('now','-{metrics_age} day')"
+                    cursor.execute(query)
 
                 # Lets clean up movement_log a bit
-                query = f"DELETE FROM movement_log WHERE time <= date('now', '-12 hour')"
+                query = f"DELETE FROM movement_log WHERE time <= date('now', '-{map_trail_age} hour')"
                 cursor.execute(query)
                 cursor.close()
 
