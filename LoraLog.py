@@ -16,7 +16,7 @@ from pygame import mixer
 import threading
 import copy
 import sqlite3
-# import yaml
+import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -58,7 +58,7 @@ trace_thread = None
 MapMarkers = {}
 ok2Send = 0
 isConnect = False
-chan2send = ''
+chan2send = 0
 MyLora = ''
 MyLora_SN = ''
 MyLora_LN = ''
@@ -103,7 +103,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
         text_widget.configure(state="disabled")
 
 def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=True, bulk=False):
-    global dbconnection
+    global dbconnection, tabControl
     dbcursor = dbconnection.cursor()
     result = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (nodeid,)).fetchone()
     dbcursor.close()
@@ -111,10 +111,17 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=True, b
         logging.error(f"Node {nodeid} not in database")
         return
 
-    if str(private) in text_boxes:
-        text_widget = text_boxes[str(private)]
+    if msend in text_boxes:
+        text_widget = text_boxes[msend]
     else:
         text_widget = text_boxes['Direct Message']
+        msend = 'Direct Message'
+
+    if bulk == False:
+        for i in range(tabControl.index("end")):
+            if tabControl.tab(i, "text") == msend:
+                current_text = tabControl.tab(i, "text")
+                tabControl.tab(i, text=f"{current_text} ✉️")
 
     label = result[5] + " (" + result[4] + ")"
     tcolor = "#00c983"
@@ -364,7 +371,7 @@ def connect_meshtastic(force_connect=False):
 
             if channel.index == 0:
                 insert_colored_text(text_box1, " Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n", "#00c983")
-                chan2send = mylorachan[0]
+                chan2send = 0
 
             # Need add to tabs for each channel
             if mylorachan[channel.index] != '' and addtotab:
@@ -400,8 +407,21 @@ def channame(s):
 # Function to reset the tab's background color
 def reset_tab_highlight(event):
     global chan2send
-    selected_tab = event.widget.tab('current')['text']
-    chan2send = selected_tab
+    selected_tab = tabControl.select()
+    current_text = tabControl.tab(selected_tab, "text")
+    
+    if current_text.endswith(" ✉️"):
+        tabControl.tab(selected_tab, text=current_text[:-2])
+    
+    # the index of mylorachan[0] = 'ChanName' is the same as the channel index
+    chan2text = tabControl.tab(selected_tab, "text")
+    if chan2text != 'Direct Message':
+        chan2send = None
+        for key, value in mylorachan.items():
+            if value == chan2text:
+                chan2send = key
+                break
+        print(f"Selected channel: {chan2send}, or also knows as {mylorachan[chan2send]}")
 
 def req_meta():
     global meshtastic_client, loop, ok2Send
@@ -596,7 +616,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                     if text != '':
                         text_msgs = str(text.encode('ascii', 'xmlcharrefreplace'), 'ascii').rstrip()
                         text_raws = text
-                        text_chns = 'Private'
+                        text_chns = 'Direct Message'
                         if "toId" in packet:
                             if packet["toId"] == '^all':
                                 text_chns = str(mylorachan[0])
@@ -731,7 +751,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                     payload = data.get('payload', b'')
                     text_raws += '\n' + (' ' * 11) + 'Payload: ' + str(payload.decode())
                 elif data["portnum"] == "TRACEROUTE_APP":
-                    ## !!!!!!!!!!!!!!!! TOFDO !! Fix with SQLite3 !!!!!!!!!!!!!!!!!!!!!
                     TraceTo = idToHex(packet['to'])
                     TraceTo_tx = TraceTo
                     TraceFrom = idToHex(packet['from'])
@@ -788,7 +807,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                     if "errorReason" in data["routing"]:
                         text_raws += ' - Error : ' + data["routing"]["errorReason"]
                 else:
-                    # Unknown Packet
                     if 'portnum' in data:
                         text_raws = 'Node ' + (data["portnum"].split('_APP', 1)[0]).title()
                     else:
@@ -796,7 +814,6 @@ def on_meshtastic_message(packet, interface, loop=None):
 
                 nodesnr = 0
                 if "rxSnr" in packet and packet['rxSnr'] is not None:
-                    # we want rxRssi / rxSnr
                     dbcursor.execute("UPDATE node_info SET last_snr = ?, last_rssi = ?, ismqtt = ? WHERE node_id = ?", (packet.get('rxSnr', 0), packet.get('rxRssi', 0), viaMqtt, packet["from"]))
                     nodesnr = packet['rxSnr']
 
@@ -834,7 +851,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if text_raws != '' and MyLora != fromraw:
                     insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
                     if ischat == True:
-                        add_message(fromraw, text_raws, tnow, private=text_chns)
+                        add_message(fromraw, text_raws, tnow, msend=text_chns)
                     if viaMqtt == True:
                         insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
                     else:
@@ -908,7 +925,8 @@ def updatesnodes():
                             nodelon = round(tmp2.get('longitude', -8.0),6)
                             nodealt = tmp2.get('altitude', 0)
                             if nodelat != -8.0 and nodelon != -8.0:
-                                cursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, hopstart = ? WHERE hex_id = ?", (nodelat, nodelon, nodealt, info.get('hopsAway', -1), nodeID))
+                                node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
+                                cursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, hopstart = ? , distance = ? WHERE hex_id = ?", (nodelat, nodelon, nodealt, info.get('hopsAway', -1), node_dist, nodeID))
 
                         if nodeID == MyLora:
                             if MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
@@ -1390,11 +1408,17 @@ if __name__ == "__main__":
             # neeed check max, some seem to say 237 ?
             insert_colored_text(text_box2, "Text message to long, keep it under 220 bytes\n", "#d1d1d1")
         elif text2send != '':
-            meshtastic_client.sendText(text2send)
+            meshtastic_client.sendText(
+                    text          = text2send,      # text -- the text of the message
+                    destinationId = "^all",         # {nodeId or nodeNum} -- where to send this message (default: {BROADCAST_ADDR = "^all" or BROADCAST_NUM: int = 0xFFFFFFFF})
+                    wantAck       = False,
+                    wantResponse  = False,
+                    channelIndex  = chan2send,      # channelIndex -- channel number to use (default: {0})
+                )
             text_from = MyLora_SN + " (" + MyLora_Lon + ")"
-            add_message(MyLora, text2send, int(time.time()), msend=str(mylorachan[0].encode('ascii', 'xmlcharrefreplace'), 'ascii'))
+            add_message(MyLora, text2send, int(time.time()), msend=str(mylorachan[chan2send].encode('ascii', 'xmlcharrefreplace'), 'ascii'))
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
-            insert_colored_text(text_box2, (' ' * 11) + '[to ' + str(mylorachan[0]) +'] ' + text2send + '\n', "#00c983")
+            insert_colored_text(text_box2, (' ' * 11) + '[to ' + str(mylorachan[chan2send]) +'] ' + text2send + '\n', "#00c983")
             my_msg.set("")
             playsound('Data' + os.path.sep + 'NewChat.mp3')
 
@@ -1689,6 +1713,9 @@ if __name__ == "__main__":
             drawoldnodes = mapview.draw_oldnodes
             nodes_to_delete = []
             nodes_to_update = []
+            yeet = map_delete
+            if drawoldnodes:
+                yeet = map_oldnode
 
             for row in result:
                 node_id = row[3]
@@ -1696,10 +1723,10 @@ if __name__ == "__main__":
                 node_name = unescape(row[5]).strip()
                 timeoffset = tnow - node_time
 
-                if timeoffset >= map_oldnode and node_id != MyLora:
+                if timeoffset >= yeet and node_id != MyLora:
                     if node_id in MapMarkers:
                         nodes_to_delete.append(node_id)
-                elif timeoffset < map_delete and node_id != MyLora:
+                elif timeoffset < yeet and node_id != MyLora:
                     nodes_to_update.append((node_id, node_time, node_name, row))
 
             # Batch delete nodes
@@ -1711,22 +1738,25 @@ if __name__ == "__main__":
 
             # Batch update nodes
             for node_id, node_time, node_name, row in nodes_to_update:
-                node_wtime = ez_date(tnow - node_time).rjust(10)
-                node_dist = ' '
-                if row[24] != 0.0:
-                    node_dist = f"{row[24]}km"
-                insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#3d3d3d")
-                if row[15]:
-                    insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
-                    insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                    insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}\n", "#9d9d9d")
-                    checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                if tnow - row[1] >= map_delete:
+                    checknode(node_id, 4, '#aaaaaa', row[9], row[10], node_name, drawoldnodes)
                 else:
-                    node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
-                    insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#00c983", tag=str(node_id))
-                    insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                    insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}{node_sig}\n", "#9d9d9d")
-                    checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                    node_wtime = ez_date(tnow - node_time).rjust(10)
+                    node_dist = ' '
+                    if row[24] != 0.0:
+                        node_dist = f"{row[24]}km"
+                    insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#3d3d3d")
+                    if row[15]:
+                        insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
+                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}\n", "#9d9d9d")
+                        checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                    else:
+                        node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
+                        insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#00c983", tag=str(node_id))
+                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}{node_sig}\n", "#9d9d9d")
+                        checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
         except Exception as e:
             logging.error(f"Error updating active nodes: {e}")
 
