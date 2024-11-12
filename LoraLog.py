@@ -72,10 +72,16 @@ loop = None
 pingcount = 0
 
 def showLink(event):
-    idx= event.widget.tag_names("current")[1]
-    temp = type('temp', (object,), {})()
-    temp.data = idx
-    click_command(temp)
+    try:
+        tag_names = event.widget.tag_names("current")
+        idx = tag_names[0] if '#' in tag_names[1] else tag_names[1]
+
+        if '#' not in idx:
+            temp = type('temp', (object,), {})()
+            temp.data = idx
+            click_command(temp)
+    except Exception as e:
+        logging.error("Error in showLink: %s", str(e))
 
 # Function to insert colored text
 def insert_colored_text(text_widget, text, color, center=False, tag=None):
@@ -102,7 +108,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
         text_widget.see(tk.END)
         text_widget.configure(state="disabled")
 
-def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=True, bulk=False):
+def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=False, bulk=False):
     global dbconnection, tabControl
     dbcursor = dbconnection.cursor()
     result = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (nodeid,)).fetchone()
@@ -111,17 +117,20 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=True, b
         logging.error(f"Node {nodeid} not in database")
         return
 
-    if msend in text_boxes:
-        text_widget = text_boxes[msend]
+    msend2 = unescape(msend)
+    private2 = 0
+    if msend2 in text_boxes:
+        text_widget = text_boxes[msend2]
     else:
         text_widget = text_boxes['Direct Message']
-        msend = 'Direct Message'
+        msend2 = 'Direct Message'
+        private2 = 1
 
-    if bulk == False:
+    if bulk == False and nodeid != MyLora:
         for i in range(tabControl.index("end")):
-            if tabControl.tab(i, "text") == msend:
+            if tabControl.tab(i, "text") == msend2:
                 current_text = tabControl.tab(i, "text")
-                tabControl.tab(i, text=f"{current_text} ✉️")
+                tabControl.tab(i, text=f"{current_text} *")
 
     label = result[5] + " (" + result[4] + ")"
     tcolor = "#00c983"
@@ -130,7 +139,7 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=True, b
     text_widget.image_create("end", image=hr_img)
     insert_colored_text(text_widget,'\n From ' + unescape(label),tcolor)
     if private:
-        insert_colored_text(text_widget,' [' + private + ']', "#c9a500")
+        insert_colored_text(text_widget,' [' + msend2 + ']', "#c9a500")
     ptext = unescape(mtext).strip()
     ptext = textwrap.fill(ptext, 87)
     tcolor = "#d2d2d2"
@@ -139,21 +148,22 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=True, b
     ptext = textwrap.indent(text=ptext, prefix='  ', predicate=lambda line: True)
     insert_colored_text(text_widget, '\n' + ptext + '\n', tcolor)
     insert_colored_text(text_widget,timestamp.rjust(89) + '\n', "#818181")
-    if bulk == False:
-        # We might have to html it so we dont get any ' and " in text that would break the the db
-        chat_log.append({'nodeID': nodeid, 'time': msgtime, 'private': private, 'send': msend, 'ackn': ackn, 'seen': False, 'text': str(mtext.encode('ascii', 'xmlcharrefreplace'), 'ascii')})
 
-    # url escape for save storage > str(text.encode('ascii', 'xmlcharrefreplace'), 'ascii')
-    # and back to normal > unescape(text_from)
-    # Do wee need to send ackn back to the sender after we seen the message ? 
+    if bulk == False:
+        msend = str(msend2.encode('ascii', 'xmlcharrefreplace'), 'ascii')
+        dbcursor = dbconnection.cursor()
+        dbcursor.execute("INSERT INTO chat_log (node_id, timerec, private, sendto, ackn, seen, text) VALUES (?, ?, ?, ?, ?, ? ,?)", (nodeid, msgtime, private2, msend, 0, 0, str(mtext.encode('ascii', 'xmlcharrefreplace'), 'ascii')))
+        dbcursor.close()
 
 def get_messages():
-    sorted_data = chat_log[-10:] # for now retrieve only the last 10 messages
-    for entry in sorted_data:
-        add_message(entry['nodeID'], unescape(entry['text']), entry['time'], private=entry['private'], msend=entry['send'], ackn=entry['ackn'], bulk=True)
+    with dbconnection:
+        dbcursor = dbconnection.cursor()
+        result = dbcursor.execute("SELECT * FROM chat_log ORDER BY timerec ASC").fetchall()
+        dbcursor.close()
+        for entry in result:
+            add_message(entry[0], unescape(entry[6]), entry[1], private=entry[2], msend=entry[3], ackn=entry[4], bulk=True)
 
-#------------------------------------------------------------- Movment Tracker --------------------------------------------------------------------------
-chat_log        = [] # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'send': 'nodeid or ch', 'ackn' : True, seen': False, 'text': 'Hello World!'}, ...]
+#------------------------------------------------------------- Database Setup --------------------------------------------------------------------------
 
 # SQLite Database
 if not os.path.exists('DataBase'):
@@ -164,7 +174,7 @@ dbconnection = sqlite3.connect(database, timeout=250, check_same_thread=False)
 dbcursor = dbconnection.cursor()
 create_tmp = """CREATE TABLE IF NOT EXISTS node_info (
                             "node_id" integer NOT NULL PRIMARY KEY, 
-                            "time" TIMESTAMP,
+                            "timerec" TIMESTAMP,
                             "mac_id" text,
                             "hex_id" text,
                             "long_name" text,
@@ -191,44 +201,35 @@ create_tmp = """CREATE TABLE IF NOT EXISTS node_info (
                         );"""
 dbcursor.execute(create_tmp)
 
-create_tmp = """CREATE TABLE IF NOT EXISTS naibor_info ("node_id" integer NOT NULL PRIMARY KEY, "hex_id" text, "time" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "neighbor_text" text );"""
+create_tmp = """CREATE TABLE IF NOT EXISTS naibor_info ("node_id" integer NOT NULL PRIMARY KEY, "hex_id" text, "timerec" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "neighbor_text" text );"""
 dbcursor.execute(create_tmp)
 
-create_tmp = """CREATE TABLE IF NOT EXISTS device_metrics ("node_hex" text, "node_id" integer, "time" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "battery_level" integer DEFAULT 0, "voltage" real DEFAULT 0.0, "channel_utilization" real DEFAULT 0.0, "air_util_tx" real DEFAULT 0.0, "snr" real DEFAULT 0.0, "rssi" integer DEFAULT 0);"""
+create_tmp = """CREATE TABLE IF NOT EXISTS device_metrics ("node_hex" text, "node_id" integer, "timerec" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "battery_level" integer DEFAULT 0, "voltage" real DEFAULT 0.0, "channel_utilization" real DEFAULT 0.0, "air_util_tx" real DEFAULT 0.0, "snr" real DEFAULT 0.0, "rssi" integer DEFAULT 0);"""
 dbcursor.execute(create_tmp)
 
-create_tmp = """CREATE TABLE IF NOT EXISTS environment_metrics ("node_hex" text, "node_id" integer, "time" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "temperature" real DEFAULT 0.0, "relative_humidity" real DEFAULT 0.0, "barometric_pressure" real DEFAULT 0.0, "gas_resistance" real DEFAULT 0.0, iaq integer DEFAULT 0);"""
+create_tmp = """CREATE TABLE IF NOT EXISTS environment_metrics ("node_hex" text, "node_id" integer, "timerec" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "temperature" real DEFAULT 0.0, "relative_humidity" real DEFAULT 0.0, "barometric_pressure" real DEFAULT 0.0, "gas_resistance" real DEFAULT 0.0, iaq integer DEFAULT 0);"""
 dbcursor.execute(create_tmp)
 
-create_tmp = """CREATE TABLE IF NOT EXISTS chat_log ("node_hex" text, "node_id" integer, "to_id" integer, "to_hex" text, "time" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "private" text, "send" text, "ackn" integer DEFAULT False, "seen" integer DEFAULT False, "text" text);"""
+create_tmp = """CREATE TABLE IF NOT EXISTS chat_log ("node_id" text, "timerec" integer, "private" integer, "sendto" text, "ackn" integer, "seen" integer, "text" text);"""
 dbcursor.execute(create_tmp)
 
-create_tmp = """CREATE TABLE IF NOT EXISTS movement_log ("node_hex" text, "node_id" integer, "time" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "from_latitude" real DEFAULT -8.0, "from_longitude" real DEFAULT -8.0, "from_altitude" integer DEFAULT 0, "to_latitude" real DEFAULT -8.0, "to_longitude" real DEFAULT -8.0, "to_altitude" integer DEFAULT 0);"""
+create_tmp = """CREATE TABLE IF NOT EXISTS movement_log ("node_hex" text, "node_id" integer, "timerec" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "from_latitude" real DEFAULT -8.0, "from_longitude" real DEFAULT -8.0, "from_altitude" integer DEFAULT 0, "to_latitude" real DEFAULT -8.0, "to_longitude" real DEFAULT -8.0, "to_altitude" integer DEFAULT 0);"""
 dbcursor.execute(create_tmp)
 
 dbcursor.execute("PRAGMA journal_mode=OFF")
 dbcursor.connection.commit()
 dbcursor.close()
 
-# Load the databases
-ChatPath = 'DataBase' + os.path.sep + 'ChatDB.pkl'
-if os.path.exists(ChatPath):
-    with open(ChatPath, 'rb') as f:
-        chat_log = pickle.load(f)
-
 def get_data_for_node(database, nodeID):
     global dbconnection
     cursor = dbconnection.cursor()
-    query = f"SELECT *, strftime('%s', time) as time_epoch FROM {database} WHERE node_hex = ? ORDER BY time DESC"
+    query = f"SELECT *, strftime('%s', timerec) as time_epoch FROM {database} WHERE node_hex = ? ORDER BY timerec ASC"
     result = cursor.execute(query, (nodeID,)).fetchall()
     cursor.close()
     return result
 
 def safedatabase():
-    global ChatPath, chat_log
-    with open(ChatPath, 'wb') as f:
-        pickle.dump(chat_log, f)
-    logging.error("Database saved!")
+     logging.error("Database saved!")
 
 #----------------------------------------------------------- Config File Handle ------------------------------------------------------------------------
 config = ConfigParser()
@@ -410,7 +411,7 @@ def reset_tab_highlight(event):
     selected_tab = tabControl.select()
     current_text = tabControl.tab(selected_tab, "text")
     
-    if current_text.endswith(" ✉️"):
+    if current_text.endswith(" *"):
         tabControl.tab(selected_tab, text=current_text[:-2])
     
     # the index of mylorachan[0] = 'ChanName' is the same as the channel index
@@ -421,7 +422,6 @@ def reset_tab_highlight(event):
             if value == chan2text:
                 chan2send = key
                 break
-        print(f"Selected channel: {chan2send}, or also knows as {mylorachan[chan2send]}")
 
 def req_meta():
     global meshtastic_client, loop, ok2Send
@@ -536,7 +536,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 print(f"on_message > Node !{text_from} not in DB")
                 sn = str(fromraw[-4:])
                 ln = "Meshtastic " + sn
-                dbcursor.execute("INSERT INTO node_info (node_id, time, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], tnow, text_from, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), tnow, sn, ln))
+                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], tnow, text_from, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), tnow, sn, ln))
                 result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
                 insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                 insert_colored_text(text_box1, " New Node Logged [!" + fromraw + "]\n", "#e8643f", tag=fromraw)
@@ -546,7 +546,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if result[5] == '': result[5] = str(fromraw[-4:])
                 if result[4] == '': result[4] = "Meshtastic " + str(fromraw[-4:])
                 text_from = unescape(result[5]) + " (" + unescape(result[4]) + ")"
-                dbcursor.execute("UPDATE node_info SET time = ?, ismqtt = ?, last_snr = ?, last_rssi = ?, hopstart = ? WHERE node_id = ?", (tnow, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), hopStart, packet["from"]))
+                dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ?, last_snr = ?, last_rssi = ?, hopstart = ? WHERE node_id = ?", (tnow, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), hopStart, packet["from"]))
 
         if "decoded" in packet:
             data = packet["decoded"]
@@ -636,7 +636,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                     if nodelat != -8.0 and nodelon != -8.0:
                         if (result[9] != nodelat or result[10] != nodelon or result[11] != nodealt) and result[9] != -8.0 and result[10] != -8.0:
                             # We moved add to movement log ?
-                            dbcursor.execute("INSERT INTO movement_log (node_hex, node_id, time, from_latitude, from_longitude, from_altitude, to_latitude, to_longitude, to_altitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (fromraw, packet["from"], tnow, result[9], result[10], result[11], nodelat, nodelon, nodealt))
+                            dbcursor.execute("INSERT INTO movement_log (node_hex, node_id, timerec, from_latitude, from_longitude, from_altitude, to_latitude, to_longitude, to_altitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (fromraw, packet["from"], tnow, result[9], result[10], result[11], nodelat, nodelon, nodealt))
                             extra = '(Moved!) '
                             MapMarkerDelete(fromraw)
                         node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
@@ -730,7 +730,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                                     listmaps.append(pos)
                                     MapMarkers[fromraw][3] = mapview.set_path(listmaps, color="#006642", width=2)
                                     if fromraw == MyLora: viaMqtt = False # We missed the initial packet so we need to log it
-                                dbcursor.execute("UPDATE node_info SET time = ?, ismqtt = ? WHERE hex_id = ?", (tnow, is_mqtt, nodeid))
+                                dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ? WHERE hex_id = ?", (tnow, is_mqtt, nodeid))
                                 nodeid = tmp[5]
                             else:
                                 nodeid = '!' + nodeid
@@ -743,7 +743,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                             tosql += '),'
                         if tosql != '':
                             tosql = tosql[:-1]
-                            dbcursor.execute("INSERT OR REPLACE INTO naibor_info (node_id, hex_id, time, neighbor_text) VALUES (?, ?, ?, ?)", (packet["from"], fromraw, tnow, tosql))
+                            dbcursor.execute("INSERT OR REPLACE INTO naibor_info (node_id, hex_id, timerec, neighbor_text) VALUES (?, ?, ?, ?)", (packet["from"], fromraw, tnow, tosql))
                     else:
                         text_raws += ' No Data'
                 elif data["portnum"] == "RANGE_TEST_APP":
@@ -884,6 +884,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                     MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
             elif fromraw in MapMarkers and MapMarkers[fromraw][0] == None:
                 MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
+        
+        logging.error(packet)
         dbcursor.close()
 
 def updatesnodes():
@@ -925,8 +927,10 @@ def updatesnodes():
                             nodelon = round(tmp2.get('longitude', -8.0),6)
                             nodealt = tmp2.get('altitude', 0)
                             if nodelat != -8.0 and nodelon != -8.0:
-                                node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
-                                cursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, hopstart = ? , distance = ? WHERE hex_id = ?", (nodelat, nodelon, nodealt, info.get('hopsAway', -1), node_dist, nodeID))
+                                if result[24] != -8.0 or result[10] == -8.0:
+                                    node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
+                                    cursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, hopstart = ? , distance = ? WHERE hex_id = ?", (nodelat, nodelon, nodealt, info.get('hopsAway', -1), node_dist, nodeID))
+                                    MapMarkerDelete(nodeID)
 
                         if nodeID == MyLora:
                             if MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
@@ -1092,10 +1096,10 @@ def plot_rssi_log(node_id, frame, width=512, height=96):
         ax.set_facecolor('#242424')
         if total_hours <= 12:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-            ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
         elif total_hours <= 24:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-            ax.xaxis.set_major_locator(mdates.HourLocator())
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
         else:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%a'))
             ax.xaxis.set_major_locator(mdates.DayLocator())
@@ -1179,10 +1183,10 @@ def plot_metrics_log(node_id, frame, width=512, height=162):
         ax.set_facecolor('#242424')
         if total_hours <= 12:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-            ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
         elif total_hours <= 24:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-            ax.xaxis.set_major_locator(mdates.HourLocator())
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
         else:
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%a'))
             ax.xaxis.set_major_locator(mdates.DayLocator())
@@ -1236,10 +1240,10 @@ def plot_environment_log(node_id, frame , width=512, height=106):
     ax1.set_facecolor('#242424')
     if total_hours <= 12:
         ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-        ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+        ax1.xaxis.set_major_locator(mdates.HourLocator(interval=1))
     elif total_hours <= 24:
         ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-        ax1.xaxis.set_major_locator(mdates.HourLocator())
+        ax1.xaxis.set_major_locator(mdates.HourLocator(interval=3))
     else:
         ax1.xaxis.set_major_formatter(mdates.DateFormatter('%a'))
         ax1.xaxis.set_major_locator(mdates.DayLocator())
@@ -1300,10 +1304,10 @@ def plot_movment_curve(node_id, frame, width=512, height=102):
 
     if total_hours <= 12:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-        ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
     elif total_hours <= 24:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H'))
-        ax.xaxis.set_major_locator(mdates.HourLocator())
+        ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
     else:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%a'))
         ax.xaxis.set_major_locator(mdates.DayLocator())
@@ -1411,12 +1415,12 @@ if __name__ == "__main__":
             meshtastic_client.sendText(
                     text          = text2send,      # text -- the text of the message
                     destinationId = "^all",         # {nodeId or nodeNum} -- where to send this message (default: {BROADCAST_ADDR = "^all" or BROADCAST_NUM: int = 0xFFFFFFFF})
-                    wantAck       = False,
+                    wantAck       = False,          # want_ack: true (for direct messages)
                     wantResponse  = False,
                     channelIndex  = chan2send,      # channelIndex -- channel number to use (default: {0})
                 )
-            text_from = MyLora_SN + " (" + MyLora_Lon + ")"
-            add_message(MyLora, text2send, int(time.time()), msend=str(mylorachan[chan2send].encode('ascii', 'xmlcharrefreplace'), 'ascii'))
+            text_from = f"{MyLora_SN} ({MyLora_Lon})"
+            add_message(MyLora, text2send, int(time.time()), msend=mylorachan[chan2send])
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
             insert_colored_text(text_box2, (' ' * 11) + '[to ' + str(mylorachan[chan2send]) +'] ' + text2send + '\n', "#00c983")
             my_msg.set("")
@@ -1509,15 +1513,16 @@ if __name__ == "__main__":
         # And here we need use and utalize chat_log
         # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'sendto': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
         # node_text = [entry for entry in chat_log if entry['nodeID'] == nodeID]
-        node_text = [entry for entry in chat_log if (entry['nodeID'] == nodeid or entry['send'] == nodeid) and entry['private'] == True]
-        node_text.sort(key=lambda x: x['time']) # might be , reverse=True
+        # node_text = [entry for entry in chat_log if (entry['nodeID'] == nodeid or entry['send'] == nodeid) and entry['private'] == True]
+        # node_text.sort(key=lambda x: x['time']) # might be , reverse=True
         # Insert sorted entries into chat_box
+        '''
         for entry in node_text:
             # datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry['time']))
             insert_colored_text(chat_box, f"[{timestamp}] {unescape(nodesn)}\n", "#d1d1d1")
             insert_colored_text(chat_box, f" {unescape(entry['text'])}\n", "#818181")
-
+        '''
         insert_colored_text(chat_box, "\n  Not yet working, Working on it !!\n", "#dddddd")
 
         chat_input = tk.Entry(overlay, textvariable=my_chat, width=50, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
@@ -1705,8 +1710,8 @@ if __name__ == "__main__":
         try:
             cursor = dbconnection.cursor()
             result = cursor.execute(
-                "SELECT * FROM node_info WHERE (? - time) <= ? ORDER BY time DESC",
-                (tnow, map_oldnode)
+                "SELECT * FROM node_info WHERE (? - timerec) <= ? ORDER BY timerec DESC",
+                (tnow, map_oldnode + 60)
             ).fetchall()
             cursor.close()
             
@@ -1720,14 +1725,13 @@ if __name__ == "__main__":
             for row in result:
                 node_id = row[3]
                 node_time = row[1]
-                node_name = unescape(row[5]).strip()
                 timeoffset = tnow - node_time
 
                 if timeoffset >= yeet and node_id != MyLora:
                     if node_id in MapMarkers:
                         nodes_to_delete.append(node_id)
                 elif timeoffset < yeet and node_id != MyLora:
-                    nodes_to_update.append((node_id, node_time, node_name, row))
+                    nodes_to_update.append((node_id, node_time, row))
 
             # Batch delete nodes
             for node_id in nodes_to_delete:
@@ -1737,10 +1741,13 @@ if __name__ == "__main__":
                 del MapMarkers[node_id]
 
             # Batch update nodes
-            for node_id, node_time, node_name, row in nodes_to_update:
+            for node_id, node_time, row in nodes_to_update:
+                node_id = row[3]
+                node_time = row[1]
                 if tnow - row[1] >= map_delete:
                     checknode(node_id, 4, '#aaaaaa', row[9], row[10], node_name, drawoldnodes)
                 else:
+                    node_name = unescape(row[5]).strip()
                     node_wtime = ez_date(tnow - node_time).rjust(10)
                     node_dist = ' '
                     if row[24] != 0.0:
@@ -1783,7 +1790,7 @@ if __name__ == "__main__":
         tnow = int(time.time())
         try:
             cursor = dbconnection.cursor()
-            result = cursor.execute("SELECT * FROM node_info  WHERE (? - time) <= ? ORDER BY time DESC", (tnow, map_oldnode)).fetchall()
+            result = cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
             cursor.close()
             for row in result:
                 node_id = row[3]
@@ -1810,6 +1817,8 @@ if __name__ == "__main__":
                                 for position in positions:
                                     pos = (position[6], position[7])
                                     drawline.append(pos)
+                                pos = (row[9], row[10])
+                                drawline.append(pos)
                                 MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
                                 MapMarkers[node_id][5] = 30
                             else:
@@ -1862,19 +1871,20 @@ if __name__ == "__main__":
                     logging.debug("Closing open figures failed?")
 
             # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
+            '''
             with dbconnection:
                 tables = ['naibor_info', 'device_metrics', 'environment_metrics', 'chat_log']
 
                 cursor = dbconnection.cursor()
                 for table in tables:
-                    query = f"DELETE FROM {table} WHERE time <= date('now','-{metrics_age} day')"
+                    query = f"DELETE FROM {table} WHERE timerec <= date('now','-{metrics_age} day')"
                     cursor.execute(query)
 
                 # Lets clean up movement_log a bit
-                query = f"DELETE FROM movement_log WHERE time <= date('now', '-{map_trail_age} hour')"
+                query = f"DELETE FROM movement_log WHERE timerec <= date('now', '-{map_trail_age} hour')"
                 cursor.execute(query)
                 cursor.close()
-
+            '''
             safedatabase()
             gc.collect()
 
@@ -1896,7 +1906,7 @@ if __name__ == "__main__":
             '''
             with dbconnection:
                 dbcursor = dbconnection.cursor()
-                result = dbcursor.execute("SELECT * FROM node_info ORDER BY time DESC").fetchall()
+                result = dbcursor.execute("SELECT * FROM node_info ORDER BY timerec DESC").fetchall()
                 if result:
                     for row in result:
                         if row[9] != -8.0 and row[10] != -8.0:
