@@ -17,6 +17,7 @@ import threading
 import copy
 import sqlite3
 import yaml
+import ast
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -201,7 +202,7 @@ create_tmp = """CREATE TABLE IF NOT EXISTS node_info (
                         );"""
 dbcursor.execute(create_tmp)
 
-create_tmp = """CREATE TABLE IF NOT EXISTS naibor_info ("node_id" integer NOT NULL PRIMARY KEY, "hex_id" text, "timerec" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "neighbor_text" text );"""
+create_tmp = """CREATE TABLE IF NOT EXISTS naibor_info ("node_id" integer NOT NULL PRIMARY KEY, "hex_id" text, "node_pos" text, "timerec" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "timedraw" TIMESTAMP NOT NULL DEFAULT 0,"neighbor_text" text );"""
 dbcursor.execute(create_tmp)
 
 create_tmp = """CREATE TABLE IF NOT EXISTS device_metrics ("node_hex" text, "node_id" integer, "timerec" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "battery_level" integer DEFAULT 0, "voltage" real DEFAULT 0.0, "channel_utilization" real DEFAULT 0.0, "air_util_tx" real DEFAULT 0.0, "snr" real DEFAULT 0.0, "rssi" integer DEFAULT 0);"""
@@ -533,13 +534,12 @@ def on_meshtastic_message(packet, interface, loop=None):
         if text_from != '':
             result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
             if result is None:
-                print(f"on_message > Node !{text_from} not in DB")
                 sn = str(fromraw[-4:])
                 ln = "Meshtastic " + sn
                 dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], tnow, text_from, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), tnow, sn, ln))
                 result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
-                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-                insert_colored_text(text_box1, " New Node Logged [!" + fromraw + "]\n", "#e8643f", tag=fromraw)
+                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged", "#d1d1d1")
+                insert_colored_text(text_box1, "[!" + fromraw + "]\n", "#e8643f", tag=fromraw)
                 playsound('Data' + os.path.sep + 'NewNode.mp3')
             else:
                 # Added timefirst here for now to so we can sync up the 2 databases
@@ -700,10 +700,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                         if result[9] != -8.0 and result[10] != -8.0:
                             MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
                             MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=fromraw, command = click_command)
-                    if fromraw in MapMarkers:
-                        if len(MapMarkers[fromraw]) > 3 and MapMarkers[fromraw][3] is not None:
-                            MapMarkers[fromraw][3].delete()
-                            MapMarkers[fromraw][3] = None
                     if "neighborinfo" in data and "neighbors" in data["neighborinfo"]:
                         text = data["neighborinfo"]["neighbors"]
                         tosql = ''
@@ -717,33 +713,27 @@ def on_meshtastic_message(packet, interface, loop=None):
                             nodeid = idToHex(neighbor["nodeId"])[1:]
                             tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ? AND latitude != -8 AND longitude != -8", (nodeid,)).fetchone()
                             nbNide = '!' + nodeid
+                            nbPos = f"(0, 0)"
                             if tmp is not None:
-                                nbNide = unescape(tmp[5])
+                                nbNide = str(tmp[5].encode('ascii', 'xmlcharrefreplace'), 'ascii') # unescape(tmp[5])
                                 if nodeid not in MapMarkers:
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
                                     MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=nodeid, command = click_command)
-                                if fromraw in MapMarkers:
-                                    listmaps = []
-                                    pos = (result[9], result[10])
-                                    listmaps.append(pos)
-                                    pos = (tmp[9], tmp[10])
-                                    listmaps.append(pos)
-                                    MapMarkers[fromraw][3] = mapview.set_path(listmaps, color="#006642", width=2)
-                                    if fromraw == MyLora: viaMqtt = False # We missed the initial packet so we need to log it
                                 dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ? WHERE hex_id = ?", (tnow, is_mqtt, nodeid))
                                 nodeid = tmp[5]
+                                if tmp[9] != -8.0 and tmp[10] != -8.0:
+                                    nbPos = f"({tmp[9]}, {tmp[10]})"
                             else:
                                 nodeid = '!' + nodeid
                             text_raws += '\n' + (' ' * 11) + nodeid
                             if "snr" in neighbor:
                                 text_raws += ' (' + str(neighbor["snr"]) + 'dB)'
-                            tmp = neighbor.get('snr', 0)
-                            tosql += '(' + nbNide
-                            if tmp != 0: tosql += ',' + str(neighbor["snr"]) 
-                            tosql += '),'
+                            tmpz = neighbor.get('snr', 0)
+                            tosql += f'("{nbNide}",{tmpz},{nbPos}),'
                         if tosql != '':
                             tosql = tosql[:-1]
-                            dbcursor.execute("INSERT OR REPLACE INTO naibor_info (node_id, hex_id, timerec, neighbor_text) VALUES (?, ?, ?, ?)", (packet["from"], fromraw, tnow, tosql))
+                            node_pos = f"({result[9]}, {result[10]})"
+                            dbcursor.execute("INSERT OR REPLACE INTO naibor_info (node_id, hex_id, node_pos, timerec, timedraw, neighbor_text) VALUES (?, ?, ?, ?, 0, ?)", (packet["from"], fromraw, node_pos, tnow, tosql))
                     else:
                         text_raws += ' No Data'
                 elif data["portnum"] == "RANGE_TEST_APP":
@@ -1599,7 +1589,10 @@ if __name__ == "__main__":
         yada = dbcursor.execute("SELECT * FROM naibor_info WHERE hex_id = ?", (marker.data,)).fetchone()
         dbcursor.close()
         if yada is not None:
-            text_loc += '\n  Naibors  :' + yada[3].replace(')', 'dB').replace('(', ' ')
+            text_loc += '\n  Naibors  :'
+            processed_results = parse_result(yada[5])
+            for item in processed_results:
+                text_loc += f" {item[0]} ({item[1]}dB)"
 
         insert_colored_text(info_label, text_loc, "#d1d1d1")
 
@@ -1714,7 +1707,7 @@ if __name__ == "__main__":
                 (tnow, map_oldnode + 60)
             ).fetchall()
             cursor.close()
-            
+
             drawoldnodes = mapview.draw_oldnodes
             nodes_to_delete = []
             nodes_to_update = []
@@ -1785,22 +1778,64 @@ if __name__ == "__main__":
         root.after(1000, update_paths_nodes)
     ### end
 
+    def parse_result(result):
+        # Split the string by the delimiter separating the tuples
+        parts = result.split('),(')
+        
+        # Add parentheses back to the split parts
+        parts = [part + ')' if not part.endswith('))') else part for part in parts]
+        parts = ['(' + part if not part.startswith('(') else part for part in parts]
+        
+        # Apply literal_eval to each part
+        parsed_results = [ast.literal_eval(part) for part in parts]
+        
+        return parsed_results
+
     def update_paths_nodes():
         global MyLora, MapMarkers, tlast, pingcount, isConnect, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age
         tnow = int(time.time())
-        try:
+
+        # Let rework mHeard Lines
+        with dbconnection:
             cursor = dbconnection.cursor()
+            results = cursor.execute("SELECT * FROM naibor_info ORDER BY timerec DESC").fetchall()
+            for result in results:
+                node_id = result[1]
+                try:
+                    if tnow - result[3] < 900:
+                        if result[4] == 0:
+                            if node_id in MapMarkers and MapMarkers[node_id][3] is not None:
+                                MapMarkers[node_id][3].delete()
+                                MapMarkers[node_id][3] = None
+                            # data_list = ast.literal_eval(result[5])
+                            processed_results = parse_result(result[5])
+                            for item in processed_results:
+                                print(f"MHeard New Drawn Node: {result[1]}, At Pos: {result[2]}, Item: {item}")
+                                listmaps = [ast.literal_eval(result[2]), item[2]]
+                                if node_id in MapMarkers:
+                                    MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
+                            cursor.execute("UPDATE naibor_info SET timedraw = ? WHERE node_id = ?", (tnow, result[0]))
+                        else:
+                            if node_id in MapMarkers and MapMarkers[node_id][3] is None:
+                                # data_list = ast.literal_eval(result[5])
+                                processed_results = parse_result(result[5])
+                                for item in processed_results:
+                                    print(f"MHeard Was Drawn before Node: {result[1]}, At Pos: {result[2]}, Item: {item}")
+                                    listmaps = [ast.literal_eval(result[2]), item[2]]
+                                    MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
+                    elif node_id in MapMarkers and MapMarkers[node_id][3] is not None:
+                        # Node record older than 900 seconds, so we delete it
+                        MapMarkers[node_id][3].delete()
+                        MapMarkers[node_id][3] = None
+                except Exception as e:
+                    print(f"Error mheard: {e}")
+            # Done drawing mheard lines
+
             result = cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
-            cursor.close()
             for row in result:
                 node_id = row[3]
                 node_time = row[1]
                 if node_id in MapMarkers:
-                    # Lets remove mheard if time bigger then 15 minutes
-                    if tnow - node_time >= 900 and MapMarkers[node_id][3] != None:
-                        MapMarkers[node_id][3].delete()
-                        MapMarkers[node_id][3] = None
-
                     if MapMarkers[node_id][6] != None and (tnow - node_time) >= 3:
                         MapMarkers[node_id][6].delete()
                         MapMarkers[node_id][6] = None
@@ -1824,15 +1859,54 @@ if __name__ == "__main__":
                             else:
                                 MapMarkers[node_id][5] -= 1
                         # Lets delete some old mars and paths if we to old...
-                        if tnow - node_time > map_delete and MapMarkers[node_id][3] != None:
-                            MapMarkers[node_id][3].delete()
-                            MapMarkers[node_id][3] = None
                         if tnow - node_time > map_oldnode and MapMarkers[node_id][4] != None:
                             MapMarkers[node_id][4].delete()
                             MapMarkers[node_id][4] = None
                             MapMarkers[node_id][5] = 0
-        except Exception as e:
-            logging.error(f"Error updating paths and nodes: {e}")   
+
+            if tnow > tlast + 900:
+                tlast = tnow
+                updatesnodes()
+
+                # Clear up text_box1 so it max has 1000 lines
+                line_count = text_box1.count("1.0", "end-1c", "lines")[0]
+                if line_count > max_lines:
+                    delete_count = (line_count - max_lines) + 10
+                    text_box1.configure(state="normal")
+                    text_box1.delete("1.0", f"{delete_count}.0")
+                    text_box1.configure(state="disabled")
+                    print(f"Clearing Frame 1 ({delete_count} lines)")
+
+                # Clear up text_box2 so it max has 1000 lines
+                line_count = text_box2.count("1.0", "end-1c", "lines")[0]
+                if line_count > max_lines:
+                    delete_count = (line_count - max_lines) + 10
+                    text_box2.configure(state="normal")
+                    text_box2.delete("1.0", f"{delete_count}.0")
+                    text_box2.configure(state="disabled")
+                    print(f"Clearing Frame 2 ({delete_count} lines)")
+
+                if overlay is None:
+                    if has_open_figures():
+                        logging.debug("Closing open figures failed?")
+
+                # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
+                '''
+                with dbconnection:
+                    tables = ['naibor_info', 'device_metrics', 'environment_metrics', 'chat_log']
+
+                    cursor = dbconnection.cursor()
+                    for table in tables:
+                        query = f"DELETE FROM {table} WHERE timerec <= date('now','-{metrics_age} day')"
+                        cursor.execute(query)
+
+                    # Lets clean up movement_log a bit
+                    query = f"DELETE FROM movement_log WHERE timerec <= date('now', '-{map_trail_age} hour')"
+                    cursor.execute(query)
+                    cursor.close()
+                '''
+                gc.collect()
+            cursor.close()
 
         if isConnect:
             pingcount += 1
@@ -1843,50 +1917,6 @@ if __name__ == "__main__":
                 except Exception as e:
                     logging.error(f"Error sending Ping: {e}")
                     print(f"Error sending Ping: {e}")
-
-        if tnow > tlast + 900:
-            tlast = tnow
-            updatesnodes()
-
-            # Clear up text_box1 so it max has 1000 lines
-            line_count = text_box1.count("1.0", "end-1c", "lines")[0]
-            if line_count > max_lines:
-                delete_count = (line_count - max_lines) + 10
-                text_box1.configure(state="normal")
-                text_box1.delete("1.0", f"{delete_count}.0")
-                text_box1.configure(state="disabled")
-                print(f"Clearing Frame 1 ({delete_count} lines)")
-
-            # Clear up text_box2 so it max has 1000 lines
-            line_count = text_box2.count("1.0", "end-1c", "lines")[0]
-            if line_count > max_lines:
-                delete_count = (line_count - max_lines) + 10
-                text_box2.configure(state="normal")
-                text_box2.delete("1.0", f"{delete_count}.0")
-                text_box2.configure(state="disabled")
-                print(f"Clearing Frame 2 ({delete_count} lines)")
-
-            if overlay is None:
-                if has_open_figures():
-                    logging.debug("Closing open figures failed?")
-
-            # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
-            '''
-            with dbconnection:
-                tables = ['naibor_info', 'device_metrics', 'environment_metrics', 'chat_log']
-
-                cursor = dbconnection.cursor()
-                for table in tables:
-                    query = f"DELETE FROM {table} WHERE timerec <= date('now','-{metrics_age} day')"
-                    cursor.execute(query)
-
-                # Lets clean up movement_log a bit
-                query = f"DELETE FROM movement_log WHERE timerec <= date('now', '-{map_trail_age} hour')"
-                cursor.execute(query)
-                cursor.close()
-            '''
-            safedatabase()
-            gc.collect()
 
         root.after(1000, update_active_nodes)
 
