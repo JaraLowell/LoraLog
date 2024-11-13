@@ -58,7 +58,6 @@ position_thread  = None
 trace_thread = None
 MapMarkers = {}
 ok2Send = 0
-isConnect = False
 chan2send = 0
 MyLora = ''
 MyLora_SN = ''
@@ -282,7 +281,7 @@ def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
     return '└' + ''.join(graph) + '┘'
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, isConnect, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send
+    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -326,7 +325,6 @@ def connect_meshtastic(force_connect=False):
                 logging.error("Could not connect: s", str(e))
                 isLora = False
                 return None
-    isConnect = True
     nodeInfo = meshtastic_client.getMyNodeInfo()
     logging.debug("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
     insert_colored_text(text_box1, " Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
@@ -435,9 +433,8 @@ def req_meta():
         ok2Send = 0
 
 def on_lost_meshtastic_connection(interface):
-    global root, loop, telemetry_thread, position_thread, trace_thread, isConnect
+    global root, loop, telemetry_thread, position_thread, trace_thread
     safedatabase()
-    isConnect = False
     logging.error("Lost connection to Meshtastic Node.")
     if telemetry_thread != None and telemetry_thread.is_alive():
         telemetry_thread.join()
@@ -503,7 +500,7 @@ def MapMarkerDelete(node_id):
 
 def on_meshtastic_message(packet, interface, loop=None):
     # print(yaml.dump(packet))
-    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection
+    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon
     if MyLora == '':
         print('*** MyLora is empty ***\n')
         return
@@ -632,6 +629,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                     nodelat = round(position.get('latitude', -8.0),6)
                     nodelon = round(position.get('longitude', -8.0),6)
                     nodealt = position.get('altitude', 0)
+                    node_dist = 0.0
                     extra = ''
                     if nodelat != -8.0 and nodelon != -8.0:
                         if (result[9] != nodelat or result[10] != nodelon or result[11] != nodealt) and result[9] != -8.0 and result[10] != -8.0:
@@ -639,7 +637,11 @@ def on_meshtastic_message(packet, interface, loop=None):
                             dbcursor.execute("INSERT INTO movement_log (node_hex, node_id, timerec, from_latitude, from_longitude, from_altitude, to_latitude, to_longitude, to_altitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (fromraw, packet["from"], tnow, result[9], result[10], result[11], nodelat, nodelon, nodealt))
                             extra = '(Moved!) '
                             MapMarkerDelete(fromraw)
-                        node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
+                        if fromraw == MyLora:
+                            MyLora_Lat = nodelat
+                            MyLora_Lon = nodelon
+                        else:
+                            node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
                         dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, precision_bits = ?, last_sats = ?, distance = ? WHERE node_id = ?", (nodelat, nodelon, position.get('altitude', 0), position.get('precisionBits', 0), position.get('satsInView', 0), node_dist, packet["from"]))
                     text_msgs = 'Node Position '
                     text_msgs += 'latitude ' + str(round(nodelat,4)) + ' '
@@ -875,7 +877,6 @@ def on_meshtastic_message(packet, interface, loop=None):
             elif fromraw in MapMarkers and MapMarkers[fromraw][0] == None:
                 MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
         
-        logging.error(packet)
         dbcursor.close()
 
 def updatesnodes():
@@ -917,7 +918,7 @@ def updatesnodes():
                             nodelon = round(tmp2.get('longitude', -8.0),6)
                             nodealt = tmp2.get('altitude', 0)
                             if nodelat != -8.0 and nodelon != -8.0:
-                                if result[24] != -8.0 or result[10] == -8.0:
+                                if result[9] == -8.0 or result[10] == -8.0: # We allready have your position
                                     node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
                                     cursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, hopstart = ? , distance = ? WHERE hex_id = ?", (nodelat, nodelon, nodealt, info.get('hopsAway', -1), node_dist, nodeID))
                                     MapMarkerDelete(nodeID)
@@ -925,6 +926,8 @@ def updatesnodes():
                         if nodeID == MyLora:
                             if MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
                                 if MyLora not in MapMarkers:
+                                    MyLora_Lat = result[9]
+                                    MyLora_Lon = result[10]
                                     mapview.set_zoom(11)
                                     MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None]
                                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 8), data=MyLora, command = click_command)
@@ -1549,10 +1552,10 @@ if __name__ == "__main__":
             logging.error(f"Node {marker.data} not in database")
             return
 
-        overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1, takefocus=True)
+        overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#777777', highlightcolor="#777777",highlightthickness=1, takefocus=True, border=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
 
-        info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=13)
+        info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=13, highlightbackground='#242424', highlightthickness=0)
         info_label.grid(row=0, column=0, columnspan=2, padx=1, pady=1, sticky='nsew')
 
         insert_colored_text(info_label, "⬢ ", "#" + marker.data[-6:],  center=True)
@@ -1576,14 +1579,15 @@ if __name__ == "__main__":
         text_loc += '  Last SNR : ' + str(result[16]).ljust(19)
         text_loc += 'Last Seen : ' + ez_date(int(time.time()) - result[1]) + '\n'
         text_loc += '  Power    : ' + str(result[19]).ljust(19)
-        text_loc += 'First Seen: ' + datetime.fromtimestamp(result[13]).strftime('%b %#d \'%y') + '\n'
-        if result[24] != 0.0:
-            text_loc += '  Distance : ' + (str(result[24]) + 'km').ljust(19)
-        else:
-            text_loc += '  Distance : ' + ('Unknown').ljust(19)
+        text_loc += 'First Seen: ' + datetime.fromtimestamp(result[13]).strftime('%b %#d \'%y')
+        if marker.data != MyLora:
+            if result[24] != 0.0:
+                text_loc += '\n  Distance : ' + (str(result[24]) + 'km').ljust(19)
+            else:
+                text_loc += '  Distance : ' + ('Unknown').ljust(19)
 
-        if result[23] > 0:
-            text_loc += 'HopsAway  : ' + str(result[23])
+            if result[23] > 0:
+                text_loc += 'HopsAway  : ' + str(result[23])
 
         dbcursor = dbconnection.cursor()
         yada = dbcursor.execute("SELECT * FROM naibor_info WHERE hex_id = ?", (marker.data,)).fetchone()
@@ -1792,7 +1796,7 @@ if __name__ == "__main__":
         return parsed_results
 
     def update_paths_nodes():
-        global MyLora, MapMarkers, tlast, pingcount, isConnect, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age
+        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age
         tnow = int(time.time())
 
         # Let rework mHeard Lines
@@ -1807,29 +1811,23 @@ if __name__ == "__main__":
                             if node_id in MapMarkers and MapMarkers[node_id][3] is not None:
                                 MapMarkers[node_id][3].delete()
                                 MapMarkers[node_id][3] = None
-                            # data_list = ast.literal_eval(result[5])
                             processed_results = parse_result(result[5])
                             for item in processed_results:
-                                print(f"MHeard New Drawn Node: {result[1]}, At Pos: {result[2]}, Item: {item}")
                                 listmaps = [ast.literal_eval(result[2]), item[2]]
                                 if node_id in MapMarkers:
                                     MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
                             cursor.execute("UPDATE naibor_info SET timedraw = ? WHERE node_id = ?", (tnow, result[0]))
                         else:
                             if node_id in MapMarkers and MapMarkers[node_id][3] is None:
-                                # data_list = ast.literal_eval(result[5])
                                 processed_results = parse_result(result[5])
                                 for item in processed_results:
-                                    print(f"MHeard Was Drawn before Node: {result[1]}, At Pos: {result[2]}, Item: {item}")
                                     listmaps = [ast.literal_eval(result[2]), item[2]]
                                     MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
                     elif node_id in MapMarkers and MapMarkers[node_id][3] is not None:
-                        # Node record older than 900 seconds, so we delete it
                         MapMarkers[node_id][3].delete()
                         MapMarkers[node_id][3] = None
                 except Exception as e:
                     print(f"Error mheard: {e}")
-            # Done drawing mheard lines
 
             result = cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
             for row in result:
@@ -1858,7 +1856,6 @@ if __name__ == "__main__":
                                 MapMarkers[node_id][5] = 30
                             else:
                                 MapMarkers[node_id][5] -= 1
-                        # Lets delete some old mars and paths if we to old...
                         if tnow - node_time > map_oldnode and MapMarkers[node_id][4] != None:
                             MapMarkers[node_id][4].delete()
                             MapMarkers[node_id][4] = None
@@ -1906,17 +1903,8 @@ if __name__ == "__main__":
                     cursor.close()
                 '''
                 gc.collect()
-            cursor.close()
 
-        if isConnect:
-            pingcount += 1
-            if pingcount > 5:
-                pingcount = 0
-                try:
-                    meshtastic_client.sendHeartbeat()
-                except Exception as e:
-                    logging.error(f"Error sending Ping: {e}")
-                    print(f"Error sending Ping: {e}")
+            cursor.close()
 
         root.after(1000, update_active_nodes)
 
