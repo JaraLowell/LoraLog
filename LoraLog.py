@@ -140,7 +140,12 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=False, 
     text_widget.image_create("end", image=hr_img)
     insert_colored_text(text_widget,'\n From ' + unescape(label),tcolor)
     if private:
-        insert_colored_text(text_widget,' [' + msend2 + ']', "#c9a500")
+        dbcursor = dbconnection.cursor()
+        result = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (msend,)).fetchone()
+        dbcursor.close()
+        if result != None:
+            label = result[5] + " (" + result[4] + ")"
+            insert_colored_text(text_widget,' to ' + label, tcolor)
     ptext = unescape(mtext).strip()
     ptext = textwrap.fill(ptext, 87)
     tcolor = "#d2d2d2"
@@ -151,7 +156,7 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=False, 
     insert_colored_text(text_widget,timestamp.rjust(89) + '\n', "#818181")
 
     if bulk == False:
-        msend = str(msend2.encode('ascii', 'xmlcharrefreplace'), 'ascii')
+        msend = str(msend.encode('ascii', 'xmlcharrefreplace'), 'ascii')
         dbcursor = dbconnection.cursor()
         dbcursor.execute("INSERT INTO chat_log (node_id, timerec, private, sendto, ackn, seen, text) VALUES (?, ?, ?, ?, ?, ? ,?)", (nodeid, msgtime, private2, msend, 0, 0, str(mtext.encode('ascii', 'xmlcharrefreplace'), 'ascii')))
         dbcursor.close()
