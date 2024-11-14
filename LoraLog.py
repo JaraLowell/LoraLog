@@ -14,10 +14,11 @@ import pickle
 from html import unescape
 from pygame import mixer
 import threading
-import copy
+# import copy
 import sqlite3
-import yaml
 import ast
+# DEBUG
+# import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -220,10 +221,10 @@ dbcursor.execute("PRAGMA journal_mode=OFF")
 dbcursor.connection.commit()
 dbcursor.close()
 
-def get_data_for_node(database, nodeID):
+def get_data_for_node(database, nodeID, days=3):
     global dbconnection
     cursor = dbconnection.cursor()
-    query = f"SELECT *, strftime('%s', timerec) as time_epoch FROM {database} WHERE node_hex = ? ORDER BY timerec ASC"
+    query = f"SELECT *, strftime('%s', timerec) as time_epoch FROM {database} WHERE node_hex = ? AND timerec > DATETIME('now', '-{days} day') ORDER BY timerec ASC"
     result = cursor.execute(query, (nodeID,)).fetchall()
     cursor.close()
     return result
@@ -510,9 +511,7 @@ def on_meshtastic_message(packet, interface, loop=None):
     hopStart = -1
 
     tnow = int(time.time())
-    rectime = tnow
 
-    if 'rxTime' in packet: rectime = packet['rxTime']
     text_from = ''
     if 'fromId' in packet and packet['fromId'] is not None:
         text_from = packet.get('fromId', '')[1:]
@@ -535,8 +534,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                 ln = "Meshtastic " + sn
                 dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], tnow, text_from, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), tnow, sn, ln))
                 result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
-                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged", "#d1d1d1")
-                insert_colored_text(text_box1, "[!" + fromraw + "]\n", "#e8643f", tag=fromraw)
+                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged\n", "#d1d1d1")
+                insert_colored_text(text_box1, (' ' * 11) + "Node ID !" + fromraw + " (" + text_from + ")\n", "#e8643f", tag=fromraw)
                 playsound('Data' + os.path.sep + 'NewNode.mp3')
             else:
                 # Added timefirst here for now to so we can sync up the 2 databases
@@ -893,8 +892,8 @@ def updatesnodes():
             if result is None:
                 print(f"updatesnodes > Node {nodeID} not in DB")
                 cursor.execute("INSERT INTO node_info (node_id, hex_id, short_name, long_name, timefirst) VALUES (?, ?, ?, ?. ?)", (info["num"], nodeID,nodeID[-4:],'Meshtastic ' + nodeID[-4:], tnow))
-                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-                insert_colored_text(text_box1, " New Node Logged [!" + nodeID + "]\n", "#e8643f", tag=nodeID)
+                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged\n", "#d1d1d1")
+                insert_colored_text(text_box1, (' ' * 11) + "Node ID !" + nodeID + "\n", "#e8643f", tag=nodeID)
                 result = cursor.execute("SELECT * FROM node_info WHERE node_id = ?", (info["num"],)).fetchone()
 
             if "user" in info:
@@ -945,29 +944,12 @@ def updatesnodes():
 #-------------------------------------------------------------- Side Functions ---------------------------------------------------------------------------
 
 def ez_date(d):
-    ts = d
-    if ts > 31536000:
-        temp = int(round(ts / 31536000, 0))
-        val = f"{temp} year{'s' if temp > 1 else ''}"
-    elif ts > 2419200:
-        temp = int(round(ts / 2419200, 0))
-        val = f"{temp} month{'s' if temp > 1 else ''}"
-    elif ts > 604800:
-        temp = int(round(ts / 604800, 0))
-        val = f"{temp} week{'s' if temp > 1 else ''}"
-    elif ts > 86400:
-        temp = int(round(ts / 86400, 0))
-        val = f"{temp} day{'s' if temp > 1 else ''}"
-    elif ts > 3600:
-        temp = int(round(ts / 3600, 0))
-        val = f"{temp} hour{'s' if temp > 1 else ''}"
-    elif ts > 60:
-        temp = int(round(ts / 60, 0))
-        val = f"{temp} minute{'s' if temp > 1 else ''}"
-    else:
-        temp = int(ts)
-        val = "Just now"
-    return val
+    units = [(31536000, "year"), (2419200, "month"), (604800, "week"), (86400, "day"), (3600, "hour"), (60, "minute")]
+    for unit_seconds, unit_name in units:
+        if d >= unit_seconds:
+            temp = int(d / unit_seconds)
+            return f"{temp} {unit_name}{'s' if temp > 1 else ''}"
+    return "Just now"
 
 def uptimmehuman(uptime, lastseentime):
     tnow = int(time.time())
@@ -1003,20 +985,18 @@ def LatLon2qth(latitude, longitude):
     return locator
 
 def calc_gc(end_lat, end_long, start_lat, start_long):
+    EARTH_R = 6372.8
+
     start_lat = math.radians(start_lat)
     start_long = math.radians(start_long)
     end_lat = math.radians(end_lat)
     end_long = math.radians(end_long)
 
-    d_lat = math.fabs(start_lat - end_lat)
+    # d_lat = math.fabs(start_lat - end_lat)
     d_long = math.fabs(start_long - end_long)
 
-    EARTH_R = 6372.8
-
     y = ((math.sin(start_lat)*math.sin(end_lat)) + (math.cos(start_lat)*math.cos(end_lat)*math.cos(d_long)))
-
     x = math.sqrt((math.cos(end_lat)*math.sin(d_long))**2 + ( (math.cos(start_lat)*math.sin(end_lat)) - (math.sin(start_lat)*math.cos(end_lat)*math.cos(d_long)))**2)
-
     c = math.atan(x/y)
 
     return round(EARTH_R*c,1)
@@ -1035,10 +1015,10 @@ plt.rcParams["font.family"] = 'sans-serif'
 plt.rcParams["font.size"] = 7
 
 def plot_rssi_log(node_id, frame, width=512, height=96):
-    global MyLora, dbconnection
+    global MyLora, dbconnection,metrics_age
 
     metrics = []
-    result = get_data_for_node('device_metrics', node_id)
+    result = get_data_for_node('device_metrics', node_id, days=metrics_age)
     if result:
         metrics = [{'time': int(row[9]), 'snr': row[7], 'rssi': row[8]} for row in result]
 
@@ -1108,10 +1088,10 @@ def plot_rssi_log(node_id, frame, width=512, height=96):
     return canvas.get_tk_widget()
 
 def plot_metrics_log(node_id, frame, width=512, height=162):
-    global MyLora, dbconnection
+    global MyLora, dbconnection, metrics_age
 
     metrics = []
-    result = get_data_for_node('device_metrics', node_id)
+    result = get_data_for_node('device_metrics', node_id, days=metrics_age)
     if result:
         metrics = [{'time': int(row[9]), 'battery': row[3], 'voltage': row[4], 'utilization': row[5], 'airutiltx': row[6]} for row in result]
 
@@ -1195,8 +1175,9 @@ def plot_metrics_log(node_id, frame, width=512, height=162):
     return canvas.get_tk_widget()
 
 def plot_environment_log(node_id, frame , width=512, height=106):
+    global metrics_age
     metrics = []
-    result = get_data_for_node('environment_metrics', node_id)
+    result = get_data_for_node('environment_metrics', node_id, days=metrics_age)
     if result:
         metrics = [{'time': int(row[8]), 'temperatures': row[3], 'humidities': row[4], 'pressures': row[5]} for row in result]
 
@@ -1274,8 +1255,9 @@ def plot_environment_log(node_id, frame , width=512, height=106):
     return canvas.get_tk_widget()
 
 def plot_movment_curve(node_id, frame, width=512, height=102):
+    global metrics_age
     positions = []
-    result = get_data_for_node('movement_log', node_id)
+    result = get_data_for_node('movement_log', node_id, days=1)
     if result:
         positions = [{'time': int(row[2]), 'altitude': row[8]} for row in result]
 
@@ -1399,25 +1381,40 @@ if __name__ == "__main__":
         text_area.grid(row=0, column=0, sticky='nsew')
         return text_area
 
-    def send(event=None):
-        text2send = my_msg.get().rstrip()
+    def send_message(tx, to="^all", wa=False, wr=False, ch=0):
+        global meshtastic_client, mylorachan, MyLora, MyLora_SN, MyLora_LN, text_box2
+        tx = tx.strip()
+        # neeed check max, some seem to say 237 ?
+        if len(tx.encode('utf-8')) <= 220 and tx != '':
+            meshtastic_client.sendText(
+                text=tx,
+                destinationId=to,
+                wantAck=wa,
+                wantResponse=wr,
+                channelIndex=ch
+            )
+            toid = mylorachan[ch]
+            if to != "^all":
+                toid = to
+            add_message(MyLora, tx, int(time.time()), msend=toid)
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(f"{MyLora_SN} ({MyLora_LN})") + "\n", "#d1d1d1")
+            insert_colored_text(text_box2, (' ' * 11) + '[to ' + str(toid) +'] ' + tx + '\n', "#00c983")
+            playsound('Data' + os.path.sep + 'NewChat.mp3')
+
+    def prechat_priv(message, nodeid):
+        global my_chat
+        if message != '':
+            send_message(message, to=nodeid, ch=0)
+            my_chat.set("")
+
+    def prechat_chan(event=None):
+        global chan2send
+        text2send = my_msg.get()
         if len(text2send.encode('utf-8')) > 220:
-            # neeed check max, some seem to say 237 ?
             insert_colored_text(text_box2, "Text message to long, keep it under 220 bytes\n", "#d1d1d1")
         elif text2send != '':
-            meshtastic_client.sendText(
-                    text          = text2send,      # text -- the text of the message
-                    destinationId = "^all",         # {nodeId or nodeNum} -- where to send this message (default: {BROADCAST_ADDR = "^all" or BROADCAST_NUM: int = 0xFFFFFFFF})
-                    wantAck       = False,          # want_ack: true (for direct messages)
-                    wantResponse  = False,
-                    channelIndex  = chan2send,      # channelIndex -- channel number to use (default: {0})
-                )
-            text_from = f"{MyLora_SN} ({MyLora_Lon})"
-            add_message(MyLora, text2send, int(time.time()), msend=mylorachan[chan2send])
-            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
-            insert_colored_text(text_box2, (' ' * 11) + '[to ' + str(mylorachan[chan2send]) +'] ' + text2send + '\n', "#00c983")
+            send_message(text2send, ch=chan2send)
             my_msg.set("")
-            playsound('Data' + os.path.sep + 'NewChat.mp3')
 
     def send_position(nodeid):
         global meshtastic_client, loop, ok2Send
@@ -1522,19 +1519,12 @@ if __name__ == "__main__":
         chat_input.pack(side="top", fill="x", padx=10, pady=3)
         button_frame = Frame(overlay, bg='#242424')
         button_frame.pack(pady=12)
-        send_button = tk.Button(button_frame, image=btn_img, command=lambda: send_message(chat_input.get(), nodeid), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        send_button = tk.Button(button_frame, image=btn_img, command=lambda: prechat_priv(chat_input.get(), nodeid), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         send_button.pack(side=tk.LEFT, padx=2)
         clear_button = tk.Button(button_frame, image=btn_img, command=lambda: print("Button Clear clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Clear Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         clear_button.pack(side=tk.LEFT, padx=2)
         close_button = tk.Button(button_frame, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         close_button.pack(side=tk.LEFT, padx=2)
-
-    def send_message(message, nodeid):
-        global my_chat
-        playsound('Data' + os.path.sep + 'Button.mp3')
-        my_chat.set("")
-        # !! Under Construction !! 
-        print("Sending "+ nodeid + " message: " + message)
 
     def click_command(marker):
         global MyLora, overlay, mapview, dbconnection
@@ -1740,11 +1730,11 @@ if __name__ == "__main__":
             # Batch update nodes
             for node_id, node_time, row in nodes_to_update:
                 node_id = row[3]
+                node_name = unescape(row[5]).strip()
                 node_time = row[1]
                 if tnow - row[1] >= map_delete:
                     checknode(node_id, 4, '#aaaaaa', row[9], row[10], node_name, drawoldnodes)
                 else:
-                    node_name = unescape(row[5]).strip()
                     node_wtime = ez_date(tnow - node_time).rjust(10)
                     node_dist = ' '
                     if row[24] != 0.0:
@@ -1795,6 +1785,12 @@ if __name__ == "__main__":
         
         return parsed_results
 
+    # Function to unbind tags for a specific range
+    def unbind_tags_for_range(text_widget, start, end):
+        for tag in text_widget.tag_names(start):
+            text_widget.tag_remove(tag, start, end)
+            text_widget.tag_unbind(tag, "<Any-Event>")  # Unbind all events for the tag
+
     def update_paths_nodes():
         global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age
         tnow = int(time.time())
@@ -1843,7 +1839,7 @@ if __name__ == "__main__":
                         MapMarkers[node_id][4] = None
 
                     if mapview.draw_trail:
-                        positions = get_data_for_node('movement_log', node_id)
+                        positions = get_data_for_node('movement_log', node_id, days=1)
                         if len(positions) > 1 and tnow - node_time <= map_oldnode:
                             if MapMarkers[node_id][5] <= 0:
                                 drawline = []
@@ -1870,6 +1866,10 @@ if __name__ == "__main__":
                 if line_count > max_lines:
                     delete_count = (line_count - max_lines) + 10
                     text_box1.configure(state="normal")
+                    
+                    # Unbind tags for the specific range before deleting
+                    unbind_tags_for_range(text_box1, "1.0", f"{delete_count}.0")
+                    
                     text_box1.delete("1.0", f"{delete_count}.0")
                     text_box1.configure(state="disabled")
                     print(f"Clearing Frame 1 ({delete_count} lines)")
@@ -1879,6 +1879,10 @@ if __name__ == "__main__":
                 if line_count > max_lines:
                     delete_count = (line_count - max_lines) + 10
                     text_box2.configure(state="normal")
+                    
+                    # Unbind tags for the specific range before deleting
+                    unbind_tags_for_range(text_box2, "1.0", f"{delete_count}.0")
+                    
                     text_box2.delete("1.0", f"{delete_count}.0")
                     text_box2.configure(state="disabled")
                     print(f"Clearing Frame 2 ({delete_count} lines)")
@@ -1888,20 +1892,16 @@ if __name__ == "__main__":
                         logging.debug("Closing open figures failed?")
 
                 # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
-                '''
-                with dbconnection:
-                    tables = ['naibor_info', 'device_metrics', 'environment_metrics', 'chat_log']
-
-                    cursor = dbconnection.cursor()
-                    for table in tables:
-                        query = f"DELETE FROM {table} WHERE timerec <= date('now','-{metrics_age} day')"
-                        cursor.execute(query)
-
-                    # Lets clean up movement_log a bit
-                    query = f"DELETE FROM movement_log WHERE timerec <= date('now', '-{map_trail_age} hour')"
+                # DELETE FROM {table} WHERE timerec < DATETIME('now', '-7 day')
+                tables = ['naibor_info', 'device_metrics', 'environment_metrics', 'chat_log']
+                for table in tables:
+                    query = f"DELETE FROM {table} WHERE timerec < DATETIME('now', '-{metrics_age} day')"
                     cursor.execute(query)
-                    cursor.close()
-                '''
+
+                # Lets clean up movement_log a bit
+                query = f"DELETE FROM movement_log WHERE timerec < DATETIME('now', '-1 day')"
+                cursor.execute(query)
+
                 gc.collect()
 
             cursor.close()
@@ -2014,7 +2014,7 @@ if __name__ == "__main__":
 
     text_box4 = tk.Entry(padding_frame, textvariable=my_msg, width=68, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
     text_box4.grid(row=4, column=0, padx=(1, 0))
-    send_box4 = tk.Button(padding_frame, image=btn_img, command=lambda: send(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+    send_box4 = tk.Button(padding_frame, image=btn_img, command=lambda: prechat_chan(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
     send_box4.grid(row=4, column=1, padx=(0, 18))
 
     # Middle Map Window
