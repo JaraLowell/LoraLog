@@ -1495,7 +1495,7 @@ if __name__ == "__main__":
             insert_colored_text(text_box2, (' ' * 11) + "Please wait before the next request, 30 secconds inbetween requests\n", "#2bd5ff")
 
     def chatbox(nodeid, nodesn, nodeln):
-        global MyLora, overlay, my_chat, chat_input
+        global MyLora, overlay, my_chat, chat_input, dbconnection
         playsound('Data' + os.path.sep + 'Button.mp3')
         if overlay is not None:
             destroy_overlay()
@@ -1510,20 +1510,28 @@ if __name__ == "__main__":
         chat_box.pack_propagate(False)  # Prevent resizing based on the content
         chat_box.pack(side="top", fill="both", expand=True, padx=10, pady=3)
 
-        # And here we need use and utalize chat_log
-        # chat_log     = [{'nodeID': '1', 'time': 1698163200, 'private', True, 'sendto': True, 'ackn' : True, 'text': 'Hello World!'}, ...]
-        # node_text = [entry for entry in chat_log if entry['nodeID'] == nodeID]
-        # node_text = [entry for entry in chat_log if (entry['nodeID'] == nodeid or entry['send'] == nodeid) and entry['private'] == True]
-        # node_text.sort(key=lambda x: x['time']) # might be , reverse=True
-        # Insert sorted entries into chat_box
-        '''
-        for entry in node_text:
-            # datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry['time']))
-            insert_colored_text(chat_box, f"[{timestamp}] {unescape(nodesn)}\n", "#d1d1d1")
-            insert_colored_text(chat_box, f" {unescape(entry['text'])}\n", "#818181")
-        '''
-        insert_colored_text(chat_box, "\n  Not yet working, Working on it !!\n", "#dddddd")
+        with dbconnection:
+            cursor = dbconnection.cursor()
+            query = f"SELECT * FROM chat_log WHERE node_id = '{nodeid}' AND sendto = '{MyLora}' OR sendto = '{nodeid}' AND node_id = '{MyLora}' ORDER BY timerec ASC;"
+            results = cursor.execute(query).fetchall()
+            cursor.close()
+        if results:
+            for entry in results:
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry[1]))
+                tcolor = "#00c983"
+                if entry[0] == MyLora:
+                    tcolor = "#2bd5ff"
+                    txtfrom = MyLora_SN + " (" + MyLora_LN + ")"
+                else:
+                    txtfrom = nodesn + " (" + nodeln + ")"
+                insert_colored_text(chat_box, f" {unescape(txtfrom)}\n", "#d1d1d1")
+                ptext = unescape(entry[6]).strip()
+                ptext = textwrap.fill(ptext, 62)
+                ptext = textwrap.indent(text=ptext, prefix='  ', predicate=lambda line: True)
+                insert_colored_text(chat_box, f"  {ptext}\n", tcolor)
+                insert_colored_text(chat_box,timestamp.rjust(63) + '\n', "#818181")
+        else:
+            insert_colored_text(chat_box, "\n  No messages found\n", "#dddddd")
 
         chat_input = tk.Entry(overlay, textvariable=my_chat, width=50, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
         chat_input.pack(side="top", fill="x", padx=10, pady=3)
