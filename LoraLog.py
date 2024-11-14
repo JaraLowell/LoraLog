@@ -1892,14 +1892,11 @@ if __name__ == "__main__":
                         logging.debug("Closing open figures failed?")
 
                 # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
-                # DELETE FROM {table} WHERE timerec < DATETIME('now', '-7 day')
-                tables = ['naibor_info', 'device_metrics', 'environment_metrics', 'chat_log']
+                tables = ['device_metrics', 'environment_metrics', 'chat_log', 'naibor_info']
                 for table in tables:
-                    query = f"DELETE FROM {table} WHERE timerec < DATETIME('now', '-{metrics_age} day')"
+                    query = f"FROM {table} WHERE DATETIME(timerec, 'auto') < DATETIME('now', '-{metrics_age} day');"
                     cursor.execute(query)
-
-                # Lets clean up movement_log a bit
-                query = f"DELETE FROM movement_log WHERE timerec < DATETIME('now', '-1 day')"
+                query = f"FROM movement_log WHERE DATETIME(timerec, 'auto') < DATETIME('now', '-1 day');"
                 cursor.execute(query)
 
                 gc.collect()
@@ -1921,18 +1918,6 @@ if __name__ == "__main__":
             logging.error("Failed to connect to meshtastic")
         else:
             # Request Admmin Metadata
-            '''
-            with dbconnection:
-                dbcursor = dbconnection.cursor()
-                result = dbcursor.execute("SELECT * FROM node_info ORDER BY timerec DESC").fetchall()
-                if result:
-                    for row in result:
-                        if row[9] != -8.0 and row[10] != -8.0:
-                            node_dist = calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon)
-                            dbcursor.execute("UPDATE node_info SET distance = ? WHERE node_id = ?", (node_dist, row[0]))
-                            print(f"Updated distance for {row[3]} to {node_dist}")
-                dbcursor.close()
-            '''
             ok2Send = 15
             req_meta_thread = threading.Thread(target=req_meta)
             req_meta_thread.start()
