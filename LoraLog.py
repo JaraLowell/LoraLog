@@ -1384,11 +1384,15 @@ if __name__ == "__main__":
     def send_message(tx, to="^all", wa=False, wr=False, ch=0):
         global meshtastic_client, mylorachan, MyLora, MyLora_SN, MyLora_LN, text_box2
         tx = tx.strip()
+        sendto = to
+        if sendto != "^all":
+            sendto = '!' + to
+        print(f"Sending message to {to} on channel {ch}")
         # neeed check max, some seem to say 237 ?
         if len(tx.encode('utf-8')) <= 220 and tx != '':
             meshtastic_client.sendText(
                 text=tx,
-                destinationId=to,
+                destinationId=sendto,
                 wantAck=wa,
                 wantResponse=wr,
                 channelIndex=ch
@@ -1403,6 +1407,7 @@ if __name__ == "__main__":
 
     def prechat_priv(message, nodeid):
         global my_chat
+        print(f"Sending private message to {nodeid}")
         if message != '':
             send_message(message, to=nodeid, ch=0)
             my_chat.set("")
@@ -1894,9 +1899,9 @@ if __name__ == "__main__":
                 # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
                 tables = ['device_metrics', 'environment_metrics', 'chat_log', 'naibor_info']
                 for table in tables:
-                    query = f"FROM {table} WHERE DATETIME(timerec, 'auto') < DATETIME('now', '-{metrics_age} day');"
+                    query = f"DELETE FROM {table} WHERE DATETIME(timerec, 'auto') < DATETIME('now', '-{metrics_age} day');"
                     cursor.execute(query)
-                query = f"FROM movement_log WHERE DATETIME(timerec, 'auto') < DATETIME('now', '-1 day');"
+                query = f"DELETE FROM movement_log WHERE DATETIME(timerec, 'auto') < DATETIME('now', '-1 day');"
                 cursor.execute(query)
 
                 gc.collect()
