@@ -11,8 +11,8 @@ import math
 from configparser import ConfigParser
 from html import unescape
 from pygame import mixer
-import threading
-# import copy
+# import threading
+from threading import Thread
 import sqlite3
 import ast
 # DEBUG
@@ -20,9 +20,8 @@ import ast
 
 # Tkinter imports
 from PIL import Image, ImageTk
-import tkinter as tk
-import customtkinter
-from tkinter import Frame, LabelFrame, ttk
+from tkinter import ttk, Frame, Text, Label, Entry, Button, StringVar, LabelFrame #, Toplevel
+from customtkinter import CTk
 from tkintermapview2 import TkinterMapView
 import textwrap
 
@@ -31,8 +30,7 @@ from base64 import b64encode
 from pubsub import pub
 import meshtastic.remote_hardware
 import meshtastic.version
-import meshtastic.tcp_interface
-import meshtastic.serial_interface
+
 try:
     from meshtastic.protobuf import config_pb2
 except ImportError:
@@ -93,10 +91,10 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
 
     if tag != None: # and tag != MyLora:
         text_widget.tag_configure(tag, foreground=color, underline=False)
-        text_widget.insert(tk.END, text, (color, tag))
+        text_widget.insert('end', text, (color, tag))
         text_widget.tag_bind(tag, "<Button-1>", showLink)
     else:
-        text_widget.insert(tk.END, text, color)
+        text_widget.insert('end', text, color)
 
     text_widget.tag_configure(color, foreground=color)
 
@@ -104,7 +102,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
         text_widget.tag_configure("center", justify='center')
         text_widget.tag_add("center", "1.0", "end")
     if "!frame5" not in parent_frame:
-        text_widget.see(tk.END)
+        text_widget.see('end')
         text_widget.configure(state="disabled")
 
 def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=False, bulk=False):
@@ -158,6 +156,11 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=False, 
         dbcursor = dbconnection.cursor()
         dbcursor.execute("INSERT INTO chat_log (node_id, timerec, private, sendto, ackn, seen, text) VALUES (?, ?, ?, ?, ?, ? ,?)", (nodeid, msgtime, private2, msend, 0, 0, str(mtext.encode('ascii', 'xmlcharrefreplace'), 'ascii')))
         dbcursor.close()
+        # Update chatbox if it is open
+        global lastchat, overlay
+        if len(lastchat) == 4 and overlay != None:
+            if lastchat[0] == nodeid or lastchat[0] == msend:
+                update_chat_log()
 
 def get_messages():
     with dbconnection:
@@ -265,6 +268,11 @@ try:
 except Exception as e :
     logging.error("Error loading databases: %s", str(e))
 
+# Import the necessary module based on the interface type
+if config.get('meshtastic', 'interface') == 'tcp':
+    import meshtastic.tcp_interface
+else:
+    import meshtastic.serial_interface
 #----------------------------------------------------------- Meshtastic Lora Con ------------------------------------------------------------------------    
 meshtastic_client = None
 
@@ -380,21 +388,21 @@ def connect_meshtastic(force_connect=False):
             # Need add to tabs for each channel
             if mylorachan[channel.index] != '' and addtotab:
                 if mylorachan[channel.index] not in text_boxes: # Reconnected ?
-                    tab = tk.Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
+                    tab = Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
                     tab.grid_rowconfigure(0, weight=1)
                     tab.grid_columnconfigure(0, weight=1)
                     tabControl.add(tab, text=mylorachan[channel.index], padding=(0, 0, 0, 0))
-                    text_area = tk.Text(tab, wrap=tk.WORD, width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
+                    text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
                     text_area.grid(sticky='nsew')
                     text_area.configure(state="disabled")
                     text_boxes[mylorachan[channel.index]] = text_area
 
     if 'Direct Message' not in text_boxes:
-        tab = tk.Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
+        tab = Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
         tab.grid_rowconfigure(0, weight=1)
         tab.grid_columnconfigure(0, weight=1)
         tabControl.add(tab, text='Direct Message', padding=(0, 0, 0, 0))
-        text_area = tk.Text(tab, wrap=tk.WORD, width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
+        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
         text_area.grid(sticky='nsew')
         text_area.configure(state="disabled")
         text_boxes['Direct Message'] = text_area
@@ -1039,7 +1047,7 @@ def plot_rssi_log(node_id, frame, width=512, height=96):
     snr_resampled = df_resampled['snr'].tolist()
     rssi_levels_resampled = df_resampled['rssi'].tolist()
 
-    if all(value == 0 for value in snr_resampled):
+    if all(value == 0.0 for value in snr_resampled):
         return None
     if all(value == 0 for value in rssi_levels_resampled):
         return None
@@ -1087,7 +1095,7 @@ def plot_rssi_log(node_id, frame, width=512, height=96):
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
-    # canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
     return canvas.get_tk_widget()
 
 def plot_metrics_log(node_id, frame, width=512, height=162):
@@ -1174,7 +1182,7 @@ def plot_metrics_log(node_id, frame, width=512, height=162):
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
-    # canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
     return canvas.get_tk_widget()
 
 def plot_environment_log(node_id, frame , width=512, height=106):
@@ -1254,7 +1262,7 @@ def plot_environment_log(node_id, frame , width=512, height=106):
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
-    # canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
     return canvas.get_tk_widget()
 
 def plot_movment_curve(node_id, frame, width=512, height=102):
@@ -1304,7 +1312,7 @@ def plot_movment_curve(node_id, frame, width=512, height=102):
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
-    # canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
     return canvas.get_tk_widget()
 
 '''
@@ -1372,7 +1380,7 @@ if __name__ == "__main__":
     # Initialize the main window
     def create_text(frame, row, column, frheight, frwidth):
         # Create a frame with a black background to simulate padding color
-        padding_frame = tk.Frame(frame, background="#121212", padx=2, pady=2)
+        padding_frame = Frame(frame, background="#121212", padx=2, pady=2)
         padding_frame.grid(row=row, column=column, rowspan=1, columnspan=1, padx=0, pady=0, sticky='nsew')
         
         # Configure grid layout for the padding frame
@@ -1380,7 +1388,7 @@ if __name__ == "__main__":
         padding_frame.grid_columnconfigure(0, weight=1)
         
         # Create a text widget inside the frame
-        text_area = tk.Text(padding_frame, wrap=tk.WORD, width=frwidth, height=frheight, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False)
+        text_area = Text(padding_frame, wrap='word', width=frwidth, height=frheight, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False)
         text_area.grid(row=0, column=0, sticky='nsew')
         return text_area
 
@@ -1458,7 +1466,8 @@ if __name__ == "__main__":
             ok2Send = 0
 
     def close_overlay():
-        global overlay
+        global overlay, lastchat
+        lastchat = []
         playsound('Data' + os.path.sep + 'Button.mp3')
         if overlay is not None:
             destroy_overlay()
@@ -1476,43 +1485,35 @@ if __name__ == "__main__":
             if info == 'ReqInfo':
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Telemetry sending Telemetry request\n", "#2bd5ff")
-                telemetry_thread = threading.Thread(target=send_telemetry, args=(node_id,))
+                telemetry_thread = Thread(target=send_telemetry, args=(node_id,))
                 telemetry_thread.start()
             elif info == 'ReqPos':
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Position sending Position request\n", "#2bd5ff")
-                position_thread = threading.Thread(target=send_position, args=(node_id,))
+                position_thread = Thread(target=send_position, args=(node_id,))
                 position_thread.start()
             elif info == 'ReqTrace':
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node TraceRoute sending Trace Route request\n", "#2bd5ff")
-                trace_thread = threading.Thread(target=send_trace, args=(node_id,))
+                trace_thread = Thread(target=send_trace, args=(node_id,))
                 trace_thread.start()
         else:
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
             insert_colored_text(text_box2, (' ' * 11) + "Please wait before the next request, 30 secconds inbetween requests\n", "#2bd5ff")
 
-    def chatbox(nodeid, nodesn, nodeln):
-        global MyLora, overlay, my_chat, chat_input, dbconnection
-        playsound('Data' + os.path.sep + 'Button.mp3')
-        if overlay is not None:
-            destroy_overlay()
-        if has_open_figures():
-            logging.debug("No fromId in packet")
-
-        overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
-        overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
-        chat_label = tk.Label(overlay, text=unescape(nodesn) + '\n' + unescape(nodeln), font=('Fixedsys', 12), bg='#242424', fg='#2bd5ff')
-        chat_label.pack(side="top", fill="x", pady=3)
-        chat_box = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=12)
-        chat_box.pack_propagate(False)  # Prevent resizing based on the content
-        chat_box.pack(side="top", fill="both", expand=True, padx=10, pady=3)
-
+    def update_chat_log():
+        global dbconnection, MyLora, MyLora_SN, MyLora_LN, lastchat
+        nodeid = lastchat[0]
+        nodesn = lastchat[1]
+        nodeln = lastchat[2]
+        chat_box = lastchat[3]
         with dbconnection:
             cursor = dbconnection.cursor()
             query = f"SELECT * FROM chat_log WHERE node_id = '{nodeid}' AND sendto = '{MyLora}' OR sendto = '{nodeid}' AND node_id = '{MyLora}' ORDER BY timerec ASC;"
             results = cursor.execute(query).fetchall()
             cursor.close()
+        chat_box.configure(state="normal")
+        chat_box.delete("1.0", 'end')
         if results:
             for entry in results:
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry[1]))
@@ -1527,20 +1528,41 @@ if __name__ == "__main__":
                 ptext = textwrap.fill(ptext, 62)
                 ptext = textwrap.indent(text=ptext, prefix='  ', predicate=lambda line: True)
                 insert_colored_text(chat_box, f"  {ptext}\n", tcolor)
-                insert_colored_text(chat_box,timestamp.rjust(63) + '\n', "#818181")
+                insert_colored_text(chat_box, timestamp.rjust(63) + '\n', "#818181")
         else:
             insert_colored_text(chat_box, "\n  No messages found\n", "#dddddd")
 
-        chat_input = tk.Entry(overlay, textvariable=my_chat, width=50, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
+    lastchat = []
+
+    def chatbox(nodeid, nodesn, nodeln):
+        global overlay, my_chat, chat_input, lastchat
+        playsound('Data' + os.path.sep + 'Button.mp3')
+        if overlay is not None:
+            destroy_overlay()
+        if has_open_figures():
+            logging.debug("No fromId in packet")
+
+        overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#777777', highlightcolor="#777777",highlightthickness=1, takefocus=True, border=1)
+        overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
+        chat_label = Label(overlay, text=unescape(nodesn) + '\n' + unescape(nodeln), font=('Fixedsys', 12), bg='#242424', fg='#2bd5ff')
+        chat_label.pack(side="top", fill="x", pady=3)
+        chat_box = Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=12)
+        chat_box.pack_propagate(False)  # Prevent resizing based on the content
+        chat_box.pack(side="top", fill="both", expand=True, padx=10, pady=3)
+
+        lastchat = [nodeid, nodesn, nodeln, chat_box]
+        update_chat_log()
+
+        chat_input = Entry(overlay, textvariable=my_chat, width=50, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
         chat_input.pack(side="top", fill="x", padx=10, pady=3)
         button_frame = Frame(overlay, bg='#242424')
         button_frame.pack(pady=12)
-        send_button = tk.Button(button_frame, image=btn_img, command=lambda: prechat_priv(chat_input.get(), nodeid), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-        send_button.pack(side=tk.LEFT, padx=2)
-        clear_button = tk.Button(button_frame, image=btn_img, command=lambda: print("Button Clear clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Clear Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-        clear_button.pack(side=tk.LEFT, padx=2)
-        close_button = tk.Button(button_frame, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
-        close_button.pack(side=tk.LEFT, padx=2)
+        send_button = Button(button_frame, image=btn_img, command=lambda: prechat_priv(chat_input.get(), nodeid), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        send_button.pack(side='left', padx=2)
+        clear_button = Button(button_frame, image=btn_img, command=lambda: print("Button Clear clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Clear Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        clear_button.pack(side='left', padx=2)
+        close_button = Button(button_frame, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        close_button.pack(side='left', padx=2)
 
     def click_command(marker):
         global MyLora, overlay, mapview, dbconnection
@@ -1561,7 +1583,7 @@ if __name__ == "__main__":
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#777777', highlightcolor="#777777",highlightthickness=1, takefocus=True, border=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
 
-        info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=13, highlightbackground='#242424', highlightthickness=0)
+        info_label = Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=13, highlightbackground='#242424', highlightthickness=0)
         info_label.grid(row=0, column=0, columnspan=2, padx=1, pady=1, sticky='nsew')
 
         insert_colored_text(info_label, "⬢ ", "#" + marker.data[-6:],  center=True)
@@ -1624,21 +1646,21 @@ if __name__ == "__main__":
         button_frame = Frame(overlay, bg='#242424')
         button_frame.grid(row=2, column=0, columnspan=2, pady=2, sticky='nsew')
         if result[3] != MyLora:
-            button1 = tk.Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqInfo', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Info", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+            button1 = Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqInfo', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Info", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
             button1.grid(row=0, column=0, padx=(0, 1), sticky='e')
-            button2 = tk.Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqPos', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Pos", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+            button2 = Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqPos', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Pos", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
             button2.grid(row=0, column=1, padx=(0, 0), sticky='ew')
-            button3 = tk.Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqTrace', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Trace Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+            button3 = Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqTrace', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Trace Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
             button3.grid(row=0, column=2, padx=(1, 0), sticky='w')
 
         button_frame2 = Frame(overlay, bg='#242424')
         button_frame2.grid(row=3, column=0, columnspan=2, pady=2, sticky='nsew')
 
-        button4 = tk.Button(button_frame2, image=btn_img, command=lambda: mapview.set_position(result[9], result[10]) if result[9] != -8.0 and result[10] != -8.0 else None, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Zoom", compound="center", fg='#d1d1d1' if result[9] != -8.0 and result[10] != -8.0 else '#616161', font=('Fixedsys', 10))
+        button4 = Button(button_frame2, image=btn_img, command=lambda: mapview.set_position(result[9], result[10]) if result[9] != -8.0 and result[10] != -8.0 else None, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Zoom", compound="center", fg='#d1d1d1' if result[9] != -8.0 and result[10] != -8.0 else '#616161', font=('Fixedsys', 10))
         button4.grid(row=0, column=0, padx=(0, 1), sticky='e')
-        button5 = tk.Button(button_frame2, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button5 = Button(button_frame2, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button5.grid(row=0, column=1, padx=(0, 0), sticky='ew')
-        button6 = tk.Button(button_frame2, image=btn_img, command=lambda: chatbox(result[3], result[5], result[4]), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button6 = Button(button_frame2, image=btn_img, command=lambda: chatbox(result[3], result[5], result[4]), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
         button6.grid(row=0, column=2, padx=(1, 0), sticky='w')
 
         button_frame.grid_columnconfigure(0, weight=1)
@@ -1702,7 +1724,7 @@ if __name__ == "__main__":
         # Unbind all tags from text_box_middle
         for tag in text_box_middle.tag_names():
             text_box_middle.tag_unbind(tag, "<Button-1>")
-        text_box_middle.delete("1.0", tk.END)
+        text_box_middle.delete("1.0", 'end')
 
         insert_colored_text(text_box_middle, "\n " + MyLora_SN + "\n", "#e67a7f", tag=MyLora)
         if MyLoraText1:
@@ -1774,8 +1796,8 @@ if __name__ == "__main__":
         insert_colored_text(text_box_middle, '\n' + ('─' * 14), "#3d3d3d")
         time1 = (time.perf_counter() - start) * 1000
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms', "#9d9d9d")
-        tmp2 = int(Process(os.getpid()).memory_info().rss)
-        time1 = round(tmp2 / 1024 / 1024 * 100,2) / 100
+
+        time1 = Process(os.getpid()).memory_full_info()[-1] / 1024 ** 2 # Process(os.getpid()).memory_info().rss / 1024 ** 2
         if peekmem < time1: peekmem = time1
         insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n", "#9d9d9d")
         insert_colored_text(text_box_middle, f" Mem Max : {peekmem:.1f}MB\n\n", "#9d9d9d")
@@ -1935,14 +1957,14 @@ if __name__ == "__main__":
         else:
             # Request Admmin Metadata
             ok2Send = 15
-            req_meta_thread = threading.Thread(target=req_meta)
+            req_meta_thread = Thread(target=req_meta)
             req_meta_thread.start()
             # mmtext ='“Have you ever noticed that anybody driving slower than you is an idiot, and anyone going faster than you is a maniac?”'
             get_messages()
             # add_message(text_box3, MyLora, mmtext, int(time.time()), private=False, msend=True)
             root.after(1000, update_active_nodes)  # Schedule the next update in 30 seconds
 
-    root = customtkinter.CTk()
+    root = CTk()
     root.title("Meshtastic Lora Logger")
     root.geometry(f'1440x810')
     root.resizable(True, True)
@@ -1955,15 +1977,13 @@ if __name__ == "__main__":
     btn_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'ui_button.png'))
     hr_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'hr.png'))
 
-    my_msg = tk.StringVar()  # For the messages to be sent.
+    my_msg = StringVar()  # For the messages to be sent.
     my_msg.set("")
-    # my_label = tk.StringVar()
-    # my_label.set("Send a message to channel")
-    my_chat = tk.StringVar()
+    my_chat = StringVar()
     my_chat.set("")
     chat_input = None
 
-    frame = tk.Frame(root, borderwidth=0, highlightthickness=1, highlightcolor="#121212", highlightbackground="#121212")
+    frame = Frame(root, borderwidth=0, highlightthickness=1, highlightcolor="#121212", highlightbackground="#121212")
     frame.grid(row=0, column=0, padx=2, pady=2, sticky='nsew')
 
     # Configure grid layout for the main frame
@@ -1983,8 +2003,8 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.37.b2 By Jara Lowell\n", "#2bd5ff")
-    insert_colored_text(text_box1, " Meshtastic Lybrary : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.3.77 (Nov 2024) By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.image_create("end", image=hr_img)
     insert_colored_text(text_box1, "\n", "#2bd5ff")
     text_box1.configure(state="disabled")
@@ -1997,7 +2017,7 @@ if __name__ == "__main__":
     style = ttk.Style()
     style.theme_use('classic') # classic
     style.layout("TNotebook", [])
-    style.configure("TNotebook", background="#242424", tabposition=tk.NW, borderwidth=1, highlightcolor="#121212", highlightbackground="#121212")
+    style.configure("TNotebook", background="#242424", tabposition='nw', borderwidth=1, highlightcolor="#121212", highlightbackground="#121212")
     style.configure("TNotebook.Tab", background="#242424", foreground="#d1d1d1", borderwidth=1, highlightbackground="#121212", highlightcolor="#121212")
     # style.configure('TFrame', background="#242424", borderwidth=0, highlightthickness=0)
     style.map("TNotebook.Tab", background=[("selected", "#242424")], foreground=[("selected", "#2bd5ff")], font=[("selected", ('Fixedsys', 10))])
@@ -2008,18 +2028,18 @@ if __name__ == "__main__":
     tabControl.bind("<<NotebookTabChanged>>", reset_tab_highlight)
 
     # Left Box Chat input
-    padding_frame = tk.LabelFrame(frame, background="#242424", padx=0, pady=4, bg='#242424', fg='#999999', font=('Fixedsys', 10), borderwidth=0, highlightthickness=0, labelanchor='n') # text=my_label.get()
+    padding_frame = LabelFrame(frame, background="#242424", padx=0, pady=4, bg='#242424', fg='#999999', font=('Fixedsys', 10), borderwidth=0, highlightthickness=0, labelanchor='n') # text=my_label.get()
     padding_frame.grid(row=4, column=0, rowspan=1, columnspan=1, padx=0, pady=0, sticky="nsew")
     padding_frame.grid_rowconfigure(1, weight=1)
     padding_frame.grid_columnconfigure(0, weight=1)
 
-    text_box4 = tk.Entry(padding_frame, textvariable=my_msg, width=68, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
+    text_box4 = Entry(padding_frame, textvariable=my_msg, width=68, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
     text_box4.grid(row=4, column=0, padx=(1, 0))
-    send_box4 = tk.Button(padding_frame, image=btn_img, command=lambda: prechat_chan(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+    send_box4 = Button(padding_frame, image=btn_img, command=lambda: prechat_chan(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
     send_box4.grid(row=4, column=1, padx=(0, 18))
 
     # Middle Map Window
-    frame_right = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#242424", highlightbackground="#242424", padx=2, pady=2)
+    frame_right = Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#242424", highlightbackground="#242424", padx=2, pady=2)
     frame_right.grid(row=0, column=1, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
     frame_right.grid_rowconfigure(0, weight=1)
     frame_right.grid_columnconfigure(0, weight=1)
@@ -2028,7 +2048,7 @@ if __name__ == "__main__":
         print("Using offline map cache")
         database_path = 'DataBase' + os.path.sep + 'MapTiles.db3'
     mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6, database_path=database_path)
-    mapview.pack(fill=tk.BOTH, expand=True) # grid(row=0, column=0, sticky='nsew')
+    mapview.pack(fill='both', expand=True) # grid(row=0, column=0, sticky='nsew')
     mapview.set_position(48.860381, 2.338594)
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
     mapview.set_zoom(1)
@@ -2039,12 +2059,12 @@ if __name__ == "__main__":
         if is_mapfullwindow:
             # Restore mapview to frame_right
             mapview.pack_forget()
-            mapview.pack(fill=tk.BOTH, expand=True)
+            mapview.pack(fill='both', expand=True)
             frame_right.grid(row=0, column=1, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
         else:
             # Make mapview full screen
             mapview.pack_forget()
-            mapview.pack(fill=tk.BOTH, expand=True)
+            mapview.pack(fill='both', expand=True)
             mapview.master.grid(row=0, column=0, rowspan=5, columnspan=3, padx=0, pady=0, sticky='nsew')
         is_mapfullwindow = not is_mapfullwindow
     root.bind('<F6>', toggle_map)
@@ -2110,12 +2130,12 @@ if __name__ == "__main__":
             else:
                 tree.insert("", "end", values=(nodeID, *data), tags=('evenrow',))
             i = not i
-        tree.pack(fill=tk.BOTH, expand=True)
+        tree.pack(fill='both', expand=True)
         tmpnodes = None
     root.bind('<F5>', lambda event: show_loradb())
     '''
     # Right Status Window
-    frame_middle = tk.Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, padx=0, pady=0)
+    frame_middle = Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, padx=0, pady=0)
     frame_middle.grid(row=0, column=2, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
     frame_middle.grid_rowconfigure(0, weight=1)
     frame_middle.grid_columnconfigure(0, weight=0)
@@ -2124,7 +2144,7 @@ if __name__ == "__main__":
     # Start OverLay window
     overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
     overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
-    info_label = tk.Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=51, height=8)
+    info_label = Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=51, height=8)
     info_label.pack(pady=2)
     insert_colored_text(info_label, '\nConnect to Meshtastic\n\n', "#d1d1d1", center=True)
     insert_colored_text(info_label, 'Please connect to your Meshtastic device\n', "#d1d1d1", center=True)
@@ -2134,7 +2154,7 @@ if __name__ == "__main__":
         insert_colored_text(info_label, 'Connect to Serial Port : ' + config.get('meshtastic', 'serial_port') + '\n', "#2bd5ff", center=True)
     else:
         insert_colored_text(info_label, 'Connect to IP : ' + config.get('meshtastic', 'host') + '\n', "#2bd5ff", center=True)
-    button = tk.Button(overlay, image=btn_img, command=start_mesh, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Connect", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+    button = Button(overlay, image=btn_img, command=start_mesh, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Connect", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
     button.pack(padx=8)
 
     try:
