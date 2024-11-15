@@ -230,7 +230,7 @@ dbcursor.close()
 def get_data_for_node(database, nodeID, days=3):
     global dbconnection
     cursor = dbconnection.cursor()
-    query = f"SELECT *, strftime('%s', timerec) as time_epoch FROM {database} WHERE node_hex = ? AND timerec > DATETIME('now', '-{days} day') ORDER BY timerec ASC"
+    query = f"SELECT *, strftime('%s', timerec) as time_epoch FROM {database} WHERE node_hex = ? AND DATETIME(timerec, 'auto') > DATETIME('now', '-{days} day') ORDER BY timerec ASC"
     result = cursor.execute(query, (nodeID,)).fetchall()
     cursor.close()
     return result
@@ -1041,7 +1041,8 @@ def plot_rssi_log(node_id, frame, width=512, height=96):
         'snr': [entry['snr'] for entry in metrics],
         'rssi': [entry['rssi'] for entry in metrics],
     })
-    resample_interval = len(df) // 60 or 5
+    total_minutes = (df['time'].max() - df['time'].min()).total_seconds() / 60
+    resample_interval =  max(int(total_minutes // 100), 1)
     df_resampled = df.set_index('time').resample(f'{resample_interval}min').mean().dropna().reset_index()
     times_resampled = df_resampled['time'].tolist()
     snr_resampled = df_resampled['snr'].tolist()
@@ -1116,7 +1117,8 @@ def plot_metrics_log(node_id, frame, width=512, height=162):
         'utilization': [entry['utilization'] for entry in metrics],
         'airutiltx': [entry['airutiltx'] for entry in metrics]
     })
-    resample_interval = len(df) // 60 or 5
+    total_minutes = (df['time'].max() - df['time'].min()).total_seconds() / 60
+    resample_interval =  max(int(total_minutes // 100), 1)
     df_resampled = df.set_index('time').resample(f'{resample_interval}min').mean().dropna().reset_index()
     times_resampled = df_resampled['time'].tolist()
     battery_levels_resampled = df_resampled['battery'].tolist()
@@ -1201,7 +1203,8 @@ def plot_environment_log(node_id, frame , width=512, height=106):
         'humidities': [entry['humidities'] for entry in metrics],
         'pressures': [entry['pressures'] for entry in metrics],
     })
-    resample_interval = len(df) // 80 or 5
+    total_minutes = (df['time'].max() - df['time'].min()).total_seconds() / 60
+    resample_interval =  max(int(total_minutes // 100), 1)
     df_resampled = df.set_index('time').resample(f'{resample_interval}min').mean().dropna().reset_index()
     times = df_resampled['time'].tolist()
     temperatures_resampled = df_resampled['temperatures'].tolist()
