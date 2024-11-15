@@ -3,14 +3,12 @@
 import os
 import time
 from datetime import datetime
-import sys
+from sys import exit
 import asyncio
 import gc
-import psutil
+from psutil import Process
 import math
-from unidecode import unidecode
 from configparser import ConfigParser
-import pickle
 from html import unescape
 from pygame import mixer
 import threading
@@ -29,7 +27,7 @@ from tkintermapview2 import TkinterMapView
 import textwrap
 
 # Meshtastic imports
-import base64
+from base64 import b64encode
 from pubsub import pub
 import meshtastic.remote_hardware
 import meshtastic.version
@@ -362,7 +360,7 @@ def connect_meshtastic(force_connect=False):
     mylorachan = {}
     if channels:
         for channel in channels:
-            psk_base64 = base64.b64encode(channel.settings.psk).decode('utf-8')
+            psk_base64 = b64encode(channel.settings.psk).decode('utf-8')
             
             if channel.settings.name == '':
                 mylorachan[channel.index] = str(channel.index)
@@ -1350,7 +1348,7 @@ def destroy_overlay():
 
 if __name__ == "__main__":
     os.system("")
-
+    gc.enable()
     isLora = True
 
     def on_closing():
@@ -1369,7 +1367,7 @@ if __name__ == "__main__":
         mapview.destroy()
         logging.debug("Exit :: Closed Program, Bye!")
         root.quit()
-        sys.exit()
+        exit()
 
     # Initialize the main window
     def create_text(frame, row, column, frheight, frwidth):
@@ -1776,7 +1774,7 @@ if __name__ == "__main__":
         insert_colored_text(text_box_middle, '\n' + ('─' * 14), "#3d3d3d")
         time1 = (time.perf_counter() - start) * 1000
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms', "#9d9d9d")
-        tmp2 = int(psutil.Process(os.getpid()).memory_info().rss)
+        tmp2 = int(Process(os.getpid()).memory_info().rss)
         time1 = round(tmp2 / 1024 / 1024 * 100,2) / 100
         if peekmem < time1: peekmem = time1
         insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n", "#9d9d9d")
@@ -2144,4 +2142,4 @@ if __name__ == "__main__":
     except Exception as e:
         safedatabase()
         logging.error("Error : ", str(e))
-        sys.exit()
+        exit()

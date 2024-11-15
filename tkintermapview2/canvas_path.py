@@ -120,10 +120,10 @@ class CanvasPath:
                                                                           capstyle=tkinter.ROUND, joinstyle=tkinter.ROUND,
                                                                           tag="path")
 
-                if self.command is not None:
-                    self.map_widget.canvas.tag_bind(self.canvas_line, "<Enter>", self.mouse_enter)
-                    self.map_widget.canvas.tag_bind(self.canvas_line, "<Leave>", self.mouse_leave)
-                    self.map_widget.canvas.tag_bind(self.canvas_line, "<Button-1>", self.click)
+                # if self.command is not None:
+                #     self.map_widget.canvas.tag_bind(self.canvas_line, "<Enter>", self.mouse_enter)
+                #     self.map_widget.canvas.tag_bind(self.canvas_line, "<Leave>", self.mouse_leave)
+                #     self.map_widget.canvas.tag_bind(self.canvas_line, "<Button-1>", self.click)
             else:
                 self.map_widget.canvas.coords(self.canvas_line, self.canvas_line_positions)
         else:

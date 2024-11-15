@@ -168,7 +168,7 @@ class CanvasPositionMarker:
                                                                                anchor=self.icon_anchor,
                                                                                image=self.icon,
                                                                                tag="marker")
-                        if self.command is not None:
+                        if self.command is not None and self.icon_index < 5:
                             self.map_widget.canvas.tag_bind(self.canvas_icon, "<Enter>", self.mouse_enter)
                             self.map_widget.canvas.tag_bind(self.canvas_icon, "<Leave>", self.mouse_leave)
                             self.map_widget.canvas.tag_bind(self.canvas_icon, "<Button-1>", self.click)
@@ -208,7 +208,6 @@ class CanvasPositionMarker:
 
                 if self.text is not None:
                     if self.canvas_text is None:
-                        # txbck.png
                         self.canvas_text_bg = self.map_widget.canvas.create_image(canvas_pos_x, canvas_pos_y + (self.text_y_offset + 1),
                                                                                 image=self.text_background_image,
                                                                                 anchor=tkinter.S,
@@ -229,6 +228,9 @@ class CanvasPositionMarker:
                         self.map_widget.canvas.itemconfig(self.canvas_text, text=self.text)
                 else:
                     if self.canvas_text is not None:
+                        self.map_widget.canvas.tag_unbind(self.canvas_text, "<Enter>")
+                        self.map_widget.canvas.tag_unbind(self.canvas_text, "<Leave>")
+                        self.map_widget.canvas.tag_unbind(self.canvas_text, "<Button-1>")
                         self.map_widget.canvas.delete(self.canvas_text)
                     if self.canvas_text_bg is not None:
                         self.map_widget.canvas.delete(self.canvas_text_bg)

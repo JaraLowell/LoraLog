@@ -96,11 +96,10 @@ class CanvasPolygon:
                                                                             y + radius_in_pixels,
                                                                             outline="#995c00",
                                                                             tag="polygon")
-
-                    if self.command is not None:
-                        self.map_widget.canvas.tag_bind(self.canvas_polygon, "<Enter>", self.mouse_enter)
-                        self.map_widget.canvas.tag_bind(self.canvas_polygon, "<Leave>", self.mouse_leave)
-                        self.map_widget.canvas.tag_bind(self.canvas_polygon, "<Button-1>", self.click)
+                    # if self.command is not None:
+                    #     self.map_widget.canvas.tag_bind(self.canvas_polygon, "<Enter>", self.mouse_enter)
+                    #     self.map_widget.canvas.tag_bind(self.canvas_polygon, "<Leave>", self.mouse_leave)
+                    #     self.map_widget.canvas.tag_bind(self.canvas_polygon, "<Button-1>", self.click)
                 else:
                     self.map_widget.canvas.coords(self.canvas_polygon, x - radius_in_pixels,
                                                                     y - radius_in_pixels,
