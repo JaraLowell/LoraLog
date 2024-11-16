@@ -82,12 +82,13 @@ def showLink(event):
 
 # Function to insert colored text
 def insert_colored_text(text_widget, text, color, center=False, tag=None):
-    global hr_img, MyLora
+    global MyLora
     parent_frame = str(text_widget.winfo_parent())
-    if "frame5" not in parent_frame:
+    if "frame5" not in parent_frame or "notebook" in parent_frame:
         text_widget.configure(state="normal")
         if color == '#d1d1d1': # and "frame3" not in parent_frame:
-            text_widget.image_create("end", image=hr_img)
+            text_widget.insert("end", "─" * 60 + "\n", '#414141')
+            text_widget.tag_configure('#414141', foreground='#414141')
 
     if tag != None: # and tag != MyLora:
         text_widget.tag_configure(tag, foreground=color, underline=False)
@@ -101,12 +102,12 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
     if center:
         text_widget.tag_configure("center", justify='center')
         text_widget.tag_add("center", "1.0", "end")
-    if "!frame5" not in parent_frame:
+    if "!frame5" not in parent_frame or "notebook" in parent_frame:
         text_widget.see('end')
         text_widget.configure(state="disabled")
 
 def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=False, bulk=False):
-    global dbconnection, tabControl
+    global dbconnection, tabControl, text_boxes
     dbcursor = dbconnection.cursor()
     result = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (nodeid,)).fetchone()
     dbcursor.close()
@@ -127,13 +128,15 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=False, 
         for i in range(tabControl.index("end")):
             if tabControl.tab(i, "text") == msend2:
                 current_text = tabControl.tab(i, "text")
-                tabControl.tab(i, text=f"{current_text} *")
+                if '*' not in current_text:
+                    tabControl.tab(i, text=f"{current_text} *")
 
     label = result[5] + " (" + result[4] + ")"
     tcolor = "#00c983"
     if nodeid == MyLora: tcolor = "#2bd5ff"
     timestamp = datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
-    text_widget.image_create("end", image=hr_img)
+
+    insert_colored_text(text_widget, "─" * 60, "#414141")
     insert_colored_text(text_widget,'\n From ' + unescape(label),tcolor)
     if private:
         dbcursor = dbconnection.cursor()
@@ -1595,12 +1598,17 @@ if __name__ == "__main__":
         else:
             text_loc = unescape(result[5]) + '\n'
         insert_colored_text(info_label, text_loc, "#2bd5ff",  center=True)
+        insert_colored_text(info_label, "─" * 30 + "\n", "#414141",  center=True)
+
         if result[9] != -8.0 and result[10] != -8.0:
-            text_loc = '\n  Position : ' + str(result[9]) + ' / ' + str(result[10]) + ' (' + LatLon2qth(result[9],result[10])[:-2] + ')'
+            text_loc = '  Position : ' + str(result[9]) + ' / ' + str(result[10]) + ' (' + LatLon2qth(result[9],result[10])[:-2] + ')'
             text_loc += ' Altitude ' + str(result[11]) + 'm\n'
         else:
-            text_loc = '\n  Position : Unknown\n'
-        insert_colored_text(info_label, text_loc, "#d1d1d1",  center=True)
+            text_loc = '  Position : Unknown\n'
+
+        insert_colored_text(info_label, text_loc, "#d2d2d2",  center=True)
+        insert_colored_text(info_label, "─" * 30 + "\n", "#414141",  center=True)
+
         text_loc = '\n  HW Model : ' + str(result[6]) + '\n'
         text_loc += '  Hex ID   : ' + '!' + str(result[3]).ljust(18)
         text_loc += 'MAC Addr  : ' + str(result[2]) + '\n'
@@ -1615,7 +1623,7 @@ if __name__ == "__main__":
             if result[24] != 0.0:
                 text_loc += '\n  Distance : ' + (str(result[24]) + 'km').ljust(19)
             else:
-                text_loc += '  Distance : ' + ('Unknown').ljust(19)
+                text_loc += '\n  Distance : ' + ('Unknown').ljust(19)
 
             if result[23] > 0:
                 text_loc += 'HopsAway  : ' + str(result[23])
@@ -1629,7 +1637,7 @@ if __name__ == "__main__":
             for item in processed_results:
                 text_loc += f" {item[0]} ({item[1]}dB)"
 
-        insert_colored_text(info_label, text_loc, "#d1d1d1")
+        insert_colored_text(info_label, text_loc, "#d2d2d2")
 
         plot_frame = Frame(overlay, bg='#242424')
         plot_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
@@ -1780,7 +1788,7 @@ if __name__ == "__main__":
                     node_dist = ' '
                     if row[24] != 0.0:
                         node_dist = f"{row[24]}km"
-                    insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#3d3d3d")
+                    insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#414141")
                     if row[15]:
                         insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
@@ -1978,7 +1986,6 @@ if __name__ == "__main__":
 
     # Map Marker Images
     btn_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'ui_button.png'))
-    hr_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'hr.png'))
 
     my_msg = StringVar()  # For the messages to be sent.
     my_msg.set("")
@@ -2008,7 +2015,9 @@ if __name__ == "__main__":
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
     insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.3.77 (Nov 2024) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
-    text_box1.image_create("end", image=hr_img)
+    text_box1.insert("end", "─" * 60 + "\n", '#414141')
+    text_box1.tag_configure('#414141', foreground='#414141')
+
     insert_colored_text(text_box1, "\n", "#2bd5ff")
     text_box1.configure(state="disabled")
 
@@ -2149,9 +2158,10 @@ if __name__ == "__main__":
     overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
     info_label = Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=51, height=8)
     info_label.pack(pady=2)
-    insert_colored_text(info_label, '\nConnect to Meshtastic\n\n', "#d1d1d1", center=True)
-    insert_colored_text(info_label, 'Please connect to your Meshtastic device\n', "#d1d1d1", center=True)
-    insert_colored_text(info_label, 'and press the Connect button\n\n', "#d1d1d1", center=True)
+    insert_colored_text(info_label, '\n\nConnect to Meshtastic\n', "#d2d2d2", center=True)
+    insert_colored_text(info_label, '─' * 34 + '\n', "#414141", center=True)
+    insert_colored_text(info_label, 'Please connect to your Meshtastic device\n', "#d2d2d2")
+    insert_colored_text(info_label, 'and press the Connect button\n\n', "#d2d2d2")
     connto = config.get('meshtastic', 'interface')
     if connto == 'serial':
         insert_colored_text(info_label, 'Connect to Serial Port : ' + config.get('meshtastic', 'serial_port') + '\n', "#2bd5ff", center=True)
