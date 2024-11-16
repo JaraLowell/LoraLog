@@ -1472,13 +1472,20 @@ if __name__ == "__main__":
             ok2Send = 0
 
     def close_overlay():
-        global overlay, lastchat
+        global overlay, lastchat, chat_input, text_box4
         lastchat = []
         playsound('Data' + os.path.sep + 'Button.mp3')
+
+        if chat_input is not None:
+            chat_input.unbind("<Return>")
+            chat_input = None
+            text_box4.bind("<Return>", send_message)
+
         if overlay is not None:
             destroy_overlay()
         if has_open_figures():
             logging.debug("Closing open figures failed?")
+
         gc.collect()
 
     # Hadnle the buttons
@@ -1540,14 +1547,16 @@ if __name__ == "__main__":
 
     lastchat = []
 
+    chat_input = None
+
     def chatbox(nodeid, nodesn, nodeln):
-        global overlay, my_chat, chat_input, lastchat
+        global overlay, my_chat, chat_input, lastchat, chat_input
         playsound('Data' + os.path.sep + 'Button.mp3')
         if overlay is not None:
             destroy_overlay()
         if has_open_figures():
             logging.debug("No fromId in packet")
-
+        
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#777777', highlightcolor="#777777",highlightthickness=1, takefocus=True, border=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
         chat_label = Label(overlay, text=unescape(nodesn) + '\n' + unescape(nodeln), font=('Fixedsys', 12), bg='#242424', fg='#2bd5ff')
@@ -1561,6 +1570,10 @@ if __name__ == "__main__":
 
         chat_input = Entry(overlay, textvariable=my_chat, width=50, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
         chat_input.pack(side="top", fill="x", padx=10, pady=3)
+
+        text_box4.unbind("<Return>")
+        chat_input.bind("<Return>", prechat_priv(chat_input.get(), nodeid))
+
         button_frame = Frame(overlay, bg='#242424')
         button_frame.pack(pady=12)
         send_button = Button(button_frame, image=btn_img, command=lambda: prechat_priv(chat_input.get(), nodeid), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
@@ -2049,6 +2062,8 @@ if __name__ == "__main__":
     text_box4.grid(row=4, column=0, padx=(1, 0))
     send_box4 = Button(padding_frame, image=btn_img, command=lambda: prechat_chan(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
     send_box4.grid(row=4, column=1, padx=(0, 18))
+
+    text_box4.bind("<Return>", prechat_chan)
 
     # Middle Map Window
     frame_right = Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#242424", highlightbackground="#242424", padx=2, pady=2)
