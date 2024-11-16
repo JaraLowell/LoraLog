@@ -345,6 +345,8 @@ def connect_meshtastic(force_connect=False):
     insert_colored_text(text_box1, " Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
     MyLora = (nodeInfo['user']['id'])[1:]
     MyLora_SN = nodeInfo['user']['shortName']
+    if MyLora_SN == '':
+        MyLora_SN = str(MyLora)[-4:]
     MyLora_LN = nodeInfo['user']['longName']
 
     pub.subscribe(on_meshtastic_message, "meshtastic.receive", loop=asyncio.get_event_loop())
@@ -352,7 +354,7 @@ def connect_meshtastic(force_connect=False):
     pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
 
     print("MyLora: " + MyLora)
-    root.wm_title("Meshtastic Lora Logger - " + unescape(MyLora_SN))
+    root.wm_title("Meshtastic Lora Logger - !" + str(MyLora).upper() + " - " + unescape(MyLora_SN))
 
     # logLora((nodeInfo['user']['id'])[1:], ['NODEINFO_APP', nodeInfo['user']['shortName'], nodeInfo['user']['longName'], nodeInfo['user']["macaddr"],nodeInfo['user']['hwModel']])
     ## NEED AD MY SELF TO LOG 1ST TIME
@@ -1374,6 +1376,8 @@ if __name__ == "__main__":
             meshtastic_client.close()
         if dbconnection is not None:
             try:
+                # Finish any commit and close the database
+                dbconnection.commit()
                 dbconnection.execute("VACUUM")
                 dbconnection.close()
             except sqlite3.Error as e:
