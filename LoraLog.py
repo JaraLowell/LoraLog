@@ -387,12 +387,14 @@ def connect_meshtastic(force_connect=False):
                 addtotab = True
 
             if channel.index == 0:
-                insert_colored_text(text_box1, " Lora Chat Channel 0 = " + mylorachan[0] + " using Key " + psk_base64 + "\n", "#00c983")
                 chan2send = 0
 
             # Need add to tabs for each channel
             if mylorachan[channel.index] != '' and addtotab:
                 if mylorachan[channel.index] not in text_boxes: # Reconnected ?
+
+                    insert_colored_text(text_box1, " Joined Lora Channel " + mylorachan[channel.index] + " using Key " + psk_base64 + "\n", "#00c983")
+
                     tab = Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
                     tab.grid_rowconfigure(0, weight=1)
                     tab.grid_columnconfigure(0, weight=1)
@@ -450,7 +452,7 @@ def req_meta():
         ok2Send = 0
 
 def on_lost_meshtastic_connection(interface):
-    global root, loop, telemetry_thread, position_thread, trace_thread
+    global root, loop, telemetry_thread, position_thread, trace_thread, meshtastic_client
     safedatabase()
     logging.error("Lost connection to Meshtastic Node.")
     if telemetry_thread != None and telemetry_thread.is_alive():
@@ -466,12 +468,13 @@ def on_lost_meshtastic_connection(interface):
 
     insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
     insert_colored_text(text_box1, " Lost connection to node!", "#db6544")
-
+    meshtastic_client.close()
+    meshtastic_client = None
     root.meshtastic_interface = None
     if isLora:
         logging.error("Trying to re-connect...")
         insert_colored_text(text_box1, ", Trying to re-connect...\n", "#db6544")
-        time.sleep(3)
+        time.sleep(10)
         root.meshtastic_interface = connect_meshtastic(force_connect=True)
 
 def on_meshtastic_connection(interface, topic=pub.AUTO_TOPIC):
@@ -1875,16 +1878,22 @@ if __name__ == "__main__":
                                 MapMarkers[node_id][3] = None
                             processed_results = parse_result(result[5])
                             for item in processed_results:
-                                listmaps = [ast.literal_eval(result[2]), item[2]]
                                 if node_id in MapMarkers:
-                                    MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
+                                    posfromm = ast.literal_eval(result[2])
+                                    posto    = item[2]
+                                    if posfromm != (0,0) and posto != (0,0):
+                                        listmaps = [posfromm, posto]
+                                        MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
                             cursor.execute("UPDATE naibor_info SET timedraw = ? WHERE node_id = ?", (tnow, result[0]))
                         else:
                             if node_id in MapMarkers and MapMarkers[node_id][3] is None:
                                 processed_results = parse_result(result[5])
                                 for item in processed_results:
-                                    listmaps = [ast.literal_eval(result[2]), item[2]]
-                                    MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
+                                    posfromm = ast.literal_eval(result[2])
+                                    posto    = item[2]
+                                    if posfromm != (0,0) and posto != (0,0):
+                                        listmaps = [posfromm, posto]
+                                        MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
                     elif node_id in MapMarkers and MapMarkers[node_id][3] is not None:
                         MapMarkers[node_id][3].delete()
                         MapMarkers[node_id][3] = None
