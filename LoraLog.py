@@ -1756,6 +1756,10 @@ if __name__ == "__main__":
         start = time.perf_counter()
         tnow = int(time.time())
 
+        if ok2Send != 0:
+            ok2Send -= 1
+            if ok2Send < 0: ok2Send = 0
+
         text_box_middle.configure(state="normal")
         current_view = text_box_middle.yview()
         
