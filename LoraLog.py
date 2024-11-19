@@ -317,10 +317,10 @@ def connect_meshtastic(force_connect=False):
     attempts = 1
     successful = False
     target_host = config.get('meshtastic', 'host')
-    comport = config.get('meshtastic', 'serial_port')
+    com_port = config.get('meshtastic', 'serial_port')
     cnto = target_host
     if config.get('meshtastic', 'interface') != 'tcp':
-        cnto = comport
+        cnto = com_port
     logging.debug("Connecting to meshtastic on " + cnto + "...")
     
     insert_colored_text(text_box1, " Connecting to meshtastic on " + cnto + "...\n", "#00c983")
@@ -329,13 +329,16 @@ def connect_meshtastic(force_connect=False):
             if config.get('meshtastic', 'interface') == 'tcp':
                 meshtastic_client = meshtastic.tcp_interface.TCPInterface(hostname=target_host)
             else:
-                meshtastic_client = meshtastic.serial_interface.SerialInterface(comport)
+                meshtastic_client = meshtastic.serial_interface.SerialInterface(com_port)
             successful = True
+            isLora = True
         except Exception as e:
             attempts += 1
             if attempts <= retry_limit:
+                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+                insert_colored_text(text_box1, " Connect re-try:" + str(e), "#db6544")
                 logging.error("Connect re-try: ", str(e))
-                time.sleep(3)
+                time.sleep(5)
             else:
                 logging.error("Could not connect: s", str(e))
                 isLora = False
@@ -453,7 +456,9 @@ def req_meta():
 
 def on_lost_meshtastic_connection(interface):
     global root, loop, telemetry_thread, position_thread, trace_thread, meshtastic_client
-    safedatabase()
+
+    pub.unsubscribe(on_lost_meshtastic_connection, "meshtastic.connection.lost")
+
     logging.error("Lost connection to Meshtastic Node.")
     if telemetry_thread != None and telemetry_thread.is_alive():
         telemetry_thread.join()
@@ -464,19 +469,18 @@ def on_lost_meshtastic_connection(interface):
 
     pub.unsubscribe(on_meshtastic_message, "meshtastic.receive")
     pub.unsubscribe(on_meshtastic_connection, "meshtastic.connection.established")
-    pub.unsubscribe(on_lost_meshtastic_connection, "meshtastic.connection.lost")
 
     insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-    insert_colored_text(text_box1, " Lost connection to node!", "#db6544")
-    meshtastic_client.close()
-    meshtastic_client = None
-    root.meshtastic_interface = None
-    if isLora:
-        logging.error("Trying to re-connect...")
-        insert_colored_text(text_box1, ", Trying to re-connect...\n", "#db6544")
-        time.sleep(10)
-        root.meshtastic_interface = connect_meshtastic(force_connect=True)
-
+    insert_colored_text(text_box1, " Lost connection to node!, Reconnecting in 10 seconds\n", "#db6544")
+    try:
+        root.meshtastic_interface = None
+        meshtastic_client.close()
+        meshtastic_client = None
+    except Exception as e:
+        logging.error("Error closing connection: %s", str(e))
+    time.sleep(10)
+    root.meshtastic_interface = connect_meshtastic(force_connect=True)
+ 
 def on_meshtastic_connection(interface, topic=pub.AUTO_TOPIC):
     print("Connected to meshtastic")
 
@@ -1373,20 +1377,25 @@ if __name__ == "__main__":
     def on_closing():
         global isLora, meshtastic_client, mapview, root, dbconnection
         isLora = False
-        safedatabase()
-        logging.debug('Saved Databases (Exit)')
         if meshtastic_client is not None:
-            meshtastic_client.close()
+            try:
+                logging.error("Closing link to meshtastic client (Exit)")
+                pub.unsubscribe(on_lost_meshtastic_connection, "meshtastic.connection.lost")
+                pub.unsubscribe(on_meshtastic_message, "meshtastic.receive")
+                meshtastic_client.close()
+            except Exception as e:
+                logging.error("Error closing meshtastic client: ", str(e))
         if dbconnection is not None:
             try:
                 # Finish any commit and close the database
+                logging.error("Cleaning and closing Databases (Exit)")
                 dbconnection.commit()
                 dbconnection.execute("VACUUM")
                 dbconnection.close()
-            except sqlite3.Error as e:
+            except Exception as e:
                 logging.error("Error closing database connection: ", str(e))
-        mapview.destroy()
-        logging.debug("Exit :: Closed Program, Bye!")
+        logging.error("Closed Program, Bye! (Exit)")
+        # mapview.destroy()
         root.quit()
         exit()
 
@@ -1726,14 +1735,12 @@ if __name__ == "__main__":
                 else:
                     MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 8), data=node_id, command = click_command)
                     MapMarkers[node_id][0].text_color = color
+                MapMarkers[node_id][1] = tmp
             else:
-                if MapMarkers[node_id][0] != None:
-                    MapMarkers[node_id][0].delete()
-                    MapMarkers[node_id][0] = None
-                if MapMarkers[node_id][3] != None:
-                    MapMarkers[node_id][3].delete()
-                    MapMarkers[node_id][3] = None
-            MapMarkers[node_id][1] = tmp
+                MapMarkerDelete(node_id)
+                MapMarkers[node_id][0].delete()
+                MapMarkers[node_id][0] = None
+                del MapMarkers[node_id]
         else:
             if lat != -8.0 and lon != -8.0:
                 if (drawme == False and icon != 4) or drawme == True:
@@ -1802,12 +1809,19 @@ if __name__ == "__main__":
                 node_name = unescape(row[5]).strip()
                 node_time = row[1]
                 if tnow - row[1] >= map_delete:
+                    if node_id in MapMarkers:
+                        MapMarkerDelete(node_id)
                     checknode(node_id, 4, '#aaaaaa', row[9], row[10], node_name, drawoldnodes)
                 else:
                     node_wtime = ez_date(tnow - node_time).rjust(10)
                     node_dist = ' '
                     if row[24] != 0.0:
                         node_dist = f"{row[24]}km"
+                    elif row[9] != -8.0 and row[10] != -8.0:
+                        node_dist = calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon)
+                        cursor = dbconnection.cursor()
+                        cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
+                        cursor.close()
                     insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#414141")
                     if row[15]:
                         insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
@@ -1861,7 +1875,7 @@ if __name__ == "__main__":
             text_widget.tag_unbind(tag, "<Any-Event>")  # Unbind all events for the tag
 
     def update_paths_nodes():
-        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age
+        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root
         tnow = int(time.time())
 
         # Let rework mHeard Lines
@@ -1878,7 +1892,7 @@ if __name__ == "__main__":
                                 MapMarkers[node_id][3] = None
                             processed_results = parse_result(result[5])
                             for item in processed_results:
-                                if node_id in MapMarkers:
+                                if node_id in MapMarkers and MapMarkers[node_id][0] != None:
                                     posfromm = ast.literal_eval(result[2])
                                     posto    = item[2]
                                     if posfromm != (0,0) and posto != (0,0):
@@ -1886,7 +1900,7 @@ if __name__ == "__main__":
                                         MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
                             cursor.execute("UPDATE naibor_info SET timedraw = ? WHERE node_id = ?", (tnow, result[0]))
                         else:
-                            if node_id in MapMarkers and MapMarkers[node_id][3] is None:
+                            if node_id in MapMarkers and MapMarkers[node_id][3] is None and MapMarkers[node_id][0] != None:
                                 processed_results = parse_result(result[5])
                                 for item in processed_results:
                                     posfromm = ast.literal_eval(result[2])
@@ -1977,6 +1991,16 @@ if __name__ == "__main__":
                 gc.collect()
 
             cursor.close()
+
+        if root.meshtastic_interface is not None:
+            pingcount += 1
+            if pingcount > 5:
+                pingcount = 0
+                try:
+                    meshtastic_client.sendHeartbeat()
+                except Exception as e:
+                    logging.error(f"Error sending Ping: {e}")
+                    print(f"Error sending Ping: {e}")
 
         root.after(1000, update_active_nodes)
 
