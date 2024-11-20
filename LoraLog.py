@@ -515,6 +515,10 @@ def MapMarkerDelete(node_id):
             MapMarkers[node_id][4] = None
         # Check Trail
         MapMarkers[node_id][5] = 0
+        # Signal
+        if MapMarkers[node_id][6] != None:
+            MapMarkers[node_id][6].delete()
+            MapMarkers[node_id][6] = None
         # Range Circle
         if len(MapMarkers[node_id]) == 8:
             if MapMarkers[node_id][7] != None:
@@ -672,9 +676,12 @@ def on_meshtastic_message(packet, interface, loop=None):
                     if nodelat != -8.0 and nodelon != -8.0:
                         if MyLora != fromraw and nodelat != -8.0 and nodelon != -8.0:
                             text_msgs += "Distance: ±" + str(node_dist) + "km "
-                        if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
-                            MapMarkers[fromraw][0].set_position(nodelat, nodelon)
-                            MapMarkers[fromraw][0].set_text(result[5])
+                        if fromraw in MapMarkers:
+                            if MapMarkers[fromraw][0] != None:
+                                MapMarkers[fromraw][0].set_position(nodelat, nodelon)
+                                MapMarkers[fromraw][0].set_text(result[5])
+                            if MapMarkers[fromraw][6] != None:
+                                MapMarkers[fromraw][6].set_position(nodelat, nodelon)
                         text_msgs += extra
                         if 'precisionBits' in position and position.get('precisionBits', 0) > 0:
                             AcMeters = round(23905787.925008 * math.pow(0.5, position.get('precisionBits', 0)), 2)
@@ -855,6 +862,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                 # Lets add a indicator
                 if fromraw in MapMarkers and MapMarkers[fromraw][6] == None and 'localstats_metrics' not in packet:
                     MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
+                elif fromraw in MapMarkers and MapMarkers[fromraw][6] != None and 'localstats_metrics' not in packet:
+                    MapMarkers[fromraw][6].change_icon(5)
 
                 # Cleanup and get ready to print
                 text_from = unescape(text_from)
@@ -1933,8 +1942,9 @@ if __name__ == "__main__":
                 node_time = row[1]
                 if node_id in MapMarkers:
                     if MapMarkers[node_id][6] != None and (tnow - node_time) >= 3:
-                        MapMarkers[node_id][6].delete()
-                        MapMarkers[node_id][6] = None
+                        MapMarkers[node_id][6].change_icon(7)
+                        # MapMarkers[node_id][6].delete()
+                        # MapMarkers[node_id][6] = None
 
                     if MapMarkers[node_id][4] != None and MapMarkers[node_id][5] <= 0:
                         MapMarkers[node_id][4].delete()

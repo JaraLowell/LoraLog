@@ -427,6 +427,7 @@ class TkinterMapView(tkinter.Frame):
     def manage_z_order(self):
         self.canvas.lift("polygon")
         self.canvas.lift("path")
+        self.canvas.lift("signal")
         self.canvas.lift("marker")
         self.canvas.lift("marker_image")
         self.canvas.lift("corner")

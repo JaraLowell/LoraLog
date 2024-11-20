@@ -22,7 +22,8 @@ class CanvasPositionMarker:
             PhotoImage(file='Data' + os.path.sep + 'marker-orange.png'),
             PhotoImage(file='Data' + os.path.sep + 'marker-grey.png'),
             PhotoImage(file='Data' + os.path.sep + 'signal.png'),
-            PhotoImage(file='Data' + os.path.sep + 'txbck.png')
+            PhotoImage(file='Data' + os.path.sep + 'txbck.png'),
+            PhotoImage(file='Data' + os.path.sep + 'blank.png')
         ]
 
     text_background_image = None  # Class variable
@@ -167,10 +168,13 @@ class CanvasPositionMarker:
                 # draw icon image for marker
                 if self.icon is not None:
                     if self.canvas_icon is None:
+                        tagdata = "marker"
+                        if self.icon_index > 4:
+                            tagdata = "signal"
                         self.canvas_icon = self.map_widget.canvas.create_image(canvas_pos_x, canvas_pos_y,
                                                                                anchor=self.icon_anchor,
                                                                                image=self.icon,
-                                                                               tag="marker")
+                                                                               tag=tagdata)
                         if self.command is not None and self.icon_index < 5:
                             self.map_widget.canvas.tag_bind(self.canvas_icon, "<Enter>", self.mouse_enter)
                             self.map_widget.canvas.tag_bind(self.canvas_icon, "<Leave>", self.mouse_leave)
