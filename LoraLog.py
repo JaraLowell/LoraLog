@@ -1723,11 +1723,13 @@ if __name__ == "__main__":
                 if MapMarkers[node_id][0] != None:
                     if hasattr(MapMarkers[node_id][0], 'text_color'):
                         if MapMarkers[node_id][0].text_color != color:
+                            MapMarkerDelete(node_id)
                             MapMarkers[node_id][0].delete()
                             MapMarkers[node_id][0] = None
                             MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 8), data=node_id, command = click_command)
                             MapMarkers[node_id][0].text_color = color
                     else:
+                        MapMarkerDelete(node_id)
                         MapMarkers[node_id][0].delete()
                         MapMarkers[node_id][0] = None
                         MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 8), data=node_id, command = click_command)
@@ -1885,36 +1887,43 @@ if __name__ == "__main__":
         # Let rework mHeard Lines
         with dbconnection:
             cursor = dbconnection.cursor()
+
             results = cursor.execute("SELECT * FROM naibor_info ORDER BY timerec DESC").fetchall()
             for result in results:
                 node_id = result[1]
                 try:
-                    if tnow - result[3] < 900:
-                        if result[4] == 0:
-                            if node_id in MapMarkers and MapMarkers[node_id][3] is not None:
-                                MapMarkers[node_id][3].delete()
-                                MapMarkers[node_id][3] = None
-                            processed_results = parse_result(result[5])
-                            for item in processed_results:
-                                if node_id in MapMarkers and MapMarkers[node_id][0] != None:
-                                    posfromm = ast.literal_eval(result[2])
-                                    posto    = item[2]
-                                    if posfromm != (0,0) and posto != (0,0):
-                                        listmaps = [posfromm, posto]
-                                        MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
-                            cursor.execute("UPDATE naibor_info SET timedraw = ? WHERE node_id = ?", (tnow, result[0]))
-                        else:
-                            if node_id in MapMarkers and MapMarkers[node_id][3] is None and MapMarkers[node_id][0] != None:
+                    if node_id in MapMarkers:
+                        if tnow - result[3] < 900:
+                            if result[4] == 0:
+                                if MapMarkers[node_id][3] != None:
+                                    MapMarkers[node_id][3].delete()
+                                    MapMarkers[node_id][3] = None
                                 processed_results = parse_result(result[5])
                                 for item in processed_results:
-                                    posfromm = ast.literal_eval(result[2])
-                                    posto    = item[2]
-                                    if posfromm != (0,0) and posto != (0,0):
-                                        listmaps = [posfromm, posto]
-                                        MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
-                    elif node_id in MapMarkers and MapMarkers[node_id][3] is not None:
-                        MapMarkers[node_id][3].delete()
-                        MapMarkers[node_id][3] = None
+                                    listmaps = []
+                                    if MapMarkers[node_id][0] != None:
+                                        posfromm = ast.literal_eval(result[2])
+                                        if posfromm != (0,0) and item[2] != (0,0):
+                                            listmaps.append(posfromm)
+                                            listmaps.append(item[2])
+                                            MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
+                                cursor.execute("UPDATE naibor_info SET timedraw = ? WHERE node_id = ?", (tnow, result[0]))
+                            else:
+                                if MapMarkers[node_id][3] == None and MapMarkers[node_id][0] != None:
+                                    processed_results = parse_result(result[5])
+                                    for item in processed_results:
+                                        listmaps = []
+                                        posfromm = ast.literal_eval(result[2])
+                                        if posfromm != (0,0) and item[2] != (0,0):
+                                            listmaps.append(posfromm)
+                                            listmaps.append(item[2])
+                                            MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
+                                elif MapMarkers[node_id][3] != None and MapMarkers[node_id][0] == None:
+                                    MapMarkers[node_id][3].delete()
+                                    MapMarkers[node_id][3] = None
+                        elif MapMarkers[node_id][3] != None:
+                            MapMarkers[node_id][3].delete()
+                            MapMarkers[node_id][3] = None
                 except Exception as e:
                     print(f"Error mheard: {e}")
 

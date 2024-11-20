@@ -81,6 +81,9 @@ class CanvasPositionMarker:
 
         self.calculate_text_y_offset()
 
+    def __del__(self):
+        self.delete()
+
     def calculate_text_y_offset(self):
         if self.icon is not None:
             if self.icon_anchor in ("center", "e", "w"):

@@ -406,6 +406,8 @@ class TkinterMapView(tkinter.Frame):
     def delete(self, map_object: any):
         if isinstance(map_object, (CanvasPath, CanvasPositionMarker, CanvasPolygon)):
             map_object.delete()
+            if hasattr(map_object, 'deleted') and map_object.deleted:
+                del map_object
 
     def delete_all_marker(self):
         for i in range(len(self.canvas_marker_list) - 1, -1, -1):

@@ -20,26 +20,27 @@ class CanvasPath:
 
         self.map_widget = map_widget
         self.position_list = position_list
-        self.canvas_line_positions = []
+        self.canvas_lines = []  # Store multiple lines
         self.deleted = False
 
         self.path_color = color
         self.command = command
-        self.canvas_line = None
         self.width = width
         self.name = name
         self.data = data
 
         self.last_upper_left_tile_pos = None
         self.last_position_list_length = len(self.position_list)
+    
+    def __del__(self):
+        self.delete()
 
     def delete(self):
-        if self in self.map_widget.canvas_path_list:
-            self.map_widget.canvas_path_list.remove(self)
-
-        self.map_widget.canvas.delete(self.canvas_line)
-        self.canvas_line = None
+        for line in self.canvas_lines:
+            self.map_widget.canvas.delete(line)
+        self.canvas_lines = []
         self.deleted = True
+        self.map_widget.canvas.update()
 
     def set_position_list(self, position_list: list):
         self.position_list = position_list
@@ -101,8 +102,8 @@ class CanvasPath:
                 self.canvas_line_positions.append(canvas_position[1])
 
         if not self.deleted and ((self.path_color == "#006642" and self.map_widget.draw_heard == True) or (self.path_color != "#006642" and self.map_widget.draw_trail == True)):
-            if self.canvas_line is None:
-                self.map_widget.canvas.delete(self.canvas_line)
+            if not self.canvas_lines:
+                self.map_widget.canvas.delete(self.canvas_lines)
                 # Custom code to have 2 type of paths
                 if self.path_color == "#006642":
                     zoom_level = round(self.map_widget.zoom)
@@ -110,26 +111,29 @@ class CanvasPath:
                     new_length = round((4 + zoom_factor) * (zoom_level / 18), 2)
                     new_width  = round((8 + zoom_factor) * (zoom_level / 18), 2)
                     new_wing   = round((1 + zoom_factor) * (zoom_level / 18), 2)
-                    self.canvas_line = self.map_widget.canvas.create_line(self.canvas_line_positions,
-                                                                          width=self.width, fill=self.path_color,
-                                                                          capstyle=tkinter.ROUND, joinstyle=tkinter.ROUND,
-                                                                          tag="path", arrow=tkinter.FIRST, arrowshape=(new_length, new_width, new_wing), dash=(3, 12), smooth=True)
+                    line = self.map_widget.canvas.create_line(self.canvas_line_positions,
+                                                              width=self.width, fill=self.path_color,
+                                                              capstyle=tkinter.ROUND, joinstyle=tkinter.ROUND,
+                                                              tag="path", arrow=tkinter.FIRST, arrowshape=(new_length, new_width, new_wing), dash=(3, 12), smooth=True)
+                    self.canvas_lines.append(line)
                 else: 
-                    self.canvas_line = self.map_widget.canvas.create_line(self.canvas_line_positions,
-                                                                          width=self.width, fill=self.path_color,
-                                                                          capstyle=tkinter.ROUND, joinstyle=tkinter.ROUND,
-                                                                          tag="path")
+                    line = self.map_widget.canvas.create_line(self.canvas_line_positions,
+                                                              width=self.width, fill=self.path_color,
+                                                              capstyle=tkinter.ROUND, joinstyle=tkinter.ROUND,
+                                                              tag="path")
+                    self.canvas_lines.append(line)
 
                 # if self.command is not None:
-                #     self.map_widget.canvas.tag_bind(self.canvas_line, "<Enter>", self.mouse_enter)
-                #     self.map_widget.canvas.tag_bind(self.canvas_line, "<Leave>", self.mouse_leave)
-                #     self.map_widget.canvas.tag_bind(self.canvas_line, "<Button-1>", self.click)
+                #     self.map_widget.canvas.tag_bind(line, "<Enter>", self.mouse_enter)
+                #     self.map_widget.canvas.tag_bind(line, "<Leave>", self.mouse_leave)
+                #     self.map_widget.canvas.tag_bind(line, "<Button-1>", self.click)
             else:
-                self.map_widget.canvas.coords(self.canvas_line, self.canvas_line_positions)
+                for line in self.canvas_lines:
+                    self.map_widget.canvas.coords(line, self.canvas_line_positions)
         else:
-            self.map_widget.canvas.delete(self.canvas_line)
-            self.canvas_line = None
+            for line in self.canvas_lines:
+                self.map_widget.canvas.delete(line)
+            self.canvas_lines = []
 
         self.map_widget.manage_z_order()
         self.last_upper_left_tile_pos = self.map_widget.upper_left_tile_pos
-

@@ -39,6 +39,9 @@ class CanvasPolygon:
         self.last_upper_left_tile_pos = None
         self.last_position = self.position
 
+    def __del__(self):
+        self.delete()
+
     def delete(self):
         self.map_widget.canvas.delete(self.canvas_polygon)
 
