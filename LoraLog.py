@@ -292,7 +292,7 @@ def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
     position0 = int((0 - min_value) / (max_value - min_value) * (graph_length - 1))
     graph = ['─'] * graph_length
     graph[position0] = '┴'
-    graph[position] = '╥'
+    graph[position] = '╫'
     return '└' + ''.join(graph) + '┘'
 
 def connect_meshtastic(force_connect=False):
@@ -503,12 +503,12 @@ def idToHex(nodeId):
     return f"!{in_hex[2:]}"
 
 def MapMarkerDelete(node_id):
-    global MapMarkers
+    global MapMarkers, mapview
     if node_id in MapMarkers:
         # Mheard
         if MapMarkers[node_id][3] != None:
-            MapMarkers[node_id][3].delete()
             MapMarkers[node_id][3] = None
+        del_mheard(node_id)
         # Move Trail
         if MapMarkers[node_id][4] != None:
             MapMarkers[node_id][4].delete()
@@ -525,6 +525,13 @@ def MapMarkerDelete(node_id):
                 MapMarkers[node_id][7].delete()
                 MapMarkers[node_id][7] = None
             MapMarkers[node_id].pop()
+        # Deleting Mehard lines and Move Trail in map_widget, as we not always get all via delete up above
+
+def del_mheard(node_id):
+    for i in range(len(mapview.canvas_path_list) - 1, -1, -1):
+        if mapview.canvas_path_list[i].name == node_id and mapview.canvas_path_list[i].path_color == '#006642':
+            mapview.canvas_path_list[i].delete()
+            del mapview.canvas_path_list[i]
 
 def on_meshtastic_message(packet, interface, loop=None):
     # print(yaml.dump(packet))
@@ -737,9 +744,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                         is_mqtt = True
                         if fromraw == MyLora:
                             is_mqtt = False
-                        if fromraw in MapMarkers and MapMarkers[fromraw][3] is not None:
-                            MapMarkers[fromraw][3].delete()
+                        if fromraw in MapMarkers and MapMarkers[fromraw][3] != None:
                             MapMarkers[fromraw][3] = None
+                            del_mheard(fromraw)
                         for neighbor in text:
                             nodeid = idToHex(neighbor["nodeId"])[1:]
                             tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ? AND latitude != -8 AND longitude != -8", (nodeid,)).fetchone()
@@ -766,6 +773,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                             node_pos = f"({result[9]}, {result[10]})"
                             dbcursor.execute("INSERT OR REPLACE INTO naibor_info (node_id, hex_id, node_pos, timerec, timedraw, neighbor_text) VALUES (?, ?, ?, ?, 0, ?)", (packet["from"], fromraw, node_pos, tnow, tosql))
                     else:
+                        node_id_exists = dbcursor.execute("SELECT node_id FROM naibor_info WHERE node_id = ?", (packet["from"],)).fetchone()
+                        if node_id_exists:
+                            dbcursor.execute("DELETE FROM naibor_info WHERE node_id = ?", (packet["from"],))
                         text_raws += ' No Data'
                 elif data["portnum"] == "RANGE_TEST_APP":
                     text_raws = 'Node RangeTest'
@@ -1905,8 +1915,8 @@ if __name__ == "__main__":
                         if tnow - result[3] < 900:
                             if result[4] == 0:
                                 if MapMarkers[node_id][3] != None:
-                                    MapMarkers[node_id][3].delete()
                                     MapMarkers[node_id][3] = None
+                                    del_mheard(node_id)
                                 processed_results = parse_result(result[5])
                                 for item in processed_results:
                                     listmaps = []
@@ -1915,7 +1925,7 @@ if __name__ == "__main__":
                                         if posfromm != (0,0) and item[2] != (0,0):
                                             listmaps.append(posfromm)
                                             listmaps.append(item[2])
-                                            MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
+                                            MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2, name=node_id)
                                 cursor.execute("UPDATE naibor_info SET timedraw = ? WHERE node_id = ?", (tnow, result[0]))
                             else:
                                 if MapMarkers[node_id][3] == None and MapMarkers[node_id][0] != None:
@@ -1926,13 +1936,14 @@ if __name__ == "__main__":
                                         if posfromm != (0,0) and item[2] != (0,0):
                                             listmaps.append(posfromm)
                                             listmaps.append(item[2])
-                                            MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2)
+                                            MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2, name=node_id)
                                 elif MapMarkers[node_id][3] != None and MapMarkers[node_id][0] == None:
-                                    MapMarkers[node_id][3].delete()
                                     MapMarkers[node_id][3] = None
+                                    del_mheard(node_id)
                         elif MapMarkers[node_id][3] != None:
-                            MapMarkers[node_id][3].delete()
                             MapMarkers[node_id][3] = None
+                            del_mheard(node_id)
+
                 except Exception as e:
                     print(f"Error mheard: {e}")
 
@@ -1943,8 +1954,6 @@ if __name__ == "__main__":
                 if node_id in MapMarkers:
                     if MapMarkers[node_id][6] != None and (tnow - node_time) >= 3:
                         MapMarkers[node_id][6].change_icon(7)
-                        # MapMarkers[node_id][6].delete()
-                        # MapMarkers[node_id][6] = None
 
                     if MapMarkers[node_id][4] != None and MapMarkers[node_id][5] <= 0:
                         MapMarkers[node_id][4].delete()
@@ -1960,7 +1969,7 @@ if __name__ == "__main__":
                                     drawline.append(pos)
                                 pos = (row[9], row[10])
                                 drawline.append(pos)
-                                MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2)
+                                MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2, name=node_id)
                                 MapMarkers[node_id][5] = 30
                             else:
                                 MapMarkers[node_id][5] -= 1
@@ -1978,10 +1987,10 @@ if __name__ == "__main__":
                 if line_count > max_lines:
                     delete_count = (line_count - max_lines) + 10
                     text_box1.configure(state="normal")
-                    
+
                     # Unbind tags for the specific range before deleting
                     unbind_tags_for_range(text_box1, "1.0", f"{delete_count}.0")
-                    
+
                     text_box1.delete("1.0", f"{delete_count}.0")
                     text_box1.configure(state="disabled")
                     print(f"Clearing Frame 1 ({delete_count} lines)")
@@ -1991,10 +2000,10 @@ if __name__ == "__main__":
                 if line_count > max_lines:
                     delete_count = (line_count - max_lines) + 10
                     text_box2.configure(state="normal")
-                    
+
                     # Unbind tags for the specific range before deleting
                     unbind_tags_for_range(text_box2, "1.0", f"{delete_count}.0")
-                    
+
                     text_box2.delete("1.0", f"{delete_count}.0")
                     text_box2.configure(state="disabled")
                     print(f"Clearing Frame 2 ({delete_count} lines)")
@@ -2084,9 +2093,9 @@ if __name__ == "__main__":
 
     # Left Top Window
     text_box1 = create_text(frame, 0, 0, 25, 90)
-    insert_colored_text(text_box1,  "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
+    insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.3.77 (Nov 2024) By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.3.9 (Nov 2024) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.insert("end", "─" * 60 + "\n", '#414141')
     text_box1.tag_configure('#414141', foreground='#414141')
