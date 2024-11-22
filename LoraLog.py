@@ -57,6 +57,7 @@ MapMarkers = {}
 ok2Send = 0
 chan2send = 0
 MyLora = ''
+MyLoraID = ''
 MyLora_SN = ''
 MyLora_LN = ''
 MyLora_Lat = -8.0
@@ -254,6 +255,8 @@ config['meshtastic'] = {
     'max_lines': '1000',
     'map_tileserver': 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
     'map_cache': 'False',
+    'weatherbeacon': 'False',
+    'weatherjson': 'http://127.0.0.1/weather.json',
 }
 
 if not os.path.exists('config.ini'):
@@ -293,10 +296,15 @@ def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
     graph = ['─'] * graph_length
     graph[position0] = '┴'
     graph[position] = '╫'
-    return '└' + ''.join(graph) + '┘'
+    txt = "Poor"
+    if value > -15.0:
+        txt = "Fair"
+    if value > -7.0:
+        txt = "Good"
+    return '└' + ''.join(graph) + '┘ ' + txt
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send
+    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -344,8 +352,9 @@ def connect_meshtastic(force_connect=False):
                 isLora = False
                 return None
     nodeInfo = meshtastic_client.getMyNodeInfo()
-    logging.debug("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
+    logging.error("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
     insert_colored_text(text_box1, " Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
+    MyLoraID = nodeInfo['num']
     MyLora = (nodeInfo['user']['id'])[1:]
     MyLora_SN = nodeInfo['user']['shortName']
     if MyLora_SN == '':
@@ -1855,9 +1864,18 @@ if __name__ == "__main__":
                         checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                     else:
                         node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
+                        # ["#de6933", "#c9a500", "#00c983"] # red, yellow, green
+                        if row[16] > -7:
+                            color = "#00c983"  # green
+                        elif -15 <= row[16] <= -7:
+                            color = "#c9a500"  # orange
+                        else:
+                            color = "#de6933"  # red
                         insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#00c983", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}{node_sig}\n", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f"{node_sig}\n", color)
+
                         checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
         except Exception as e:
             logging.error(f"Error updating active nodes: {e}")
@@ -2020,6 +2038,9 @@ if __name__ == "__main__":
                 query = f"DELETE FROM movement_log WHERE DATETIME(timerec, 'auto') < DATETIME('now', '-1 day');"
                 cursor.execute(query)
 
+                # Send weather update
+                weather_update()
+
                 gc.collect()
 
             cursor.close()
@@ -2035,6 +2056,51 @@ if __name__ == "__main__":
                     print(f"Error sending Ping: {e}")
 
         root.after(1000, update_active_nodes)
+
+    # A Litle Fun with Weather, using the json file from a weather station and sending it to mesh
+    if config.get('meshtastic', 'weatherbeacon') == 'True':
+        from urllib.request import urlopen
+        from json import load as json_load
+        from meshtastic.protobuf import portnums_pb2, telemetry_pb2
+        
+    def weather_update():
+        global meshtastic_client, MyLoraID, MyLora, dbconnection
+        if config.get('meshtastic', 'weatherbeacon') == 'True':
+            weatherurl = config.get('meshtastic', 'weatherjson')
+            if weatherurl != '':
+                try:
+                    url = urlopen(weatherurl)
+                    wjson = json_load(url)
+                    print(f"Temp: {wjson['tempc']}°C, Humidity: {wjson['humidity']}%, Pressure: {wjson['baromabshpa']}hPa")
+                    # Send it to mesh
+                    telemetry_data = telemetry_pb2.Telemetry()
+                    telemetry_data.time = int(time.time())
+                    telemetry_data.environment_metrics.temperature = round(wjson['tempc'], 2)
+                    telemetry_data.environment_metrics.relative_humidity = int(wjson['humidity'])
+                    telemetry_data.environment_metrics.barometric_pressure = round(wjson['baromabshpa'], 2)
+                    meshtastic_client.sendData(
+                        telemetry_data,
+                        destinationId = "^all",
+                        portNum = portnums_pb2.PortNum.TELEMETRY_APP,
+                        wantResponse = False,
+                        channelIndex = 0,
+                        hopLimit = 3
+                    )
+                    # Lets add it to DB
+                    cursor = dbconnection.cursor()
+                    cursor.execute("INSERT INTO environment_metrics (node_hex, node_id, temperature, relative_humidity, barometric_pressure) VALUES (?, ?, ?, ?, ?)", (MyLora, MyLoraID, round(wjson['tempc'], 2), int(wjson['humidity']), round(wjson['baromabshpa'], 2)))
+                    cursor.close()
+                    # And finaly send to chatbox so we know it send to!
+                    text_raws = 'Node Telemetry'
+                    text_raws += '\n' + (' ' * 11) + 'Temperature: ' + str(round(wjson['tempc'], 1)) + '°C'
+                    text_raws += ' Humidity: ' + str(wjson['humidity']) + '%'
+                    text_raws += ' Pressure: ' + str(round(wjson['baromabshpa'], 2)) + 'hPa'
+                    insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + unescape(f"{MyLora_SN} ({MyLora_LN})") + "\n", "#d1d1d1")
+                    insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
+
+                except Exception as e:
+                    logging.error(f"Error sending Weather: {e}")
+                    print(f"Error sending Weather: {e}")
 
     def start_mesh():
         global overlay, root, ok2Send, database, dbconnection

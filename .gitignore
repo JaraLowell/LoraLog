@@ -8,3 +8,4 @@ venv/
 *.psd
 tkintermapview2/__pycache__/
 *.log
+config.ini
