@@ -446,6 +446,8 @@ class TkinterMapView(tkinter.Frame):
             key_zoom, key_x, key_y = map(int, key.split('_'))
             if key_zoom == self.zoom and not self.is_within_viewport(key_x, key_y):
                 keys_to_delete.append(key)
+            elif key_zoom != self.zoom:
+                keys_to_delete.append(key)
 
         if len(keys_to_delete):
             print(f"Deleting {len(keys_to_delete)} / {len(self.tile_image_cache)} tiles from cache")
