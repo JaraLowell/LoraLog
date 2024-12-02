@@ -785,6 +785,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                         node_id_exists = dbcursor.execute("SELECT node_id FROM naibor_info WHERE node_id = ?", (packet["from"],)).fetchone()
                         if node_id_exists:
                             dbcursor.execute("DELETE FROM naibor_info WHERE node_id = ?", (packet["from"],))
+                        if fromraw in MapMarkers and MapMarkers[fromraw][3] != None:
+                            MapMarkers[fromraw][3] = None
+                            del_mheard(fromraw)
                         text_raws += ' No Data'
                 elif data["portnum"] == "RANGE_TEST_APP":
                     text_raws = 'Node RangeTest'
@@ -930,7 +933,7 @@ def on_meshtastic_message(packet, interface, loop=None):
         dbcursor.close()
 
 def updatesnodes():
-    global MyLora, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, MyLora_SN
+    global MyLora, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN
     info = ''
     tnow = int(time.time())
     with dbconnection:
@@ -960,6 +963,9 @@ def updatesnodes():
                                 if lora_sn == '':
                                     lora_sn = str(nodeID[-4:])
                                     lora_ln = "Meshtastic " + str(nodeID[-4:])
+                                if nodeID == MyLora:
+                                    MyLora_SN = lora_sn
+                                    MyLora_LN = lora_ln
                                 cursor.execute("UPDATE node_info SET mac_id = ?, long_name = ?, short_name = ?, hw_model_id = ?, is_licensed = ? WHERE hex_id = ?", (tmp.get('macaddr', 'N/A'), lora_ln, lora_sn, tmp.get('hwModel', 'N/A'), tmp.get('isLicensed', False) ,nodeID))
 
                         if "position" in info:
@@ -1287,7 +1293,7 @@ def plot_environment_log(node_id, frame , width=512, height=106):
     max_temp = max(temperatures)
     min_humidity = min(humidities)
     max_humidity = max(humidities)
-    ax1.set_ylim(min(min_temp, min_humidity) - 10, max(max_temp, max_humidity) + 10)
+    ax1.set_ylim(min(min_temp, -15.0), max(120.0, max_humidity))
 
     # Add pressure data if available
     if pressures[-1] != 0 and pressures[0] != 0:
@@ -1963,6 +1969,7 @@ if __name__ == "__main__":
                             del_mheard(node_id)
 
                 except Exception as e:
+                    logging.error(f"Error mheard: {e}")
                     print(f"Error mheard: {e}")
 
             result = cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
@@ -2071,7 +2078,6 @@ if __name__ == "__main__":
                 try:
                     url = urlopen(weatherurl)
                     wjson = json_load(url)
-                    print(f"Temp: {wjson['tempc']}°C, Humidity: {wjson['humidity']}%, Pressure: {wjson['baromabshpa']}hPa")
                     # Send it to mesh
                     telemetry_data = telemetry_pb2.Telemetry()
                     telemetry_data.time = int(time.time())
