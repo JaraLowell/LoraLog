@@ -56,7 +56,7 @@ trace_thread = None
 MapMarkers = {}
 ok2Send = 0
 chan2send = 0
-MyLora = ''
+MyLora = 'ffffffff'
 MyLoraID = ''
 MyLora_SN = ''
 MyLora_LN = ''
@@ -319,6 +319,10 @@ def connect_meshtastic(force_connect=False):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+    pub.subscribe(on_meshtastic_message, "meshtastic.receive", loop=asyncio.get_event_loop())
+    pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
+    pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
+
     meshtastic_client = None
     # Initialize Meshtastic interface
     retry_limit = 3
@@ -330,7 +334,7 @@ def connect_meshtastic(force_connect=False):
     if config.get('meshtastic', 'interface') != 'tcp':
         cnto = com_port
     logging.debug("Connecting to meshtastic on " + cnto + "...")
-    
+
     insert_colored_text(text_box1, " Connecting to meshtastic on " + cnto + "...\n", "#00c983")
     while not successful and attempts <= retry_limit:
         try:
@@ -360,10 +364,6 @@ def connect_meshtastic(force_connect=False):
     if MyLora_SN == '':
         MyLora_SN = str(MyLora)[-4:]
     MyLora_LN = nodeInfo['user']['longName']
-
-    pub.subscribe(on_meshtastic_message, "meshtastic.receive", loop=asyncio.get_event_loop())
-    pub.subscribe(on_meshtastic_connection, "meshtastic.connection.established")
-    pub.subscribe(on_lost_meshtastic_connection,"meshtastic.connection.lost")
 
     print("MyLora: " + MyLora)
     root.wm_title("Meshtastic Lora Logger - !" + str(MyLora).upper() + " - " + unescape(MyLora_SN))
@@ -426,6 +426,7 @@ def connect_meshtastic(force_connect=False):
         text_area.configure(state="disabled")
         text_boxes['Direct Message'] = text_area
 
+    time.sleep(0.5)
     updatesnodes()
     return meshtastic_client
 
@@ -547,7 +548,7 @@ def on_meshtastic_message(packet, interface, loop=None):
     global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon
     if MyLora == '':
         print('*** MyLora is empty ***\n')
-        return
+        # return
 
     ischat = False
     viaMqtt = False
@@ -564,7 +565,7 @@ def on_meshtastic_message(packet, interface, loop=None):
 
     with dbconnection:
         if "viaMqtt" in packet:
-                viaMqtt = True
+            viaMqtt = True
 
         if "hopStart" in packet:
             hopStart = packet.get('hopStart', -1)
@@ -897,6 +898,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                     insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
                     if ischat == True:
                         add_message(fromraw, text_raws, tnow, msend=text_chns)
+
                     if viaMqtt == True:
                         insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
                     else:
@@ -984,10 +986,12 @@ def updatesnodes():
                                 if MyLora not in MapMarkers:
                                     MyLora_Lat = result[9]
                                     MyLora_Lon = result[10]
+                                    time.sleep(0.5)
                                     mapview.set_zoom(11)
                                     MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None]
                                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 8), data=MyLora, command = click_command)
                                     MapMarkers[MyLora][0].text_color = '#e67a7f'
+                                    time.sleep(0.5)
                                     mapview.set_position(MyLora_Lat, MyLora_Lon)
                             else:
                                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
@@ -1858,7 +1862,7 @@ if __name__ == "__main__":
                     if row[24] != 0.0:
                         node_dist = f"{row[24]}km"
                     elif row[9] != -8.0 and row[10] != -8.0:
-                        node_dist = calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon)
+                        node_dist = calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon) + 0.01
                         cursor = dbconnection.cursor()
                         cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
                         cursor.close()
@@ -1866,7 +1870,7 @@ if __name__ == "__main__":
                     if row[15]:
                         insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}\n", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f" {str(node_dist).ljust(9)}\n", "#9d9d9d")
                         checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                     else:
                         node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
@@ -1879,7 +1883,7 @@ if __name__ == "__main__":
                             color = "#de6933"  # red
                         insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#00c983", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f" {str(node_dist).ljust(9)}", "#9d9d9d")
                         insert_colored_text(text_box_middle, f"{node_sig}\n", color)
 
                         checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
