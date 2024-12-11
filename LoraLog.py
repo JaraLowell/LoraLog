@@ -55,7 +55,7 @@ position_thread  = None
 trace_thread = None
 MapMarkers = {}
 ok2Send = 0
-chan2send = 0
+chan2send = -1
 MyLora = 'ffffffff'
 MyLoraID = ''
 MyLora_SN = ''
@@ -381,40 +381,37 @@ def connect_meshtastic(force_connect=False):
     modem_preset_enum = lora_config.modem_preset
     modem_preset_string = config_pb2._CONFIG_LORACONFIG_MODEMPRESET.values_by_number[modem_preset_enum].name
     channels = nodeInfo.channels
+    chan2send = 0
     addtotab = False
     mylorachan = {}
     if channels:
         for channel in channels:
-            psk_base64 = b64encode(channel.settings.psk).decode('utf-8')
-            
-            if channel.settings.name == '':
-                mylorachan[channel.index] = str(channel.index)
-                addtotab = False
-            else:
-                mylorachan[channel.index] = channame(channel.settings.name)
+            addtotab = True
+            if len(str(channel.settings)) > 4:
+                psk_base64 = b64encode(channel.settings.psk).decode('utf-8')
                 addtotab = True
-            
-            if channel.index == 0 and mylorachan[channel.index] == '0':
-                mylorachan[channel.index] = channame(modem_preset_string)
-                addtotab = True
+                if channel.settings.name == '':
+                    mylorachan[channel.index] = channame(modem_preset_string)
+                else:
+                    mylorachan[channel.index] = channame(channel.settings.name)
 
-            if channel.index == 0:
-                chan2send = 0
+                if chan2send == -1:
+                    chan2send = channel.index
 
-            # Need add to tabs for each channel
-            if mylorachan[channel.index] != '' and addtotab:
-                if mylorachan[channel.index] not in text_boxes: # Reconnected ?
+                # Need add to tabs for each channel
+                if mylorachan[channel.index] != '' and addtotab:
+                    if mylorachan[channel.index] not in text_boxes: # Reconnected ?
 
-                    insert_colored_text(text_box1, " Joined Lora Channel " + mylorachan[channel.index] + " using Key " + psk_base64 + "\n", "#00c983")
+                        insert_colored_text(text_box1, " Joined Lora Channel " + str(channel.index) + " " + mylorachan[channel.index] + " using Key " + psk_base64 + "\n", "#00c983")
 
-                    tab = Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
-                    tab.grid_rowconfigure(0, weight=1)
-                    tab.grid_columnconfigure(0, weight=1)
-                    tabControl.add(tab, text=mylorachan[channel.index], padding=(0, 0, 0, 0))
-                    text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
-                    text_area.grid(sticky='nsew')
-                    text_area.configure(state="disabled")
-                    text_boxes[mylorachan[channel.index]] = text_area
+                        tab = Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
+                        tab.grid_rowconfigure(0, weight=1)
+                        tab.grid_columnconfigure(0, weight=1)
+                        tabControl.add(tab, text=mylorachan[channel.index], padding=(0, 0, 0, 0))
+                        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
+                        text_area.grid(sticky='nsew')
+                        text_area.configure(state="disabled")
+                        text_boxes[mylorachan[channel.index]] = text_area
 
     if 'Direct Message' not in text_boxes:
         tab = Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
@@ -767,7 +764,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                                 if nodeid not in MapMarkers:
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
                                     MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=nodeid, command = click_command)
-                                dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ? WHERE hex_id = ?", (tnow, is_mqtt, nodeid))
+                                dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ? WHERE hex_id = ?", (tnow, is_mqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
                                 nodeid = tmp[5]
                                 if tmp[9] != -8.0 and tmp[10] != -8.0:
                                     nbPos = f"({tmp[9]}, {tmp[10]})"
