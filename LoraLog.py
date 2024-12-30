@@ -349,10 +349,10 @@ def connect_meshtastic(force_connect=False):
             if attempts <= retry_limit:
                 insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                 insert_colored_text(text_box1, " Connect re-try:" + str(e), "#db6544")
-                logging.error("Connect re-try: ", str(e))
+                logging.error("Connect re-try: " + str(e))
                 time.sleep(5)
             else:
-                logging.error("Could not connect: s", str(e))
+                logging.error("Could not connect: " + str(e))
                 isLora = False
                 return None
     nodeInfo = meshtastic_client.getMyNodeInfo()
@@ -512,10 +512,6 @@ def idToHex(nodeId):
 def MapMarkerDelete(node_id):
     global MapMarkers, mapview
     if node_id in MapMarkers:
-        # Mheard
-        if MapMarkers[node_id][3] != None:
-            MapMarkers[node_id][3] = None
-        del_mheard(node_id)
         # Move Trail
         if MapMarkers[node_id][4] != None:
             MapMarkers[node_id][4].delete()
@@ -534,11 +530,44 @@ def MapMarkerDelete(node_id):
             MapMarkers[node_id].pop()
         # Deleting Mehard lines and Move Trail in map_widget, as we not always get all via delete up above
 
-def del_mheard(node_id):
-    for i in range(len(mapview.canvas_path_list) - 1, -1, -1):
-        if mapview.canvas_path_list[i].name == node_id and mapview.canvas_path_list[i].path_color == '#006642':
-            mapview.canvas_path_list[i].delete()
-            del mapview.canvas_path_list[i]
+# Lets work the local nodes heard list
+HeardDB = {}
+def logheard(sourseID, nodeID, dbdata):
+    global HeardDB, MapMarkers, mapview
+    tnow = int(time.time())
+    key = (sourseID, nodeID)
+    if key in HeardDB:
+        HeardDB[key][0] = tnow
+        HeardDB[key][1] = dbdata
+    else:
+        HeardDB[key] = [tnow, dbdata, None] # Node not heard yet, add to db
+
+    if sourseID in MapMarkers and nodeID in MapMarkers:
+        if HeardDB[key][2] == None:
+            listmaps = []
+            listmaps.append(MapMarkers[sourseID][0].get_position())
+            listmaps.append(MapMarkers[nodeID][0].get_position())
+            HeardDB[key][2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID)
+
+# We moved need re draw 
+def redrawnaibors(sourceID):
+    for key in HeardDB.keys():
+        if key[0] == sourceID or key[1] == sourceID:
+            HeardDB[key][2].delete()
+            HeardDB[key][2] = None
+            listmaps = []
+            listmaps.append(MapMarkers[key[0]][0].get_position())
+            listmaps.append(MapMarkers[key[1]][0].get_position())
+            HeardDB[key][2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourceID)
+
+def deloldheard(deltime):
+    tnow = int(time.time())
+    keys_to_delete = [key for key, value in HeardDB.items() if tnow - value[0] > (deltime / 3)]
+    for key in keys_to_delete:
+        if HeardDB[key][2] != None:
+            HeardDB[key][2].delete()
+            HeardDB[key][2] = None
+        del HeardDB[key]
 
 def on_meshtastic_message(packet, interface, loop=None):
     # print(yaml.dump(packet))
@@ -563,6 +592,9 @@ def on_meshtastic_message(packet, interface, loop=None):
     with dbconnection:
         if "viaMqtt" in packet:
             viaMqtt = True
+        elif MyLora != fromraw:
+            logheard(MyLora, fromraw, packet.get('rxSnr', 0.00))
+        # else check if we have this in neighbor text; and no sqllite as that changes to fast; stroe neighbor text in memory and ony to sql on neighbor package
 
         if "hopStart" in packet:
             hopStart = packet.get('hopStart', -1)
@@ -676,7 +708,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                             # We moved add to movement log ?
                             dbcursor.execute("INSERT INTO movement_log (node_hex, node_id, timerec, from_latitude, from_longitude, from_altitude, to_latitude, to_longitude, to_altitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (fromraw, packet["from"], tnow, result[9], result[10], result[11], nodelat, nodelon, nodealt))
                             extra = '(Moved!) '
-                            MapMarkerDelete(fromraw)
+                            # MapMarkerDelete(fromraw)
                         if fromraw == MyLora:
                             MyLora_Lat = nodelat
                             MyLora_Lon = nodelon
@@ -708,6 +740,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                                         MapMarkers[fromraw][7] = mapview.set_polygon(position=(nodelat, nodelon), range_in_meters=(AcMeters * 2),fill_color="gray25")
                     if "satsInView" in position:
                         text_msgs += '(' + str(position.get('satsInView', 0)) + ' satelites)'
+                    if extra == '(Moved!) ':
+                        redrawnaibors(fromraw)
                     text_raws = text_msgs
                 elif data["portnum"] == "NODEINFO_APP":
                     node_info = packet['decoded'].get('user', {})
@@ -747,45 +781,29 @@ def on_meshtastic_message(packet, interface, loop=None):
                             MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                     if "neighborinfo" in data and "neighbors" in data["neighborinfo"]:
                         text = data["neighborinfo"]["neighbors"]
-                        tosql = ''
                         is_mqtt = True
                         if fromraw == MyLora:
                             is_mqtt = False
-                        if fromraw in MapMarkers and MapMarkers[fromraw][3] != None:
-                            MapMarkers[fromraw][3] = None
-                            del_mheard(fromraw)
                         for neighbor in text:
                             nodeid = idToHex(neighbor["nodeId"])[1:]
                             tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ? AND latitude != -8 AND longitude != -8", (nodeid,)).fetchone()
                             nbNide = '!' + nodeid
-                            nbPos = f"(0, 0)"
                             if tmp is not None:
                                 nbNide = str(tmp[5].encode('ascii', 'xmlcharrefreplace'), 'ascii') # unescape(tmp[5])
                                 if nodeid not in MapMarkers:
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
                                     MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=nodeid, command = click_command)
-                                dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ? WHERE hex_id = ?", (tnow, is_mqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
+                                    dbcursor.execute("UPDATE node_info SET timerec = ? WHERE hex_id = ?", (tnow, nodeid)) # We dont need to update this as we only update if we hear it our self
                                 nodeid = tmp[5]
-                                if tmp[9] != -8.0 and tmp[10] != -8.0:
-                                    nbPos = f"({tmp[9]}, {tmp[10]})"
                             else:
                                 nodeid = '!' + nodeid
+
                             text_raws += '\n' + (' ' * 11) + nodeid
                             if "snr" in neighbor:
                                 text_raws += ' (' + str(neighbor["snr"]) + 'dB)'
-                            tmpz = neighbor.get('snr', 0)
-                            tosql += f'("{nbNide}",{tmpz},{nbPos}),'
-                        if tosql != '':
-                            tosql = tosql[:-1]
-                            node_pos = f"({result[9]}, {result[10]})"
-                            dbcursor.execute("INSERT OR REPLACE INTO naibor_info (node_id, hex_id, node_pos, timerec, timedraw, neighbor_text) VALUES (?, ?, ?, ?, 0, ?)", (packet["from"], fromraw, node_pos, tnow, tosql))
+
+                            logheard(fromraw, idToHex(neighbor["nodeId"])[1:], neighbor.get('snr', 0.00))
                     else:
-                        node_id_exists = dbcursor.execute("SELECT node_id FROM naibor_info WHERE node_id = ?", (packet["from"],)).fetchone()
-                        if node_id_exists:
-                            dbcursor.execute("DELETE FROM naibor_info WHERE node_id = ?", (packet["from"],))
-                        if fromraw in MapMarkers and MapMarkers[fromraw][3] != None:
-                            MapMarkers[fromraw][3] = None
-                            del_mheard(fromraw)
                         text_raws += ' No Data'
                 elif data["portnum"] == "RANGE_TEST_APP":
                     text_raws = 'Node RangeTest'
@@ -1692,14 +1710,18 @@ if __name__ == "__main__":
             if result[23] > 0:
                 text_loc += 'HopsAway  : ' + str(result[23])
 
+        text_naib = ''
         dbcursor = dbconnection.cursor()
-        yada = dbcursor.execute("SELECT * FROM naibor_info WHERE hex_id = ?", (marker.data,)).fetchone()
+        for key in HeardDB.keys():
+            if key[0] == marker.data:
+                yada = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (key[1],)).fetchone()
+                if yada is not None:
+                    text_naib += f" {yada[5]} ({str(HeardDB[key][1])}dB),"
+                else:
+                    text_naib += f" !{key[1]} ({str(HeardDB[key][1])}dB),"
         dbcursor.close()
-        if yada is not None:
-            text_loc += '\n  Naibors  :'
-            processed_results = parse_result(yada[5])
-            for item in processed_results:
-                text_loc += f" {item[0]} ({item[1]}dB)"
+        if text_naib != '':
+            text_loc += '\n  Naibors  :' + text_naib[:-1]
 
         insert_colored_text(info_label, text_loc, "#d2d2d2")
 
@@ -1928,50 +1950,12 @@ if __name__ == "__main__":
         global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root
         tnow = int(time.time())
 
+        # Delete or check old heard nodes
+        deloldheard(map_delete)
+
         # Let rework mHeard Lines
         with dbconnection:
             cursor = dbconnection.cursor()
-
-            results = cursor.execute("SELECT * FROM naibor_info ORDER BY timerec DESC").fetchall()
-            for result in results:
-                node_id = result[1]
-                try:
-                    if node_id in MapMarkers:
-                        if tnow - result[3] < 900:
-                            if result[4] == 0:
-                                if MapMarkers[node_id][3] != None:
-                                    MapMarkers[node_id][3] = None
-                                    del_mheard(node_id)
-                                processed_results = parse_result(result[5])
-                                for item in processed_results:
-                                    listmaps = []
-                                    if MapMarkers[node_id][0] != None:
-                                        posfromm = ast.literal_eval(result[2])
-                                        if posfromm != (0,0) and item[2] != (0,0):
-                                            listmaps.append(posfromm)
-                                            listmaps.append(item[2])
-                                            MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2, name=node_id)
-                                cursor.execute("UPDATE naibor_info SET timedraw = ? WHERE node_id = ?", (tnow, result[0]))
-                            else:
-                                if MapMarkers[node_id][3] == None and MapMarkers[node_id][0] != None:
-                                    processed_results = parse_result(result[5])
-                                    for item in processed_results:
-                                        listmaps = []
-                                        posfromm = ast.literal_eval(result[2])
-                                        if posfromm != (0,0) and item[2] != (0,0):
-                                            listmaps.append(posfromm)
-                                            listmaps.append(item[2])
-                                            MapMarkers[node_id][3] = mapview.set_path(listmaps, color="#006642", width=2, name=node_id)
-                                elif MapMarkers[node_id][3] != None and MapMarkers[node_id][0] == None:
-                                    MapMarkers[node_id][3] = None
-                                    del_mheard(node_id)
-                        elif MapMarkers[node_id][3] != None:
-                            MapMarkers[node_id][3] = None
-                            del_mheard(node_id)
-
-                except Exception as e:
-                    logging.error(f"Error mheard: {e}")
-                    print(f"Error mheard: {e}")
 
             result = cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
             for row in result:
@@ -2168,7 +2152,7 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.3.9 (Nov 2024) By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.4.1 (Dec 2024) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.insert("end", "─" * 60 + "\n", '#414141')
     text_box1.tag_configure('#414141', foreground='#414141')

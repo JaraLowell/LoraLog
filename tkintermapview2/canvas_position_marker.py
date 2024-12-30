@@ -117,6 +117,9 @@ class CanvasPositionMarker:
         self.position = (deg_x, deg_y)
         self.draw()
 
+    def get_position(self):
+        return self.position
+
     def set_text(self, text):
         self.text = text
         self.draw()
