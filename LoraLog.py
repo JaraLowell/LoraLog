@@ -532,10 +532,12 @@ def MapMarkerDelete(node_id):
 
 # Lets work the local nodes heard list
 HeardDB = {}
-def logheard(sourseID, nodeID, dbdata):
+def logheard(sourseIDx, nodeIDx, dbdata):
     global HeardDB, MapMarkers, mapview
     tnow = int(time.time())
-    key = (sourseID, nodeID)
+    key = (sourseIDx, nodeIDx)
+    sourseID = idToHex(sourseIDx)[1:]
+    nodeID = idToHex(nodeIDx)[1:]
     if key in HeardDB:
         HeardDB[key][0] = tnow
         HeardDB[key][1] = dbdata
@@ -550,15 +552,17 @@ def logheard(sourseID, nodeID, dbdata):
             HeardDB[key][2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID)
 
 # We moved need re draw 
-def redrawnaibors(sourceID):
+def redrawnaibors(sourceIDx):
     for key in HeardDB.keys():
-        if key[0] == sourceID or key[1] == sourceID:
+        if key[0] == sourceIDx or key[1] == sourceIDx:
             HeardDB[key][2].delete()
             HeardDB[key][2] = None
             listmaps = []
-            listmaps.append(MapMarkers[key[0]][0].get_position())
-            listmaps.append(MapMarkers[key[1]][0].get_position())
-            HeardDB[key][2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourceID)
+            sourseID = idToHex(key[0])[1:]
+            nodeID = idToHex(key[1])[1:]
+            listmaps.append(MapMarkers[sourseID][0].get_position())
+            listmaps.append(MapMarkers[nodeID][0].get_position())
+            HeardDB[key][2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID)
 
 def deloldheard(deltime):
     tnow = int(time.time())
@@ -593,7 +597,7 @@ def on_meshtastic_message(packet, interface, loop=None):
         if "viaMqtt" in packet:
             viaMqtt = True
         elif MyLora != fromraw:
-            logheard(MyLora, fromraw, packet.get('rxSnr', 0.00))
+            logheard(MyLoraID, packet["from"], packet.get('rxSnr', 0.00))
         # else check if we have this in neighbor text; and no sqllite as that changes to fast; stroe neighbor text in memory and ony to sql on neighbor package
 
         if "hopStart" in packet:
@@ -741,7 +745,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                     if "satsInView" in position:
                         text_msgs += '(' + str(position.get('satsInView', 0)) + ' satelites)'
                     if extra == '(Moved!) ':
-                        redrawnaibors(fromraw)
+                        redrawnaibors(packet["from"])
                     text_raws = text_msgs
                 elif data["portnum"] == "NODEINFO_APP":
                     node_info = packet['decoded'].get('user', {})
@@ -802,7 +806,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                             if "snr" in neighbor:
                                 text_raws += ' (' + str(neighbor["snr"]) + 'dB)'
 
-                            logheard(fromraw, idToHex(neighbor["nodeId"])[1:], neighbor.get('snr', 0.00))
+                            logheard(packet["from"], neighbor["nodeId"], neighbor.get('snr', 0.00))
                     else:
                         text_raws += ' No Data'
                 elif data["portnum"] == "RANGE_TEST_APP":
@@ -1713,8 +1717,8 @@ if __name__ == "__main__":
         text_naib = ''
         dbcursor = dbconnection.cursor()
         for key in HeardDB.keys():
-            if key[0] == marker.data:
-                yada = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (key[1],)).fetchone()
+            if idToHex(key[0])[1:] == marker.data:
+                yada = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (idToHex(key[1])[1:],)).fetchone()
                 if yada is not None:
                     text_naib += f" {yada[5]} ({str(HeardDB[key][1])}dB),"
                 else:
@@ -2053,8 +2057,30 @@ if __name__ == "__main__":
     if config.get('meshtastic', 'weatherbeacon') == 'True':
         from urllib.request import urlopen
         from json import load as json_load
-        from meshtastic.protobuf import portnums_pb2, telemetry_pb2
-        
+        from meshtastic.protobuf import portnums_pb2, telemetry_pb2, mesh_pb2
+
+    # Under construction
+    # option to manually send NeighborInfo
+    def neighbors_update():
+        neighbors_data = mesh_pb2.NeighborInfo()
+        neighbors_data.node_id = MyLoraID
+        neighbors_data.node_broadcast_interval_secs = (60 * 20)
+
+        for key in HeardDB.keys():
+            if key[0] == MyLoraID:
+                neighbor = neighbors_data.neighbors.add()
+                neighbor.node_id = key[1]
+                neighbor.snr = HeardDB[key][1]
+
+        meshtastic_client.sendData(
+            neighbors_data,
+            destinationId = "^all",
+            portNum = portnums_pb2.PortNum.NEIGHBORINFO_APP,
+            wantResponse = False,
+            channelIndex = 0,
+            hopLimit = 3
+        )
+
     def weather_update():
         global meshtastic_client, MyLoraID, MyLora, dbconnection
         if config.get('meshtastic', 'weatherbeacon') == 'True':
