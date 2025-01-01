@@ -20,7 +20,7 @@ import ast
 
 # Tkinter imports
 from PIL import Image, ImageTk
-from tkinter import ttk, Frame, Text, Label, Entry, Button, StringVar, LabelFrame #, Toplevel
+from tkinter import ttk, Frame, Text, Label, Entry, Button, StringVar, LabelFrame, Toplevel
 from customtkinter import CTk
 from tkintermapview2 import TkinterMapView
 import textwrap
@@ -380,6 +380,7 @@ def connect_meshtastic(force_connect=False):
     lora_config = nodeInfo.localConfig.lora
     modem_preset_enum = lora_config.modem_preset
     modem_preset_string = config_pb2._CONFIG_LORACONFIG_MODEMPRESET.values_by_number[modem_preset_enum].name
+    logging.error("Using modem preset:\n %s", modem_preset_string)
     channels = nodeInfo.channels
     chan2send = 0
     addtotab = False
@@ -505,9 +506,12 @@ def print_range(range_in_meters):
         return f"{range_in_km:.0f}km"
 
 def idToHex(nodeId):
-    in_hex = hex(nodeId)
-    if len(in_hex)%2: in_hex = in_hex.replace("0x","0x0") # Need account for leading zero, wish hex removes if it has one
-    return f"!{in_hex[2:]}"
+    if type(nodeId) is int:
+        if nodeId > 0:
+            in_hex = hex(nodeId)
+            if len(in_hex)%2: in_hex = in_hex.replace("0x","0x0") # Need account for leading zero, wish hex removes if it has one
+            return f"!{in_hex[2:]}"
+    return '!ffffffff'
 
 def MapMarkerDelete(node_id):
     global MapMarkers, mapview
@@ -581,9 +585,6 @@ def on_meshtastic_message(packet, interface, loop=None):
         # return
 
     ischat = False
-    viaMqtt = False
-    hopStart = -1
-
     tnow = int(time.time())
 
     text_from = ''
@@ -593,16 +594,15 @@ def on_meshtastic_message(packet, interface, loop=None):
         text_from = idToHex(packet["from"])[1:]
     fromraw = text_from
 
+    viaMqtt = False
+    if "viaMqtt" in packet:
+        viaMqtt = True
+
+    hopStart = -1
+    if "hopStart" in packet:
+        hopStart = packet.get('hopStart', 0) - packet.get('hopLimit', 0) # packet.get('hopStart', -1)
+
     with dbconnection:
-        if "viaMqtt" in packet:
-            viaMqtt = True
-        elif MyLora != fromraw:
-            logheard(MyLoraID, packet["from"], packet.get('rxSnr', 0.00))
-        # else check if we have this in neighbor text; and no sqllite as that changes to fast; stroe neighbor text in memory and ony to sql on neighbor package
-
-        if "hopStart" in packet:
-            hopStart = packet.get('hopStart', -1)
-
         dbcursor = dbconnection.cursor()
         if text_from != '':
             result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
@@ -778,16 +778,12 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_raws = 'Node Info No Data'
                 elif data["portnum"] == "NEIGHBORINFO_APP":
                     text_raws = 'Node Neighborinfo'
-                    listmaps = []
                     if fromraw not in MapMarkers:
                         if result[9] != -8.0 and result[10] != -8.0:
                             MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
                             MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                     if "neighborinfo" in data and "neighbors" in data["neighborinfo"]:
                         text = data["neighborinfo"]["neighbors"]
-                        is_mqtt = True
-                        if fromraw == MyLora:
-                            is_mqtt = False
                         for neighbor in text:
                             nodeid = idToHex(neighbor["nodeId"])[1:]
                             tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ? AND latitude != -8 AND longitude != -8", (nodeid,)).fetchone()
@@ -913,6 +909,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_via = ''
                 if viaMqtt == True:
                     text_via = ' via mqtt'
+                elif hopStart > 0:
+                    text_via = ' via ' + str(hopStart) + ' node'
+
                 if text_raws != '' and MyLora != fromraw:
                     insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
                     if ischat == True:
@@ -922,8 +921,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                         insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
                     else:
                         text_from = ''
-                        if hopStart > 0:
-                            text_from = '\n' + (' ' * 11) + str(hopStart) + ' hops '
                         if nodesnr != 0 and MyLora != fromraw:
                             if text_from == '':
                                 text_from = '\n' + (' ' * 11)
@@ -940,6 +937,8 @@ def on_meshtastic_message(packet, interface, loop=None):
                 insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] No fromId in packet\n', "#c24400")
         else:
             insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + ']', "#d1d1d1")
+            if hopStart > 0:
+                text_from += ' via ' + str(hopStart) + ' node'
             insert_colored_text(text_box1, ' Encrypted packet from ' + text_from + '\n', "#db6544", tag=fromraw)
 
             if fromraw not in MapMarkers:
@@ -950,7 +949,11 @@ def on_meshtastic_message(packet, interface, loop=None):
                     MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
             elif fromraw in MapMarkers and MapMarkers[fromraw][0] == None:
                 MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
-        
+
+        # Lets add the mheard lines
+        if MyLoraID != 'ffffffff' and packet["from"] != '' and viaMqtt == False and hopStart == 0:
+            logheard(MyLoraID, packet["from"], packet.get('rxSnr', 0.00))
+
         dbcursor.close()
 
 def updatesnodes():
@@ -1923,7 +1926,7 @@ if __name__ == "__main__":
         insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n", "#9d9d9d")
         insert_colored_text(text_box_middle, f" Mem Max : {peekmem:.1f}MB\n\n", "#9d9d9d")
 
-        insert_colored_text(text_box_middle, " F6 Map Extend Mode\n", "#9d9d9d")
+        insert_colored_text(text_box_middle, " F5 Show Node DB\n F6 Map Extend Mode\n", "#9d9d9d")
 
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
@@ -2059,9 +2062,11 @@ if __name__ == "__main__":
         from json import load as json_load
         from meshtastic.protobuf import portnums_pb2, telemetry_pb2, mesh_pb2
 
-    # Under construction
+    # Under construction, not sure yet if this be correct; needs testing!
     # option to manually send NeighborInfo
     def neighbors_update():
+        global meshtastic_client, MyLoraID, MyLora, HeardDB
+
         neighbors_data = mesh_pb2.NeighborInfo()
         neighbors_data.node_id = MyLoraID
         neighbors_data.node_broadcast_interval_secs = (60 * 20)
@@ -2178,7 +2183,7 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.4.1 (Dec 2024) By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.4.0 (Dec 2024) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.insert("end", "─" * 60 + "\n", '#414141')
     text_box1.tag_configure('#414141', foreground='#414141')
@@ -2247,12 +2252,14 @@ if __name__ == "__main__":
             mapview.master.grid(row=0, column=0, rowspan=5, columnspan=3, padx=0, pady=0, sticky='nsew')
         is_mapfullwindow = not is_mapfullwindow
     root.bind('<F6>', toggle_map)
-    '''
-    def show_loradb():
 
+    def show_loradb():
         global dbconnection
+        cursor = dbconnection.cursor()
+        tmpnodes = cursor.execute("SELECT * FROM node_info ORDER BY timerec DESC").fetchall()
+        cursor.close()
         # Create a new window
-        new_window = tk.Toplevel(root)
+        new_window = Toplevel(root)
         new_window.title("LoraDB Nodes")
         new_window.geometry("1440x810")
         new_window.configure(bg="#242424")
@@ -2294,25 +2301,35 @@ if __name__ == "__main__":
         tree.column("uptime", minwidth=90, width=90)
         tree.tag_configure('oddrow', background='#242424')
         tree.tag_configure('evenrow', background='#3d3d3d')
-        tmpnodes = copy.deepcopy(LoraDB)
-        tmpnodes = dict(sorted(tmpnodes.items(), key=lambda item: item[1][0], reverse=True))
+        data = [None] * 14
         i = False
-        for nodeID, data in tmpnodes.items():
-            data[0] = datetime.fromtimestamp(int(data[0])).strftime('%d %b %y %H:%M')
-            data[1] = unescape(data[1])
-            data[2] = unescape(data[2])
-            data[3] = data[3]
-            data[4] = data[4]
-            data[8] = datetime.fromtimestamp(int(data[8])).strftime('%d %b %y')
-            if i:
-                tree.insert("", "end", values=(nodeID, *data), tags=('oddrow',))
+        for entry in tmpnodes:
+            if entry[1] == None:
+                data[0] = datetime.fromtimestamp(int(entry[13])).strftime('%d %b %y %H:%M')
             else:
-                tree.insert("", "end", values=(nodeID, *data), tags=('evenrow',))
+                data[0] = datetime.fromtimestamp(int(entry[1])).strftime('%d %b %y %H:%M')
+            data[1] = unescape(entry[5])
+            data[2] = unescape(entry[4])
+            data[3] = entry[9]
+            data[4] = entry[10]
+            data[5] = entry[11]
+            data[6] = entry[6]
+            data[7] = entry[13]
+            data[8] = datetime.fromtimestamp(int(entry[13])).strftime('%d %b %y')
+            data[9] = str(entry[18]) + '%, ' + str(entry[19]) + 'v'
+            data[10] = entry[15]
+            data[11] = str(entry[16]) + 'dB'
+            data[12] = entry[23]
+            data[13] = entry[14]
+            if i:
+                tree.insert("", "end", values=('!' + str(entry[3]), *data), tags=('oddrow',))
+            else:
+                tree.insert("", "end", values=('!' + str(entry[3]), *data), tags=('evenrow',))
             i = not i
         tree.pack(fill='both', expand=True)
         tmpnodes = None
     root.bind('<F5>', lambda event: show_loradb())
-    '''
+
     # Right Status Window
     frame_middle = Frame(frame, bg="#242424", borderwidth=0, highlightthickness=0, padx=0, pady=0)
     frame_middle.grid(row=0, column=2, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
