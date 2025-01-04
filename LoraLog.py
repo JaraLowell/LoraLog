@@ -380,7 +380,6 @@ def connect_meshtastic(force_connect=False):
     lora_config = nodeInfo.localConfig.lora
     modem_preset_enum = lora_config.modem_preset
     modem_preset_string = config_pb2._CONFIG_LORACONFIG_MODEMPRESET.values_by_number[modem_preset_enum].name
-    logging.error("Using modem preset:\n %s", modem_preset_string)
     channels = nodeInfo.channels
     chan2send = 0
     addtotab = False
@@ -536,7 +535,7 @@ def MapMarkerDelete(node_id):
 
 # Lets work the local nodes heard list
 HeardDB = {}
-def logheard(sourseIDx, nodeIDx, dbdata):
+def logheard(sourseIDx, nodeIDx, dbdata, nodesname):
     global HeardDB, MapMarkers, mapview
     tnow = int(time.time())
     key = (sourseIDx, nodeIDx)
@@ -546,7 +545,7 @@ def logheard(sourseIDx, nodeIDx, dbdata):
         HeardDB[key][0] = tnow
         HeardDB[key][1] = dbdata
     else:
-        HeardDB[key] = [tnow, dbdata, None] # Node not heard yet, add to db
+        HeardDB[key] = [tnow, dbdata, None, nodesname] # Node not heard yet, add to db
 
     if sourseID in MapMarkers and nodeID in MapMarkers:
         if HeardDB[key][2] == None:
@@ -578,7 +577,7 @@ def deloldheard(deltime):
         del HeardDB[key]
 
 def on_meshtastic_message(packet, interface, loop=None):
-    # print(yaml.dump(packet))
+    # print(yaml.dump(packet), end='\n\n')
     global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon
     if MyLora == '':
         print('*** MyLora is empty ***\n')
@@ -593,6 +592,7 @@ def on_meshtastic_message(packet, interface, loop=None):
     if text_from == '':
         text_from = idToHex(packet["from"])[1:]
     fromraw = text_from
+    fromname = text_from
 
     viaMqtt = False
     if "viaMqtt" in packet:
@@ -619,6 +619,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if result[5] == '': result[5] = str(fromraw[-4:])
                 if result[4] == '': result[4] = "Meshtastic " + str(fromraw[-4:])
                 text_from = unescape(result[5]) + " (" + unescape(result[4]) + ")"
+                fromname = unescape(result[5])
                 dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ?, last_snr = ?, last_rssi = ?, hopstart = ? WHERE node_id = ?", (tnow, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), hopStart, packet["from"]))
 
         if "decoded" in packet:
@@ -802,7 +803,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                             if "snr" in neighbor:
                                 text_raws += ' (' + str(neighbor["snr"]) + 'dB)'
 
-                            logheard(packet["from"], neighbor["nodeId"], neighbor.get('snr', 0.00))
+                            logheard(packet["from"], neighbor["nodeId"], neighbor.get('snr', 0.00), nbNide)
                     else:
                         text_raws += ' No Data'
                 elif data["portnum"] == "RANGE_TEST_APP":
@@ -912,13 +913,21 @@ def on_meshtastic_message(packet, interface, loop=None):
                 elif hopStart > 0:
                     text_via = ' via ' + str(hopStart) + ' node'
 
+                chantxt = (' ' * 11)
+                if "channel" in packet:
+                    chantxt = ' ' + str(mylorachan[packet["channel"]])
+                    if len(chantxt) <= 10:
+                        chantxt += (' ' * (11 - len(chantxt)))
+                    else:
+                        chantxt = chantxt[:8] + '.. '
+
                 if text_raws != '' and MyLora != fromraw:
                     insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
                     if ischat == True:
                         add_message(fromraw, text_raws, tnow, msend=text_chns)
 
                     if viaMqtt == True:
-                        insert_colored_text(text_box1, (' ' * 11) + text_raws + '\n', "#c9a500")
+                        insert_colored_text(text_box1, chantxt + text_raws + '\n', "#c9a500")
                     else:
                         text_from = ''
                         if nodesnr != 0 and MyLora != fromraw:
@@ -926,10 +935,10 @@ def on_meshtastic_message(packet, interface, loop=None):
                                 text_from = '\n' + (' ' * 11)
                             text_from += f"{round(nodesnr,1)}dB {value_to_graph(nodesnr)}"
 
-                        insert_colored_text(text_box1, (' ' * 11) + text_raws + text_from + '\n', "#00c983")
+                        insert_colored_text(text_box1, chantxt + text_raws + text_from + '\n', "#00c983")
                 elif text_raws != '' and MyLora == fromraw:
                     insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + text_via + "\n", "#d1d1d1")
-                    insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
+                    insert_colored_text(text_box2, chantxt + text_raws + '\n', "#00c983")
                 else:
                     insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
             else:
@@ -952,7 +961,7 @@ def on_meshtastic_message(packet, interface, loop=None):
 
         # Lets add the mheard lines
         if MyLoraID != 'ffffffff' and packet["from"] != '' and viaMqtt == False and hopStart == 0:
-            logheard(MyLoraID, packet["from"], packet.get('rxSnr', 0.00))
+            logheard(MyLoraID, packet["from"], packet.get('rxSnr', 0.00), fromname)
 
         dbcursor.close()
 
@@ -1511,8 +1520,11 @@ if __name__ == "__main__":
         if len(text2send.encode('utf-8')) > 220:
             insert_colored_text(text_box2, "Text message to long, keep it under 220 bytes\n", "#d1d1d1")
         elif text2send != '':
-            send_message(text2send, ch=chan2send)
-            my_msg.set("")
+            if text2send == '/neighbors':
+                neighbors_update()
+            else:
+                send_message(text2send, ch=chan2send)
+                my_msg.set("")
 
     def send_position(nodeid):
         global meshtastic_client, loop, ok2Send
@@ -1720,12 +1732,12 @@ if __name__ == "__main__":
         text_naib = ''
         dbcursor = dbconnection.cursor()
         for key in HeardDB.keys():
-            if idToHex(key[0])[1:] == marker.data:
-                yada = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (idToHex(key[1])[1:],)).fetchone()
-                if yada is not None:
-                    text_naib += f" {yada[5]} ({str(HeardDB[key][1])}dB),"
-                else:
-                    text_naib += f" !{key[1]} ({str(HeardDB[key][1])}dB),"
+            if idToHex(key[0])[1:] == marker.data and key[1] != MyLoraID:
+                # yada = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (idToHex(key[1])[1:],)).fetchone()
+                # if yada is not None:
+                text_naib += f" {str(HeardDB[key][3])} ({str(HeardDB[key][1])}dB),"
+                # else:
+                #    text_naib += f" !{key[1]} ({str(HeardDB[key][1])}dB),"
         dbcursor.close()
         if text_naib != '':
             text_loc += '\n  Naibors  :' + text_naib[:-1]
@@ -2064,18 +2076,31 @@ if __name__ == "__main__":
 
     # Under construction, not sure yet if this be correct; needs testing!
     # option to manually send NeighborInfo
+    '''
+    Kanaal 0 -> Primair -> MeshNet      Key : AQ==
+    Kanaal 1 -> Sec     -> LongFast     Key : AQ==
+    Kanaal 2 -> Sec     -> LongMod      Key : AQ==
+    Kanaal 3 -> Sec     -> Longslow     Key : AQ==
+    Kanaal 4 -> Sec     -> Privé        Key: ....
+    '''
     def neighbors_update():
         global meshtastic_client, MyLoraID, MyLora, HeardDB
-
+        tmp = 0
+        text_raws = 'Node Neighborinfo'
         neighbors_data = mesh_pb2.NeighborInfo()
-        neighbors_data.node_id = MyLoraID
-        neighbors_data.node_broadcast_interval_secs = (60 * 20)
-
+        neighbors_data.last_sent_by_id = MyLoraID
         for key in HeardDB.keys():
-            if key[0] == MyLoraID:
+            if key[0] == MyLoraID and key[1] != MyLoraID:
                 neighbor = neighbors_data.neighbors.add()
                 neighbor.node_id = key[1]
                 neighbor.snr = HeardDB[key][1]
+                text_raws += '\n' + (' ' * 11) + str(HeardDB[key][3]) + ' (' + str(HeardDB[key][1]) + 'dB)'
+                if HeardDB[key][0] > tmp:
+                    tmp = HeardDB[key][0]
+                    neighbors_data.last_sent_by_id = key[1]
+
+        neighbors_data.node_id = MyLoraID
+        neighbors_data.node_broadcast_interval_secs = (60 * 18)  # 18 minutes
 
         meshtastic_client.sendData(
             neighbors_data,
@@ -2085,6 +2110,8 @@ if __name__ == "__main__":
             channelIndex = 0,
             hopLimit = 3
         )
+        insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + unescape(f"{MyLora_SN} ({MyLora_LN})") + "\n", "#d1d1d1")
+        insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
 
     def weather_update():
         global meshtastic_client, MyLoraID, MyLora, dbconnection
@@ -2258,16 +2285,19 @@ if __name__ == "__main__":
         cursor = dbconnection.cursor()
         tmpnodes = cursor.execute("SELECT * FROM node_info ORDER BY timerec DESC").fetchall()
         cursor.close()
+
         # Create a new window
         new_window = Toplevel(root)
         new_window.title("LoraDB Nodes")
         new_window.geometry("1440x810")
         new_window.configure(bg="#242424")
-        style = ttk.Style()
-        style.theme_use('default')
+        new_window.iconbitmap('Data' + os.path.sep + 'mesh.ico')
+
+        # style = ttk.Style()
+        # style.theme_use('default')
         # style.configure(".", font=('Fixedsys', 10))
-        style.configure("Treeview", background="#242424", foreground="#eeeeee", fieldbackground="#3d3d3d")
-        style.configure("Treeview.Heading", background="#242424", foreground="#eeeeee")
+        # style.configure("Treeview", background="#242424", foreground="#eeeeee", fieldbackground="#3d3d3d")
+        # style.configure("Treeview.Heading", background="#242424", foreground="#eeeeee")
         tree = ttk.Treeview(new_window, columns=("nodeID", "timenow", "ShortName", "LongName", "latitude", "longitude", "altitude", "macaddr", "hardware", "timefirst", "rightbarstats", "mmqtt", "snr", "hops", "uptime"), show='headings')
         tree.heading("nodeID", text="Node ID")
         tree.column("nodeID", minwidth=75, width=75, anchor='center')
@@ -2299,8 +2329,8 @@ if __name__ == "__main__":
         tree.column("hops", minwidth=40, width=40, anchor='center')
         tree.heading("uptime", text="Uptime")
         tree.column("uptime", minwidth=90, width=90)
-        tree.tag_configure('oddrow', background='#242424')
-        tree.tag_configure('evenrow', background='#3d3d3d')
+        tree.tag_configure('oddrow', background='#242424', foreground="#eeeeee")
+        tree.tag_configure('evenrow', background='#3d3d3d', foreground="#eeeeee")
         data = [None] * 14
         i = False
         for entry in tmpnodes:
@@ -2310,14 +2340,14 @@ if __name__ == "__main__":
                 data[0] = datetime.fromtimestamp(int(entry[1])).strftime('%d %b %y %H:%M')
             data[1] = unescape(entry[5])
             data[2] = unescape(entry[4])
-            data[3] = entry[9]
-            data[4] = entry[10]
-            data[5] = entry[11]
-            data[6] = entry[6]
-            data[7] = entry[13]
+            data[3] = "%.6f" % entry[9] if entry[9] != -8.0 else 'N/A'
+            data[4] = "%.6f" % entry[10] if entry[10] != -8.0 else 'N/A'
+            data[5] = "%.0f" % entry[11]
+            data[6] = entry[2]
+            data[7] = entry[6]
             data[8] = datetime.fromtimestamp(int(entry[13])).strftime('%d %b %y')
-            data[9] = str(entry[18]) + '%, ' + str(entry[19]) + 'v'
-            data[10] = entry[15]
+            data[9] = str(entry[18]) + '%, ' + str("%.2f" % entry[19]) + 'v'
+            data[10] = 'True' if entry[15] else 'False'
             data[11] = str(entry[16]) + 'dB'
             data[12] = entry[23]
             data[13] = entry[14]
