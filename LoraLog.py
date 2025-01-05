@@ -47,7 +47,7 @@ pprint(vars(object))
 
 # Configure Error logging
 import logging
-logging.basicConfig(filename='LoraLog.log', level=logging.ERROR, format='%(asctime)s : %(message)s', datefmt='%m-%d %H:%M', filemode='w')
+logging.basicConfig(filename='LoraLog.log', level=logging.WARN, format='%(asctime)s : %(message)s', datefmt='%m-%d %H:%M', filemode='w')
 logging.error("Startin Up")
 
 telemetry_thread = None
@@ -374,6 +374,7 @@ def connect_meshtastic(force_connect=False):
     if 'position' in nodeInfo and 'latitude' in nodeInfo['position']:
         MyLora_Lat = round(nodeInfo['position']['latitude'],6)
         MyLora_Lon = round(nodeInfo['position']['longitude'],6)
+        mapview.set_position(MyLora_Lat, MyLora_Lon)
 
     nodeInfo = meshtastic_client.getNode('^local')
     # Lets get the Local Node's channels
@@ -669,15 +670,21 @@ def on_meshtastic_message(packet, interface, loop=None):
                             text_raws += '\n' + (' ' * 11) + 'PacketsTx: ' + str(localstats_metrics.get('numPacketsTx', 0))
                             text_raws += ' PacketsRx: ' + str(localstats_metrics.get('numPacketsRx', 0))
                             text_raws += ' PacketsRxBad: ' + str(localstats_metrics.get('numPacketsRxBad', 0))
-                            if device_metrics.get('numTxRelay', 0) > 0:
+                            if localstats_metrics.get('numTxRelay', 0) > 0:
                                 text_raws += '\n' + (' ' * 11) + 'TxRelay: ' + str(localstats_metrics.get('numTxRelay', 0))
-                            if device_metrics.get('numRxDupe', 0) > 0:
+                            if localstats_metrics.get('numRxDupe', 0) > 0:
                                 text_raws += ' RxDupe: ' + str(localstats_metrics.get('numRxDupe', 0))
-                            if device_metrics.get('numTxRelayCanceled', 0) > 0:
+                            if localstats_metrics.get('numTxRelayCanceled', 0) > 0:
                                 text_raws += ' TxCanceled: ' + str(localstats_metrics.get('numTxRelayCanceled', 0))
                             text_raws += ' Nodes: ' + str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))
                             if MyLora == fromraw:
-                                MyLoraText2 = (' PacketsTx').ljust(13) + str(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n' + (' PacketsRx').ljust(13) + str(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' + (' Rx Bad').ljust(13) + str(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n' + (' Nodes').ljust(13) + (str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))).rjust(7) + '\n'
+                                MyLoraText2 = (' PacketsTx').ljust(13) + str(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n' + (' PacketsRx').ljust(13) + str(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' +  (' Rx Bad').ljust(13) + str(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n' +  (' Nodes').ljust(13) + (str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))).rjust(7) + '\n'
+                                if localstats_metrics.get('numTxRelay', 0) > 0:
+                                    MyLoraText2 += (' TxRelay').ljust(13) + str(localstats_metrics.get('numTxRelay', 0)).rjust(7) + '\n'
+                                if localstats_metrics.get('numRxDupe', 0) > 0:
+                                    MyLoraText2 += (' RxDupe').ljust(13) + str(localstats_metrics.get('numRxDupe', 0)).rjust(7) + '\n'
+                                if localstats_metrics.get('numTxRelayCanceled', 0) > 0:
+                                    MyLoraText2 += (' TxCanceled').ljust(13) + str(localstats_metrics.get('numTxRelayCanceled', 0)).rjust(7) + '\n'
                     if text_raws == 'Node Telemetry':
                         text_raws += ' No Data'
                 elif data["portnum"] == "CHAT_APP" or data["portnum"] == "TEXT_MESSAGE_APP":
@@ -2174,11 +2181,16 @@ if __name__ == "__main__":
 
     root = CTk()
     root.title("Meshtastic Lora Logger")
-    root.geometry(f'1440x810')
     root.resizable(True, True)
     root.iconbitmap('Data' + os.path.sep + 'mesh.ico')
     root.protocol('WM_DELETE_WINDOW', on_closing)
     root.tk_setPalette("#242424")
+
+    if root.winfo_screenwidth() >= 1920 and root.winfo_screenheight() >= 1080:
+        root.geometry(f'1600x990') 
+    else:
+        root.geometry(f'1024x768')
+
     overlay = None
 
     # Map Marker Images
