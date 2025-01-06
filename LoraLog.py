@@ -12,7 +12,7 @@ from configparser import ConfigParser
 from html import unescape
 from pygame import mixer
 # import threading
-from threading import Thread
+import threading
 import sqlite3
 import ast
 # DEBUG
@@ -458,16 +458,6 @@ def reset_tab_highlight(event):
             if value == chan2text:
                 chan2send = key
                 break
-
-def req_meta():
-    global meshtastic_client, loop, ok2Send
-    try:
-        meshtastic_client.localNode.getMetadata()
-    except Exception as e:
-        logging.error("Error requesting metadata: %s", str(e))
-    finally:
-        print(f"Finished requesting metadata")
-        ok2Send = 0
 
 def on_lost_meshtastic_connection(interface):
     global root, loop, telemetry_thread, position_thread, trace_thread, meshtastic_client
@@ -1546,36 +1536,71 @@ if __name__ == "__main__":
 
     # runnign send_position, send_telemetry, send_trace in threads so they do not block the main loop; 
     # however, right now send_trace might cause a tread to stay open and cause the program to not close properly.
+    def timeout():
+        thread = threading.current_thread()
+        if thread.is_alive():
+            raise TimeoutError("Operation timed out")
+
+    def req_meta():
+        global meshtastic_client, loop, ok2Send
+        timer = threading.Timer(60.0, timeout)
+        timer.start()
+        try:
+            meshtastic_client.localNode.getMetadata()
+        except TimeoutError as e:
+            logging.error("Timeout requesting metadata: %s", str(e))
+        except Exception as e:
+            logging.error("Error requesting metadata: %s", str(e))
+        finally:
+            timer.cancel()
+            print(f"Finished requesting metadata")
+            ok2Send = 0
+
     def send_position(nodeid):
         global meshtastic_client, loop, ok2Send
         print(f"Requesting Position Data from {nodeid}")
+        timer = threading.Timer(60.0, timeout)
+        timer.start()
         try:
             meshtastic_client.sendPosition(destinationId=nodeid, wantResponse=True, channelIndex=0)
+        except TimeoutError as e:
+            logging.error("Timeout sending Position: %s", str(e))
         except Exception as e:
-            print(f"Error sending Position: {e}")
+            logging.error("Error sending Position: %s", str(e))
         finally:
+            timer.cancel()
             print(f"Finished sending Position")
             ok2Send = 0
 
     def send_telemetry(nodeid):
         global meshtastic_client, loop, ok2Send
         print(f"Requesting Telemetry Data from {nodeid}")
+        timer = threading.Timer(60.0, timeout)
+        timer.start()
         try:
             meshtastic_client.sendTelemetry(destinationId=nodeid, wantResponse=True, channelIndex=0)
+        except TimeoutError as e:
+            logging.error("Timeout sending Telemetry: %s", str(e))
         except Exception as e:
-            print(f"Error sending Telemetry: {e}")
+            logging.error("Error sending Telemetry: %s", str(e))
         finally:
+            timer.cancel()
             print(f"Finished sending Telemetry")
             ok2Send = 0
 
     def send_trace(nodeid):
         global meshtastic_client, loop, ok2Send
         print(f"Requesting Traceroute Data from {nodeid}")
+        timer = threading.Timer(60.0, timeout)
+        timer.start()
         try:
             meshtastic_client.sendTraceRoute(dest=nodeid, hopLimit=7, channelIndex=0)
+        except TimeoutError as e:
+            logging.error("Timeout sending Traceroute: %s", str(e))
         except Exception as e:
-            print(f"Error sending Traceroute: {e}")
+            logging.error("Error sending Traceroute: %s", str(e))
         finally:
+            timer.cancel()
             print(f"Finished sending Traceroute")
             ok2Send = 0
 
@@ -1606,17 +1631,17 @@ if __name__ == "__main__":
             if info == 'ReqInfo':
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Telemetry sending Telemetry request\n", "#2bd5ff")
-                telemetry_thread = Thread(target=send_telemetry, args=(node_id,))
+                telemetry_thread = threading.Thread(target=send_telemetry, args=(node_id,))
                 telemetry_thread.start()
             elif info == 'ReqPos':
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Position sending Position request\n", "#2bd5ff")
-                position_thread = Thread(target=send_position, args=(node_id,))
+                position_thread = threading.Thread(target=send_position, args=(node_id,))
                 position_thread.start()
             elif info == 'ReqTrace':
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node TraceRoute sending Trace Route request\n", "#2bd5ff")
-                trace_thread = Thread(target=send_trace, args=(node_id,))
+                trace_thread = threading.Thread(target=send_trace, args=(node_id,))
                 trace_thread.start()
         else:
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
@@ -2203,7 +2228,7 @@ if __name__ == "__main__":
         else:
             # Request Admmin Metadata
             ok2Send = 15
-            req_meta_thread = Thread(target=req_meta)
+            req_meta_thread = threading.Thread(target=req_meta)
             req_meta_thread.start()
             # mmtext ='“Have you ever noticed that anybody driving slower than you is an idiot, and anyone going faster than you is a maniac?”'
             get_messages()
@@ -2212,7 +2237,7 @@ if __name__ == "__main__":
 
     # The Node Configuration Frame still a work in progress, for now the LoRa settings seem to be working; more to come
     def create_config_frame():
-        global config_frame, meshtastic_client, ourNode
+        global config_frame, meshtastic_client, ourNode, MyLora_LN, MyLora_SN
         style = ttk.Style()
         style.configure("TLabel", background="#242424", foreground="#d1d1d1", font=('Fixedsys', 10))
         style.configure("TEntry", background="#242424", foreground="#000000", borderwidth=0, border=0, highlightthickness=0, font=('Fixedsys', 10))
@@ -2223,9 +2248,14 @@ if __name__ == "__main__":
 
         frameUser = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         config.notebook.add(frameUser, text='User')
-
-        frameChan = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
-        config.notebook.add(frameChan, text='Channels')
+        nodeuser = meshtastic_client.getMyNodeInfo()
+        config.shortName = StringVar(value=nodeuser['user']['shortName'])
+        config.longName = StringVar(value=nodeuser['user']['longName'])
+        ttk.Label(frameUser, text="Short Name:").pack(pady=(10, 0))
+        ttk.Entry(frameUser, textvariable=config.shortName, width=7, justify='center').pack(pady=(0, 10))
+        ttk.Label(frameUser, text="Long Name:").pack(pady=(10, 0))
+        ttk.Entry(frameUser, textvariable=config.longName, width=32, justify='center').pack(pady=(0, 10))
+        ttk.Button(frameUser, text="Save", command=lambda: save_user_config(config)).pack(pady=(40, 0))
 
         framePos = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         config.notebook.add(framePos, text='Position')
@@ -2236,7 +2266,7 @@ if __name__ == "__main__":
         config.override_duty_cycle = BooleanVar(value=ourNode.localConfig.lora.override_duty_cycle)
         config.sx126x_rx_boosted_gain = BooleanVar(value=ourNode.localConfig.lora.sx126x_rx_boosted_gain)
         config.tx_enabled = BooleanVar(value=ourNode.localConfig.lora.tx_enabled)
-        config.tx_power = IntVar(value=ourNode.localConfig.lora.tx_power)
+        config.tx_power = IntVar(value=ourNode.localConfig.lora.tx_power) # watt = 10 ** (dbm / 10) * 1e-3
         config.config_ok_to_mqtt = BooleanVar(value=ourNode.localConfig.lora.config_ok_to_mqtt)
         ttk.Label(frameLora, text="Hop Limit:").pack(pady=(10, 0))
         ttk.Entry(frameLora, textvariable=config.hop_limit).pack(pady=(0, 10))
@@ -2254,9 +2284,15 @@ if __name__ == "__main__":
         frameNeighbor = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         config.notebook.add(frameNeighbor, text='Neightbor Info')
 
+    def save_user_config(config):
+        global config_frame, meshtastic_client, ourNode
+        ourNode.setOwner(long_name=config.longName.get(), short_name=config.shortName.get()[:4], is_licensed=False)
+        insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+        insert_colored_text(text_box2, " Sending user config to node...\n", "#db6544")
+        toggle_frames()
+
     def save_lora_config(config):
         global config_frame, meshtastic_client, ourNode
-
         prev = deepcopy(ourNode.localConfig.lora)
         ourNode.localConfig.lora.hop_limit = config.hop_limit.get()
         ourNode.localConfig.lora.override_duty_cycle = config.override_duty_cycle.get()
@@ -2288,10 +2324,10 @@ if __name__ == "__main__":
     root.protocol('WM_DELETE_WINDOW', on_closing)
     root.tk_setPalette("#242424")
 
-    if root.winfo_screenwidth() >= 1920 and root.winfo_screenheight() >= 1080:
+    if root.winfo_screenwidth() > 1920 and root.winfo_screenheight() > 1080:
         root.geometry(f'1600x990') 
     else:
-        root.geometry(f'1024x768')
+        root.geometry(f'{str(root.winfo_screenwidth() - 70)}x{str(root.winfo_screenheight() - 70)}')
 
     overlay = None
 
