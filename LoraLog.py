@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from sys import exit
 import asyncio
 import gc
@@ -20,7 +20,7 @@ import ast
 
 # Tkinter imports
 from PIL import Image, ImageTk
-from tkinter import ttk, Frame, Text, Label, Entry, Button, StringVar, LabelFrame, Toplevel
+from tkinter import ttk, Frame, Text, Label, Entry, Button, StringVar, LabelFrame, Toplevel, IntVar, BooleanVar, DoubleVar
 from customtkinter import CTk
 from tkintermapview2 import TkinterMapView
 import textwrap
@@ -30,6 +30,7 @@ from base64 import b64encode
 from pubsub import pub
 import meshtastic.remote_hardware
 import meshtastic.version
+from copy import deepcopy
 
 try:
     from meshtastic.protobuf import config_pb2
@@ -68,6 +69,10 @@ mylorachan = {}
 tlast = int(time.time())
 loop = None
 pingcount = 0
+incoming_uptime = 0
+package_received_time = 0
+zoomhome = False
+ourNode = None
 
 def showLink(event):
     try:
@@ -304,7 +309,7 @@ def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
     return '└' + ''.join(graph) + '┘ ' + txt
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID
+    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -374,9 +379,11 @@ def connect_meshtastic(force_connect=False):
     if 'position' in nodeInfo and 'latitude' in nodeInfo['position']:
         MyLora_Lat = round(nodeInfo['position']['latitude'],6)
         MyLora_Lon = round(nodeInfo['position']['longitude'],6)
-        mapview.set_position(MyLora_Lat, MyLora_Lon)
+        zoomhome = False
 
     nodeInfo = meshtastic_client.getNode('^local')
+    ourNode = nodeInfo
+
     # Lets get the Local Node's channels
     lora_config = nodeInfo.localConfig.lora
     modem_preset_enum = lora_config.modem_preset
@@ -579,7 +586,7 @@ def deloldheard(deltime):
 
 def on_meshtastic_message(packet, interface, loop=None):
     # print(yaml.dump(packet), end='\n\n')
-    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon
+    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time
     if MyLora == '':
         print('*** MyLora is empty ***\n')
         # return
@@ -677,14 +684,20 @@ def on_meshtastic_message(packet, interface, loop=None):
                             if localstats_metrics.get('numTxRelayCanceled', 0) > 0:
                                 text_raws += ' TxCanceled: ' + str(localstats_metrics.get('numTxRelayCanceled', 0))
                             text_raws += ' Nodes: ' + str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))
-                            if MyLora == fromraw:
-                                MyLoraText2 = (' PacketsTx').ljust(13) + str(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n' + (' PacketsRx').ljust(13) + str(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' +  (' Rx Bad').ljust(13) + str(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n' +  (' Nodes').ljust(13) + (str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))).rjust(7) + '\n'
-                                if localstats_metrics.get('numTxRelay', 0) > 0:
-                                    MyLoraText2 += (' TxRelay').ljust(13) + str(localstats_metrics.get('numTxRelay', 0)).rjust(7) + '\n'
-                                if localstats_metrics.get('numRxDupe', 0) > 0:
-                                    MyLoraText2 += (' RxDupe').ljust(13) + str(localstats_metrics.get('numRxDupe', 0)).rjust(7) + '\n'
-                                if localstats_metrics.get('numTxRelayCanceled', 0) > 0:
-                                    MyLoraText2 += (' TxCanceled').ljust(13) + str(localstats_metrics.get('numTxRelayCanceled', 0)).rjust(7) + '\n'
+
+                            MyLoraText2 = (' PacketsTx').ljust(13) + str(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n' + (' PacketsRx').ljust(13) + str(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' +  (' Rx Bad').ljust(13) + str(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n'
+                            if localstats_metrics.get('numTxRelay', 0) > 0:
+                                MyLoraText2 += (' TxRelay').ljust(13) + str(localstats_metrics.get('numTxRelay', 0)).rjust(7) + '\n'
+                            if localstats_metrics.get('numRxDupe', 0) > 0:
+                                MyLoraText2 += (' RxDupe').ljust(13) + str(localstats_metrics.get('numRxDupe', 0)).rjust(7) + '\n'
+                            if localstats_metrics.get('numTxRelayCanceled', 0) > 0:
+                                MyLoraText2 += (' TxCanceled').ljust(13) + str(localstats_metrics.get('numTxRelayCanceled', 0)).rjust(7) + '\n'
+                            MyLoraText2 += (' Nodes').ljust(13) + (str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))).rjust(7) + '\n'
+
+                        if 'uptimeSeconds' in device_metrics and fromraw == MyLora:
+                            incoming_uptime = device_metrics.get('uptimeSeconds', 0)
+                            package_received_time = tnow
+
                     if text_raws == 'Node Telemetry':
                         text_raws += ' No Data'
                 elif data["portnum"] == "CHAT_APP" or data["portnum"] == "TEXT_MESSAGE_APP":
@@ -973,7 +986,7 @@ def on_meshtastic_message(packet, interface, loop=None):
         dbcursor.close()
 
 def updatesnodes():
-    global MyLora, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN
+    global MyLora, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, zoomhome
     info = ''
     tnow = int(time.time())
     with dbconnection:
@@ -1025,12 +1038,10 @@ def updatesnodes():
                                     MyLora_Lat = result[9]
                                     MyLora_Lon = result[10]
                                     time.sleep(0.5)
-                                    mapview.set_zoom(11)
                                     MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None]
                                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 8), data=MyLora, command = click_command)
                                     MapMarkers[MyLora][0].text_color = '#e67a7f'
-                                    time.sleep(0.5)
-                                    mapview.set_position(MyLora_Lat, MyLora_Lon)
+                                    zoomhome = False
                             else:
                                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                                 insert_colored_text(text_box2, " My Node has no position !!\n", "#e8643f")
@@ -1533,6 +1544,8 @@ if __name__ == "__main__":
                 send_message(text2send, ch=chan2send)
                 my_msg.set("")
 
+    # runnign send_position, send_telemetry, send_trace in threads so they do not block the main loop; 
+    # however, right now send_trace might cause a tread to stay open and cause the program to not close properly.
     def send_position(nodeid):
         global meshtastic_client, loop, ok2Send
         print(f"Requesting Position Data from {nodeid}")
@@ -1837,7 +1850,7 @@ if __name__ == "__main__":
                     MapMarkers[node_id][1] = tmp
 
     def update_active_nodes():
-        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon
+        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time
         start = time.perf_counter()
         tnow = int(time.time())
 
@@ -1853,11 +1866,24 @@ if __name__ == "__main__":
             text_box_middle.tag_unbind(tag, "<Button-1>")
         text_box_middle.delete("1.0", 'end')
 
-        insert_colored_text(text_box_middle, "\n " + MyLora_SN + "\n", "#e67a7f", tag=MyLora)
+        insert_colored_text(text_box_middle, "\n " + MyLora_SN.ljust(12), "#e67a7f", tag=MyLora)
+
+        if incoming_uptime != 0:
+            elapsed_time = tnow - package_received_time
+            delta = timedelta(seconds=(incoming_uptime + elapsed_time))
+            days = delta.days
+            hours, remainder = divmod(delta.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            tmp = f"{days}d{hours}h" if days > 0 else f"{hours}h{minutes}m"
+            insert_colored_text(text_box_middle, tmp.rjust(7) + '\n', "#9d9d9d")
+        else:
+            insert_colored_text(text_box_middle,'\n', "#9d9d9d")
+
         if MyLoraText1:
             insert_colored_text(text_box_middle, MyLoraText1, "#c1c1c1")
         if MyLoraText2:
             insert_colored_text(text_box_middle, MyLoraText2, "#c1c1c1")
+
 
         try:
             cursor = dbconnection.cursor()
@@ -1973,8 +1999,13 @@ if __name__ == "__main__":
             text_widget.tag_unbind(tag, "<Any-Event>")  # Unbind all events for the tag
 
     def update_paths_nodes():
-        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root
+        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome
         tnow = int(time.time())
+
+        if MyLora_Lat != -8.0 and MyLora_Lon != -8.0 and zoomhome == False:
+            zoomhome = True
+            mapview.set_zoom(11)
+            mapview.set_position(MyLora_Lat, MyLora_Lon)
 
         # Delete or check old heard nodes
         deloldheard(map_delete)
@@ -2179,6 +2210,77 @@ if __name__ == "__main__":
             # add_message(text_box3, MyLora, mmtext, int(time.time()), private=False, msend=True)
             root.after(1000, update_active_nodes)  # Schedule the next update in 30 seconds
 
+    # The Node Configuration Frame still a work in progress, for now the LoRa settings seem to be working; more to come
+    def create_config_frame():
+        global config_frame, meshtastic_client, ourNode
+        style = ttk.Style()
+        style.configure("TLabel", background="#242424", foreground="#d1d1d1", font=('Fixedsys', 10))
+        style.configure("TEntry", background="#242424", foreground="#000000", borderwidth=0, border=0, highlightthickness=0, font=('Fixedsys', 10))
+        style.configure("TCheckbutton", background="#242424", foreground="#d1d1d1", borderwidth=0, border=0, highlightthickness=0, font=('Fixedsys', 10))
+        style.configure("TButton", borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", compound="center", foreground='#000000', font=('Fixedsys', 10))
+        config.notebook = ttk.Notebook(config_frame, style='TNotebook')
+        config.notebook.pack(expand=True, fill='both')
+
+        frameUser = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
+        config.notebook.add(frameUser, text='User')
+
+        frameChan = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
+        config.notebook.add(frameChan, text='Channels')
+
+        framePos = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
+        config.notebook.add(framePos, text='Position')
+
+        frameLora = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
+        config.notebook.add(frameLora, text='LoRa')
+        config.hop_limit = IntVar(value=ourNode.localConfig.lora.hop_limit)
+        config.override_duty_cycle = BooleanVar(value=ourNode.localConfig.lora.override_duty_cycle)
+        config.sx126x_rx_boosted_gain = BooleanVar(value=ourNode.localConfig.lora.sx126x_rx_boosted_gain)
+        config.tx_enabled = BooleanVar(value=ourNode.localConfig.lora.tx_enabled)
+        config.tx_power = IntVar(value=ourNode.localConfig.lora.tx_power)
+        config.config_ok_to_mqtt = BooleanVar(value=ourNode.localConfig.lora.config_ok_to_mqtt)
+        ttk.Label(frameLora, text="Hop Limit:").pack(pady=(10, 0))
+        ttk.Entry(frameLora, textvariable=config.hop_limit).pack(pady=(0, 10))
+        ttk.Checkbutton(frameLora, text="Override Duty Cycle", variable=config.override_duty_cycle).pack(pady=(10, 0))
+        ttk.Checkbutton(frameLora, text="RX Boosted Gain", variable=config.sx126x_rx_boosted_gain).pack(pady=(10, 0))
+        ttk.Checkbutton(frameLora, text="TX Enabled", variable=config.tx_enabled).pack(pady=(10, 0))
+        ttk.Label(frameLora, text="TX Power:").pack(pady=(10, 0))
+        ttk.Entry(frameLora, textvariable=config.tx_power).pack(pady=(0, 10))
+        ttk.Checkbutton(frameLora, text="Ok to mqtt", variable=config.config_ok_to_mqtt).pack(pady=(10, 0))
+        ttk.Button(frameLora, text="Save", command=lambda: save_lora_config(config)).pack(pady=(40, 0))
+
+        frameMQTT = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
+        config.notebook.add(frameMQTT, text='MQTT')
+
+        frameNeighbor = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
+        config.notebook.add(frameNeighbor, text='Neightbor Info')
+
+    def save_lora_config(config):
+        global config_frame, meshtastic_client, ourNode
+
+        prev = deepcopy(ourNode.localConfig.lora)
+        ourNode.localConfig.lora.hop_limit = config.hop_limit.get()
+        ourNode.localConfig.lora.override_duty_cycle = config.override_duty_cycle.get()
+        ourNode.localConfig.lora.sx126x_rx_boosted_gain = config.sx126x_rx_boosted_gain.get()
+        ourNode.localConfig.lora.tx_enabled = config.tx_enabled.get()
+        ourNode.localConfig.lora.tx_power = config.tx_power.get()
+        ourNode.localConfig.lora.config_ok_to_mqtt = config.config_ok_to_mqtt.get()
+        if prev != ourNode.localConfig.lora:
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+            insert_colored_text(text_box2, " Sending lora config to node, this will reset the node...\n", "#db6544")
+            ourNode.writeConfig('lora')
+        toggle_frames()
+
+    def toggle_frames():
+        if frame.winfo_viewable():
+            frame.grid_remove()
+            config_frame.grid()
+            create_config_frame()
+        else:
+            for widget in config_frame.winfo_children():
+                widget.destroy()
+            config_frame.grid_remove()
+            frame.grid()
+
     root = CTk()
     root.title("Meshtastic Lora Logger")
     root.resizable(True, True)
@@ -2291,6 +2393,15 @@ if __name__ == "__main__":
             mapview.master.grid(row=0, column=0, rowspan=5, columnspan=3, padx=0, pady=0, sticky='nsew')
         is_mapfullwindow = not is_mapfullwindow
     root.bind('<F6>', toggle_map)
+
+    # Config Window
+    config_frame = Frame(root, borderwidth=0, highlightthickness=1, highlightcolor="#121212", highlightbackground="#121212")
+    config_frame.grid(row=0, column=0, padx=2, pady=2, sticky='nsew')
+    config_frame.grid_remove()  # Hide the config frame initially
+    config_frame.grid_rowconfigure(0, weight=1)
+    config_frame.grid_columnconfigure(0, weight=1)
+
+    root.bind('<F2>', lambda event: toggle_frames())
 
     def show_loradb():
         global dbconnection
