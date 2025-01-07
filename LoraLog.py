@@ -73,6 +73,7 @@ incoming_uptime = 0
 package_received_time = 0
 zoomhome = False
 ourNode = None
+NIenabled = False
 
 def showLink(event):
     try:
@@ -2237,11 +2238,13 @@ if __name__ == "__main__":
 
     # The Node Configuration Frame still a work in progress, for now the LoRa settings seem to be working; more to come
     def create_config_frame():
-        global config_frame, meshtastic_client, ourNode, MyLora_LN, MyLora_SN
+        global config_frame, meshtastic_client, ourNode, MyLora_LN, MyLora_SN, NIenabled
         style = ttk.Style()
+        style.theme_use('classic')
         style.configure("TLabel", background="#242424", foreground="#d1d1d1", font=('Fixedsys', 10))
         style.configure("TEntry", background="#242424", foreground="#000000", borderwidth=0, border=0, highlightthickness=0, font=('Fixedsys', 10))
         style.configure("TCheckbutton", background="#242424", foreground="#d1d1d1", borderwidth=0, border=0, highlightthickness=0, font=('Fixedsys', 10))
+        style.map('TCheckbutton', indicatorcolor=[('selected', 'green'), ('pressed', 'gray')], background = [('disabled', '#242424'), ('pressed', '!focus', '#242424'), ('active', '#242424')], foreground = [('disabled', '#d1d1d1'), ('pressed', '#d1d1d1'), ('active', '#d1d1d1')])
         style.configure("TButton", borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", compound="center", foreground='#000000', font=('Fixedsys', 10))
         config.notebook = ttk.Notebook(config_frame, style='TNotebook')
         config.notebook.pack(expand=True, fill='both')
@@ -2257,8 +2260,8 @@ if __name__ == "__main__":
         ttk.Entry(frameUser, textvariable=config.longName, width=32, justify='center').pack(pady=(0, 10))
         ttk.Button(frameUser, text="Save", command=lambda: save_user_config(config)).pack(pady=(40, 0))
 
-        framePos = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
-        config.notebook.add(framePos, text='Position')
+        # framePos = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
+        # config.notebook.add(framePos, text='Position')
 
         frameLora = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         config.notebook.add(frameLora, text='LoRa')
@@ -2280,9 +2283,37 @@ if __name__ == "__main__":
 
         frameMQTT = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         config.notebook.add(frameMQTT, text='MQTT')
+        config.mqttenabled = BooleanVar(value=ourNode.moduleConfig.mqtt.enabled)
+        config.mqttaddress = StringVar(value=ourNode.moduleConfig.mqtt.address)
+        config.mqttusername = StringVar(value=ourNode.moduleConfig.mqtt.username)
+        config.mqttpassword = StringVar(value=ourNode.moduleConfig.mqtt.password)
+        config.mqtttopic = StringVar(value=ourNode.moduleConfig.mqtt.root)
+        ttk.Checkbutton(frameMQTT, text="Enabled", variable=config.mqttenabled).pack(pady=(10, 0))
+        ttk.Label(frameMQTT, text="Address:").pack(pady=(10, 0))
+        ttk.Entry(frameMQTT, textvariable=config.mqttaddress).pack(pady=(0, 10))
+        ttk.Label(frameMQTT, text="Username:").pack(pady=(10, 0))
+        ttk.Entry(frameMQTT, textvariable=config.mqttusername).pack(pady=(0, 10))
+        ttk.Label(frameMQTT, text="Password:").pack(pady=(10, 0))
+        ttk.Entry(frameMQTT, textvariable=config.mqttpassword, show='*').pack(pady=(0, 10))
+        ttk.Label(frameMQTT, text="Topic:").pack(pady=(10, 0))
+        ttk.Entry(frameMQTT, textvariable=config.mqtttopic).pack(pady=(0, 10))
+        ttk.Button(frameMQTT, text="Save", command=lambda: save_mqtt_config(config)).pack(pady=(40, 0))
 
         frameNeighbor = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         config.notebook.add(frameNeighbor, text='Neightbor Info')
+        config.nbenabled = BooleanVar(value=ourNode.moduleConfig.neighbor_info.enabled)
+        config.nbinterval = IntVar(value=ourNode.moduleConfig.neighbor_info.update_interval)
+        ttk.Checkbutton(frameNeighbor, text="Hardware Enabled", variable=config.nbenabled).pack(pady=(10, 0))
+        ttk.Checkbutton(frameNeighbor, text="via LoraLog Enabled", variable=NIenabled).pack(pady=(10, 0))
+        ttk.Label(frameNeighbor, text="Update Interval:").pack(pady=(10, 0))
+        ttk.Entry(frameNeighbor, textvariable=config.nbinterval).pack(pady=(0, 10))
+        ttk.Button(frameNeighbor, text="Save", command=lambda: save_neighbor_config(config)).pack(pady=(40, 0))
+
+    def save_mqtt_config(config):
+        print(ourNode.moduleConfig.mqtt, end='\n\n')
+
+    def save_neighbor_config(config):
+        print(ourNode.moduleConfig.neighbor_info, end='\n\n')
 
     def save_user_config(config):
         global config_frame, meshtastic_client, ourNode
