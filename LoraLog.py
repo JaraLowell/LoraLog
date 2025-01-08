@@ -647,7 +647,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                             if 'uptimeSeconds' in device_metrics:
                                 text_raws += '\n' + (' ' * 11) + uptimmehuman(device_metrics.get('uptimeSeconds', 0), tnow)
                             if MyLora == fromraw:
-                                MyLoraText1 = (' ChUtil').ljust(13) + str(round(device_metrics.get('channelUtilization', 0.00),2)).rjust(6) + '%\n' + (' AirUtilTX').ljust(13) + str(round(device_metrics.get('airUtilTx', 0.00),2)).rjust(6) + '%\n' + (' Power').ljust(13) + str(round(device_metrics.get('voltage', 0.00),2)).rjust(6) + 'v\n' + (' Battery').ljust(13) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
+                                MyLoraText1 = (' ChUtil').ljust(13) + str(round(device_metrics.get('channelUtilization', 0.00),2)).rjust(6) + '%\n' + (' AirUtilTX').ljust(13) + str(round(device_metrics.get('airUtilTx', 0.00),2)).rjust(6) + '%\n'
+                                if device_metrics.get('voltage', 0.00) > 0.00: MyLoraText1 += (' Power').ljust(13) + str(round(device_metrics.get('voltage', 0.00),2)).rjust(6) + 'v\n' 
+                                if device_metrics.get('batteryLevel', 0) > 0: MyLoraText1 += (' Battery').ljust(13) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
                         power_metrics = telemetry.get('powerMetrics', {})
                         if power_metrics:
                             text_raws += '\n' + (' ' * 11) + 'CH1 Voltage: ' + str(round(power_metrics.get('ch1_voltage', 'N/A'),2)) + 'v'
@@ -668,21 +670,22 @@ def on_meshtastic_message(packet, interface, loop=None):
                             text_raws += '\n' + (' ' * 11) + 'PacketsTx: ' + str(localstats_metrics.get('numPacketsTx', 0))
                             text_raws += ' PacketsRx: ' + str(localstats_metrics.get('numPacketsRx', 0))
                             text_raws += ' PacketsRxBad: ' + str(localstats_metrics.get('numPacketsRxBad', 0))
-                            if localstats_metrics.get('numTxRelay', 0) > 0:
-                                text_raws += '\n' + (' ' * 11) + 'TxRelay: ' + str(localstats_metrics.get('numTxRelay', 0))
                             if localstats_metrics.get('numRxDupe', 0) > 0:
+                                # Number of received packets that were duplicates (due to multiple nodes relaying)
                                 text_raws += ' RxDupe: ' + str(localstats_metrics.get('numRxDupe', 0))
+                            if localstats_metrics.get('numTxRelay', 0) > 0:
+                                # Number of packets we transmitted that were a relay for others (not originating from ourselves)
+                                text_raws += '\n' + (' ' * 11) + 'TxRelay: ' + str(localstats_metrics.get('numTxRelay', 0))
                             if localstats_metrics.get('numTxRelayCanceled', 0) > 0:
+                                # Number of times we canceled a packet to be relayed, because someone else did it before us
                                 text_raws += ' TxCanceled: ' + str(localstats_metrics.get('numTxRelayCanceled', 0))
                             text_raws += ' Nodes: ' + str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))
 
-                            MyLoraText2 = (' PacketsTx').ljust(13) + str(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n' + (' PacketsRx').ljust(13) + str(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' +  (' Rx Bad').ljust(13) + str(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n'
-                            if localstats_metrics.get('numTxRelay', 0) > 0:
-                                MyLoraText2 += (' TxRelay').ljust(13) + str(localstats_metrics.get('numTxRelay', 0)).rjust(7) + '\n'
-                            if localstats_metrics.get('numRxDupe', 0) > 0:
-                                MyLoraText2 += (' RxDupe').ljust(13) + str(localstats_metrics.get('numRxDupe', 0)).rjust(7) + '\n'
-                            if localstats_metrics.get('numTxRelayCanceled', 0) > 0:
-                                MyLoraText2 += (' TxCanceled').ljust(13) + str(localstats_metrics.get('numTxRelayCanceled', 0)).rjust(7) + '\n'
+                            MyLoraText2 = (' Packets Tx').ljust(13) + str(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n'
+                            if localstats_metrics.get('numTxRelay', 0) > 0: MyLoraText2 += (' Tx Relay').ljust(13) + str(localstats_metrics.get('numTxRelay', 0)).rjust(7) + '\n'
+                            if localstats_metrics.get('numTxRelayCanceled', 0) > 0: MyLoraText2 += (' Tx Canceled').ljust(13) + str(localstats_metrics.get('numTxRelayCanceled', 0)).rjust(7) + '\n'
+                            MyLoraText2 += (' Packets Rx').ljust(13) + str(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' + (' Rx Bad').ljust(13) + str(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n'
+                            if localstats_metrics.get('numRxDupe', 0) > 0: MyLoraText2 += (' Rx Dupe').ljust(13) + str(localstats_metrics.get('numRxDupe', 0)).rjust(7) + '\n'
                             MyLoraText2 += (' Nodes').ljust(13) + (str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))).rjust(7) + '\n'
 
                         if 'uptimeSeconds' in device_metrics and fromraw == MyLora:
@@ -2262,6 +2265,7 @@ if __name__ == "__main__":
 
         # framePos = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         # config.notebook.add(framePos, text='Position')
+        # print(ourNode.localConfig.position)
 
         frameLora = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         config.notebook.add(frameLora, text='LoRa')
@@ -2310,16 +2314,34 @@ if __name__ == "__main__":
         ttk.Button(frameNeighbor, text="Save", command=lambda: save_neighbor_config(config)).pack(pady=(40, 0))
 
     def save_mqtt_config(config):
-        print(ourNode.moduleConfig.mqtt, end='\n\n')
+        prev = deepcopy(ourNode.moduleConfig.mqtt)
+        ourNode.moduleConfig.mqtt.enabled = config.mqttenabled.get()
+        ourNode.moduleConfig.mqtt.address = config.mqttaddress.get()
+        ourNode.moduleConfig.mqtt.username = config.mqttusername.get()
+        ourNode.moduleConfig.mqtt.password = config.mqttpassword.get()
+        ourNode.moduleConfig.mqtt.root = config.mqtttopic.get()
+        if prev != ourNode.moduleConfig.mqtt:
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+            insert_colored_text(text_box2, " Sending mqtt config to node...\n", "#db6544")
+            ourNode.writeConfig('mqtt')
+        toggle_frames()
 
     def save_neighbor_config(config):
-        print(ourNode.moduleConfig.neighbor_info, end='\n\n')
+        prev = deepcopy(ourNode.moduleConfig.neighbor_info)
+        ourNode.moduleConfig.neighbor_info.enabled = config.nbenabled.get()
+        ourNode.moduleConfig.neighbor_info.update_interval = config.nbinterval.get()
+        if prev != ourNode.moduleConfig.neighbor_info:
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+            insert_colored_text(text_box2, " Sending neighbor info config to node...\n", "#db6544")
+            ourNode.writeConfig('neighbor_info')
+        toggle_frames()
 
     def save_user_config(config):
         global config_frame, meshtastic_client, ourNode
-        ourNode.setOwner(long_name=config.longName.get(), short_name=config.shortName.get()[:4], is_licensed=False)
-        insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-        insert_colored_text(text_box2, " Sending user config to node...\n", "#db6544")
+        if config.longName.get() != '' and config.shortName.get() != '' and (config.longName.get() != MyLora_LN or config.shortName.get() != MyLora_SN):
+            ourNode.setOwner(long_name=config.longName.get(), short_name=config.shortName.get()[:4], is_licensed=False)
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
+            insert_colored_text(text_box2, " Sending user config to node...\n", "#db6544")
         toggle_frames()
 
     def save_lora_config(config):
@@ -2462,7 +2484,8 @@ if __name__ == "__main__":
     root.bind('<F6>', toggle_map)
 
     # Config Window
-    config_frame = Frame(root, borderwidth=0, highlightthickness=1, highlightcolor="#121212", highlightbackground="#121212")
+    config_frame = None
+    config_frame = Frame(root, borderwidth=0, highlightthickness=1, highlightcolor="#121212", highlightbackground="#121212") # was root
     config_frame.grid(row=0, column=0, padx=2, pady=2, sticky='nsew')
     config_frame.grid_remove()  # Hide the config frame initially
     config_frame.grid_rowconfigure(0, weight=1)
