@@ -2425,7 +2425,7 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.4.0 (Dec 2024) By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.4.1 (Jan 2025) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.insert("end", "─" * 60 + "\n", '#414141')
     text_box1.tag_configure('#414141', foreground='#414141')
