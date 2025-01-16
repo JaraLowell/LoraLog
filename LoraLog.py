@@ -293,6 +293,7 @@ sound_cache = {}
 def playsound(soundfile):
     if soundfile not in sound_cache:
         sound_cache[soundfile] = mixer.Sound(soundfile)
+        sound_cache[soundfile].set_volume(0.5)
     sound_cache[soundfile].play()
 
 def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
@@ -308,6 +309,16 @@ def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
     if value > -7.0:
         txt = "Good"
     return '└' + ''.join(graph) + '┘ ' + txt
+
+def format_number(n):
+    if n >= 1_000_000_000:
+        return f'{n // 1_000_000_000},{(n % 1_000_000_000) // 100_000_000}B'
+    elif n >= 1_000_000:
+        return f'{n // 1_000_000},{(n % 1_000_000) // 100_000}M'
+    # elif n >= 1_000:
+    #     return f'{n // 1_000}K{(n % 1_000) // 100}'
+    else:
+        return f'{n:,}'
 
 def connect_meshtastic(force_connect=False):
     global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode
@@ -540,39 +551,36 @@ def logheard(sourseIDx, nodeIDx, dbdata, nodesname):
     key = (sourseIDx, nodeIDx)
     sourseID = idToHex(sourseIDx)[1:]
     nodeID = idToHex(nodeIDx)[1:]
-    if key in HeardDB:
-        HeardDB[key][0] = tnow
-        HeardDB[key][1] = dbdata
-    else:
-        HeardDB[key] = [tnow, dbdata, None, nodesname] # Node not heard yet, add to db
+
+    heard_entry = HeardDB.setdefault(key, [tnow, dbdata, None, nodesname])
+    heard_entry[0] = tnow
+    heard_entry[1] = dbdata
 
     if sourseID in MapMarkers and nodeID in MapMarkers:
-        if HeardDB[key][2] == None:
-            listmaps = []
-            listmaps.append(MapMarkers[sourseID][0].get_position())
-            listmaps.append(MapMarkers[nodeID][0].get_position())
-            HeardDB[key][2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID)
+        if heard_entry[2] is None:
+            listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position() ]
+            heard_entry[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID)
 
 # We moved need re draw 
 def redrawnaibors(sourceIDx):
-    for key in HeardDB.keys():
-        if key[0] == sourceIDx or key[1] == sourceIDx:
-            HeardDB[key][2].delete()
-            HeardDB[key][2] = None
-            listmaps = []
+    for key, value in HeardDB.items():
+        if value[2] is not None and (key[0] == sourceIDx or key[1] == sourceIDx):
+            value[2].delete()
+            value[2] = None
             sourseID = idToHex(key[0])[1:]
             nodeID = idToHex(key[1])[1:]
-            listmaps.append(MapMarkers[sourseID][0].get_position())
-            listmaps.append(MapMarkers[nodeID][0].get_position())
-            HeardDB[key][2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID)
+            if sourseID in MapMarkers and nodeID in MapMarkers:
+                listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position()]
+                value[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID)
 
 def deloldheard(deltime):
     tnow = int(time.time())
     keys_to_delete = [key for key, value in HeardDB.items() if tnow - value[0] > (deltime / 3)]
     for key in keys_to_delete:
-        if HeardDB[key][2] != None:
-            HeardDB[key][2].delete()
-            HeardDB[key][2] = None
+        value = HeardDB[key]
+        if value[2] is not None:
+            value[2].delete()
+            value[2] = None
         del HeardDB[key]
 
 def on_meshtastic_message(packet, interface, loop=None):
@@ -681,12 +689,15 @@ def on_meshtastic_message(packet, interface, loop=None):
                                 text_raws += ' TxCanceled: ' + str(localstats_metrics.get('numTxRelayCanceled', 0))
                             text_raws += ' Nodes: ' + str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))
 
-                            MyLoraText2 = (' Packets Tx').ljust(13) + str(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n'
-                            if localstats_metrics.get('numTxRelay', 0) > 0: MyLoraText2 += (' Tx Relay').ljust(13) + str(localstats_metrics.get('numTxRelay', 0)).rjust(7) + '\n'
-                            if localstats_metrics.get('numTxRelayCanceled', 0) > 0: MyLoraText2 += (' Tx Canceled').ljust(13) + str(localstats_metrics.get('numTxRelayCanceled', 0)).rjust(7) + '\n'
-                            MyLoraText2 += (' Packets Rx').ljust(13) + str(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' + (' Rx Bad').ljust(13) + str(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n'
-                            if localstats_metrics.get('numRxDupe', 0) > 0: MyLoraText2 += (' Rx Dupe').ljust(13) + str(localstats_metrics.get('numRxDupe', 0)).rjust(7) + '\n'
-                            MyLoraText2 += (' Nodes').ljust(13) + (str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))).rjust(7) + '\n'
+                            MyLoraText2 = (' Packets Tx').ljust(13) + format_number(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n'
+                            if localstats_metrics.get('numTxRelay', 0) > 0:
+                                MyLoraText2 += (' Tx Relay').ljust(13) + format_number(localstats_metrics.get('numTxRelay', 0)).rjust(7) + '\n'
+                            if localstats_metrics.get('numTxRelayCanceled', 0) > 0:
+                                MyLoraText2 += (' Tx Cancel').ljust(13) + format_number(localstats_metrics.get('numTxRelayCanceled', 0)).rjust(7) + '\n'
+                            MyLoraText2 += (' Packets Rx').ljust(13) + format_number(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' + (' Rx Bad').ljust(13) + format_number(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n'
+                            if localstats_metrics.get('numRxDupe', 0) > 0:
+                                MyLoraText2 += (' Rx Dupe').ljust(13) + format_number(localstats_metrics.get('numRxDupe', 0)).rjust(7) + '\n'
+                            MyLoraText2 += (' Nodes').ljust(13) + (format_number(localstats_metrics.get('numOnlineNodes', 0)) + '/' + format_number(localstats_metrics.get('numTotalNodes', 0))).rjust(7) + '\n'
 
                         if 'uptimeSeconds' in device_metrics and fromraw == MyLora:
                             incoming_uptime = device_metrics.get('uptimeSeconds', 0)
@@ -1960,17 +1971,18 @@ if __name__ == "__main__":
                     node_wtime = ez_date(tnow - node_time).rjust(10)
                     node_dist = ' '
                     if row[24] != 0.0:
-                        node_dist = f"{row[24]}km"
+                        node_dist = "%.1f" % row[24] + "km"
                     elif row[9] != -8.0 and row[10] != -8.0:
-                        node_dist = calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon) + 0.01
+                        node_dist = round(calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon), 2)
                         cursor = dbconnection.cursor()
                         cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
                         cursor.close()
+                        node_dist = "%.1f" % node_dist + "km"
                     insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#414141")
                     if row[15]:
                         insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {str(node_dist).ljust(9)}\n", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}\n", "#9d9d9d")
                         checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                     else:
                         node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
@@ -1983,7 +1995,7 @@ if __name__ == "__main__":
                             color = "#de6933"  # red
                         insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#00c983", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {str(node_dist).ljust(9)}", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
                         insert_colored_text(text_box_middle, f"{node_sig}\n", color)
 
                         checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
