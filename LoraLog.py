@@ -42,8 +42,7 @@ Fix sub parts if they brake a main part install > pip install --upgrade setuptoo
 Upgrade the Meshtastic Python Library           > pip install --upgrade meshtastic
 Build the build                                 > pyinstaller --icon=mesh.ico -F --onefile --noconsole LoraLog.py
 
-from pprint import pprint
-pprint(vars(object))
+can also use "pip-review --local --auto" but needs to be installed via pip install pip-review and might need multiple runs till you get Everything up-to-date
 '''
 
 # Configure Error logging
@@ -504,15 +503,15 @@ def on_meshtastic_connection(interface, topic=pub.AUTO_TOPIC):
 def print_range(range_in_meters):
     if range_in_meters < 1:
         # Convert to centimeters
-        range_in_cm = range_in_meters * 100
-        return f"{range_in_cm:.0f}cm"
+        result = f"{range_in_meters * 100:.0f}cm"
     elif range_in_meters < 1000:
         # Print in meters
-        return f"{range_in_meters:.0f}meter"
+        result = f"{range_in_meters:.0f}meter"
     else:
         # Convert to kilometers
-        range_in_km = range_in_meters / 1000
-        return f"{range_in_km:.0f}km"
+        result = f"{range_in_meters / 1000:.0f}km"
+    
+    return result
 
 def idToHex(nodeId):
     if type(nodeId) is int:
@@ -1107,14 +1106,13 @@ def calc_gc(end_lat, end_long, start_lat, start_long):
     end_lat = math.radians(end_lat)
     end_long = math.radians(end_long)
 
-    # d_lat = math.fabs(start_lat - end_lat)
-    d_long = math.fabs(start_long - end_long)
+    d_lat = end_lat - start_lat
+    d_long = end_long - start_long
 
-    y = ((math.sin(start_lat)*math.sin(end_lat)) + (math.cos(start_lat)*math.cos(end_lat)*math.cos(d_long)))
-    x = math.sqrt((math.cos(end_lat)*math.sin(d_long))**2 + ( (math.cos(start_lat)*math.sin(end_lat)) - (math.sin(start_lat)*math.cos(end_lat)*math.cos(d_long)))**2)
-    c = math.atan(x/y)
+    a = math.sin(d_lat / 2)**2 + math.cos(start_lat) * math.cos(end_lat) * math.sin(d_long / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-    return round(EARTH_R*c,1)
+    return round(EARTH_R * c, 1)
 
 #-------------------------------------------------------------- Plot Functions ---------------------------------------------------------------------------
 
@@ -2019,19 +2017,6 @@ if __name__ == "__main__":
 
         root.after(1000, update_paths_nodes)
     ### end
-
-    def parse_result(result):
-        # Split the string by the delimiter separating the tuples
-        parts = result.split('),(')
-        
-        # Add parentheses back to the split parts
-        parts = [part + ')' if not part.endswith('))') else part for part in parts]
-        parts = ['(' + part if not part.startswith('(') else part for part in parts]
-        
-        # Apply literal_eval to each part
-        parsed_results = [ast.literal_eval(part) for part in parts]
-        
-        return parsed_results
 
     # Function to unbind tags for a specific range
     def unbind_tags_for_range(text_widget, start, end):
