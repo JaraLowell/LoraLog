@@ -1127,7 +1127,7 @@ plt.switch_backend('TkAgg') # No clue why we even need this
 plt.rcParams["font.family"] = 'sans-serif'
 plt.rcParams["font.size"] = 7
 
-def plot_rssi_log(node_id, frame, width=512, height=96):
+def plot_rssi_log(node_id, frame, width=512, height=102):
     global MyLora, dbconnection,metrics_age
 
     metrics = []
@@ -1195,13 +1195,20 @@ def plot_rssi_log(node_id, frame, width=512, height=96):
         ax.tick_params(axis='x', colors='white')
         ax.tick_params(axis='y', colors='white')
         ax.set(frame_on=False)
+
+    # Add text with the last known value and date/time
+    last_time = datetime.strptime(str(times_resampled[-1]), '%Y-%m-%d %H:%M:%S').strftime('%H:%M:%S') # times_resampled[-1]
+    last_snr = snr_levels_smooth[-1]
+    last_rssi = rssi_smooth[-1]
+    fig.text(0.5, 0.01, f'Last at {last_time}: {last_snr:.1f}, {last_rssi:.0f}', ha='center', color='white', fontsize=9)
+    fig.subplots_adjust(bottom=0.85)
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
 
     return canvas.get_tk_widget()
 
-def plot_metrics_log(node_id, frame, width=512, height=162):
+def plot_metrics_log(node_id, frame, width=512, height=102):
     global MyLora, dbconnection, metrics_age
 
     metrics = []
@@ -1283,6 +1290,14 @@ def plot_metrics_log(node_id, frame, width=512, height=162):
         ax.tick_params(axis='x', colors='white')
         ax.tick_params(axis='y', colors='white')
         ax.set(frame_on=False)
+    
+    last_time = datetime.strptime(str(times_resampled[-1]), '%Y-%m-%d %H:%M:%S').strftime('%H:%M:%S') # times_resampled[-1]
+    last_battery = battery_levels_smooth[-1]
+    last_voltage = voltages_smooth[-1]
+    last_utilization = utilizations_smooth[-1]
+    last_airutiltx = airutiltxs_smooth[-1]
+    fig.text(0.5, 0.01, f'Last at {last_time}: {last_battery:.0f}%, {last_voltage:.1f}V, {last_utilization:.1f}%, {last_airutiltx:.1f}%', ha='center', color='white', fontsize=9)
+    fig.subplots_adjust(bottom=0.85)
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
@@ -1364,13 +1379,23 @@ def plot_environment_log(node_id, frame , width=512, height=106):
         ax2.yaxis.set_major_formatter(formatter)
 
     fig.legend(loc='upper center', ncol=3, facecolor='#242424', edgecolor='#242424', labelcolor='linecolor')
+
+    last_time = last_time = datetime.strptime(str(times[-1]), '%Y-%m-%d %H:%M:%S').strftime('%H:%M:%S') # times[-1]
+    last_temp = temperatures[-1]
+    last_humidity = humidities[-1]
+    last_pressure = pressures[-1]
+    if pressures[-1] != 0 and pressures[0] != 0:
+        fig.text(0.5, 0.005, f'Last at {last_time}: {last_temp:.1f}°C, {last_humidity:.0f}%, {last_pressure:.0f}hPa', ha='center', color='white', fontsize=9)
+    else:
+        fig.text(0.5, 0.01, f'Last at {last_time}: {last_temp:.1f}°C, {last_humidity:.0f}%', ha='center', color='white', fontsize=9)
+    fig.subplots_adjust(bottom=0.85)
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
 
     return canvas.get_tk_widget()
 
-def plot_movment_curve(node_id, frame, width=512, height=102):
+def plot_movment_curve(node_id, frame, width=512, height=106):
     global metrics_age
     positions = []
     result = get_data_for_node('movement_log', node_id, days=1)
@@ -1413,7 +1438,7 @@ def plot_movment_curve(node_id, frame, width=512, height=102):
     # ax.xaxis.set_major_locator(mdates.HourLocator())
     ax.set_title('Altitude change in meters')
     ax.grid(True, color='#444444')
-
+    fig.subplots_adjust(bottom=0.85)
     fig.tight_layout()
     canvas = FigureCanvasTkAgg(fig, master=frame)
     canvas.draw()
