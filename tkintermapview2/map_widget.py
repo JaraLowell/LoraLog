@@ -11,7 +11,7 @@ import io
 import sqlite3
 import pyperclip
 import geocoder
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageEnhance, ImageOps, ImageChops
 from typing import Callable, List, Dict, Union, Tuple
 from functools import partial
 
@@ -31,6 +31,7 @@ class TkinterMapView(tkinter.Frame):
                  database_path: str = None,
                  use_database_only: bool = False,
                  max_zoom: int = 19,
+                 use_filter: bool = False,
                  **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -140,6 +141,7 @@ class TkinterMapView(tkinter.Frame):
         self.serverur = "tile.openstreetmap.org"
         self.database_path = database_path
         self.use_database_only = use_database_only
+        self.use_filter = use_filter
         self.overlay_tile_server: Union[str, None] = None
         self.max_zoom = max_zoom  # should be set according to tile server max zoom
         self.min_zoom: int = math.ceil(math.log2(math.ceil(self.width / self.tile_size)))  # min zoom at which map completely fills widget
@@ -584,9 +586,25 @@ class TkinterMapView(tkinter.Frame):
             response = requests.get(url, stream=True, headers={"User-Agent": "TkinterMapView"})
             image_org = Image.open(io.BytesIO(response.content))
             if image_org.mode != 'RGB': image_org = image_org.convert('RGB')
+
+            if self.use_filter:
+                # Making a darkmode map from a light one like using the css filter: invert(0.9) hue-rotate(170deg) brightness(1.5) contrast(1.2) saturate(0.3);
+                # Invert colors
+                inverted_image = ImageOps.invert(image_org)
+                image_org = ImageChops.blend(image_org, inverted_image, 0.9)
+                # Adjust brightness
+                enhancer = ImageEnhance.Brightness(image_org)
+                image_org = enhancer.enhance(1.1)
+                # Adjust contrast
+                enhancer = ImageEnhance.Contrast(image_org)
+                image_org = enhancer.enhance(1.2)
+                # Adjust saturation
+                enhancer = ImageEnhance.Color(image_org)
+                image_org = enhancer.enhance(0.12)
+
             output = io.BytesIO()
-            image_org.save(output, format="JPEG", quality=74)  # Adjust the quality as needed
-            image = Image.open(io.BytesIO(output.getvalue()))
+            image_org.save(output, format="JPEG", quality=74)  # Save the (possibly filtered) image to output
+            output.seek(0)  # Reset the stream position to the beginning
 
             if db_cursor is not None and output is not None:
                 try:
@@ -606,6 +624,7 @@ class TkinterMapView(tkinter.Frame):
                 image.paste(image_overlay, (0, 0), image_overlay)
 
             if self.running:
+                image = Image.open(output)
                 image_tk = ImageTk.PhotoImage(image)
             else:
                 return self.empty_tile_image

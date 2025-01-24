@@ -14,13 +14,15 @@ from pygame import mixer
 # import threading
 import threading
 import sqlite3
-import ast
+# import ast
 # DEBUG
 # import yaml
 
 # Tkinter imports
 from PIL import Image, ImageTk
+import tkinter as tk
 from tkinter import ttk, Frame, Text, Label, Entry, Button, StringVar, LabelFrame, Toplevel, IntVar, BooleanVar, DoubleVar
+from ctypes import windll
 from customtkinter import CTk
 from tkintermapview2 import TkinterMapView
 import textwrap
@@ -73,6 +75,7 @@ package_received_time = 0
 zoomhome = False
 ourNode = None
 NIenabled = False
+ThisFont = ('Fixedsys', int(10))
 
 def showLink(event):
     try:
@@ -259,6 +262,7 @@ config['meshtastic'] = {
     'metrics_age': '7',
     'max_lines': '1000',
     'map_tileserver': 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+    'color_filter': 'False',
     'map_cache': 'False',
     'weatherbeacon': 'False',
     'weatherjson': 'http://127.0.0.1/weather.json',
@@ -427,7 +431,7 @@ def connect_meshtastic(force_connect=False):
                         tab.grid_rowconfigure(0, weight=1)
                         tab.grid_columnconfigure(0, weight=1)
                         tabControl.add(tab, text=mylorachan[channel.index], padding=(0, 0, 0, 0))
-                        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
+                        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
                         text_area.grid(sticky='nsew')
                         text_area.configure(state="disabled")
                         text_boxes[mylorachan[channel.index]] = text_area
@@ -437,7 +441,7 @@ def connect_meshtastic(force_connect=False):
         tab.grid_rowconfigure(0, weight=1)
         tab.grid_columnconfigure(0, weight=1)
         tabControl.add(tab, text='Direct Message', padding=(0, 0, 0, 0))
-        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False, borderwidth=1, highlightthickness=0)
+        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
         text_area.grid(sticky='nsew')
         text_area.configure(state="disabled")
         text_boxes['Direct Message'] = text_area
@@ -1041,7 +1045,6 @@ def updatesnodes():
                                 if MyLora not in MapMarkers:
                                     MyLora_Lat = result[9]
                                     MyLora_Lon = result[10]
-                                    time.sleep(0.5)
                                     MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None]
                                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 8), data=MyLora, command = click_command)
                                     MapMarkers[MyLora][0].text_color = '#e67a7f'
@@ -1525,7 +1528,7 @@ if __name__ == "__main__":
         padding_frame.grid_columnconfigure(0, weight=1)
         
         # Create a text widget inside the frame
-        text_area = Text(padding_frame, wrap='word', width=frwidth, height=frheight, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), undo=False)
+        text_area = Text(padding_frame, wrap='word', width=frwidth, height=frheight, bg='#242424', fg='#dddddd', font=ThisFont, undo=False)
         text_area.grid(row=0, column=0, sticky='nsew')
         return text_area
 
@@ -1730,16 +1733,16 @@ if __name__ == "__main__":
         
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#777777', highlightcolor="#777777",highlightthickness=1, takefocus=True, border=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
-        chat_label = Label(overlay, text=unescape(nodesn) + '\n' + unescape(nodeln), font=('Fixedsys', 12), bg='#242424', fg='#2bd5ff')
+        chat_label = Label(overlay, text=unescape(nodesn) + '\n' + unescape(nodeln), font=ThisFont, bg='#242424', fg='#2bd5ff')
         chat_label.pack(side="top", fill="x", pady=3)
-        chat_box = Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=12)
+        chat_box = Text(overlay, bg='#242424', fg='#dddddd', font=ThisFont, width=64, height=12)
         chat_box.pack_propagate(False)  # Prevent resizing based on the content
         chat_box.pack(side="top", fill="both", expand=True, padx=10, pady=3)
 
         lastchat = [nodeid, nodesn, nodeln, chat_box]
         update_chat_log()
 
-        chat_input = Entry(overlay, textvariable=my_chat, width=50, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
+        chat_input = Entry(overlay, textvariable=my_chat, width=50, bg='#242424', fg='#eeeeee', font=ThisFont)
         chat_input.pack(side="top", fill="x", padx=10, pady=3)
 
         text_box4.unbind("<Return>")
@@ -1747,11 +1750,11 @@ if __name__ == "__main__":
 
         button_frame = Frame(overlay, bg='#242424')
         button_frame.pack(pady=12)
-        send_button = Button(button_frame, image=btn_img, command=lambda: prechat_priv(chat_input.get(), nodeid), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        send_button = Button(button_frame, image=btn_img, command=lambda: prechat_priv(chat_input.get(), nodeid), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=ThisFont)
         send_button.pack(side='left', padx=2)
-        clear_button = Button(button_frame, image=btn_img, command=lambda: print("Button Clear clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Clear Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        clear_button = Button(button_frame, image=btn_img, command=lambda: print("Button Clear clicked"), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Clear Chat", compound="center", fg='#d1d1d1', font=ThisFont)
         clear_button.pack(side='left', padx=2)
-        close_button = Button(button_frame, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        close_button = Button(button_frame, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close Chat", compound="center", fg='#d1d1d1', font=ThisFont)
         close_button.pack(side='left', padx=2)
 
     def click_command(marker):
@@ -1773,7 +1776,7 @@ if __name__ == "__main__":
         overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#777777', highlightcolor="#777777",highlightthickness=1, takefocus=True, border=1)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
 
-        info_label = Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=64, height=13, highlightbackground='#242424', highlightthickness=0)
+        info_label = Text(overlay, bg='#242424', fg='#dddddd', font=ThisFont, width=64, height=13, highlightbackground='#242424', highlightthickness=0)
         info_label.grid(row=0, column=0, columnspan=2, padx=1, pady=1, sticky='nsew')
 
         insert_colored_text(info_label, "⬢ ", "#" + marker.data[-6:],  center=True)
@@ -1845,21 +1848,21 @@ if __name__ == "__main__":
         button_frame = Frame(overlay, bg='#242424')
         button_frame.grid(row=2, column=0, columnspan=2, pady=2, sticky='nsew')
         if result[3] != MyLora:
-            button1 = Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqInfo', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Info", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+            button1 = Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqInfo', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Info", compound="center", fg='#d1d1d1', font=ThisFont)
             button1.grid(row=0, column=0, padx=(0, 1), sticky='e')
-            button2 = Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqPos', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Pos", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+            button2 = Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqPos', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Request Pos", compound="center", fg='#d1d1d1', font=ThisFont)
             button2.grid(row=0, column=1, padx=(0, 0), sticky='ew')
-            button3 = Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqTrace', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Trace Node", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+            button3 = Button(button_frame, image=btn_img, command=lambda: buttonpress('ReqTrace', marker.data), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Trace Node", compound="center", fg='#d1d1d1', font=ThisFont)
             button3.grid(row=0, column=2, padx=(1, 0), sticky='w')
 
         button_frame2 = Frame(overlay, bg='#242424')
         button_frame2.grid(row=3, column=0, columnspan=2, pady=2, sticky='nsew')
 
-        button4 = Button(button_frame2, image=btn_img, command=lambda: mapview.set_position(result[9], result[10]) if result[9] != -8.0 and result[10] != -8.0 else None, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Zoom", compound="center", fg='#d1d1d1' if result[9] != -8.0 and result[10] != -8.0 else '#616161', font=('Fixedsys', 10))
+        button4 = Button(button_frame2, image=btn_img, command=lambda: mapview.set_position(result[9], result[10]) if result[9] != -8.0 and result[10] != -8.0 else None, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Zoom", compound="center", fg='#d1d1d1' if result[9] != -8.0 and result[10] != -8.0 else '#616161', font=ThisFont)
         button4.grid(row=0, column=0, padx=(0, 1), sticky='e')
-        button5 = Button(button_frame2, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button5 = Button(button_frame2, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close", compound="center", fg='#d1d1d1', font=ThisFont)
         button5.grid(row=0, column=1, padx=(0, 0), sticky='ew')
-        button6 = Button(button_frame2, image=btn_img, command=lambda: chatbox(result[3], result[5], result[4]), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Chat", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+        button6 = Button(button_frame2, image=btn_img, command=lambda: chatbox(result[3], result[5], result[4]), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Chat", compound="center", fg='#d1d1d1', font=ThisFont)
         button6.grid(row=0, column=2, padx=(1, 0), sticky='w')
 
         button_frame.grid_columnconfigure(0, weight=1)
@@ -2266,11 +2269,11 @@ if __name__ == "__main__":
         global config_frame, meshtastic_client, ourNode, MyLora_LN, MyLora_SN, NIenabled
         style = ttk.Style()
         style.theme_use('classic')
-        style.configure("TLabel", background="#242424", foreground="#d1d1d1", font=('Fixedsys', 10))
-        style.configure("TEntry", background="#242424", foreground="#000000", borderwidth=0, border=0, highlightthickness=0, font=('Fixedsys', 10))
-        style.configure("TCheckbutton", background="#242424", foreground="#d1d1d1", borderwidth=0, border=0, highlightthickness=0, font=('Fixedsys', 10))
+        style.configure("TLabel", background="#242424", foreground="#d1d1d1", font=ThisFont)
+        style.configure("TEntry", background="#242424", foreground="#000000", borderwidth=0, border=0, highlightthickness=0, font=ThisFont)
+        style.configure("TCheckbutton", background="#242424", foreground="#d1d1d1", borderwidth=0, border=0, highlightthickness=0, font=ThisFont)
         style.map('TCheckbutton', indicatorcolor=[('selected', 'green'), ('pressed', 'gray')], background = [('disabled', '#242424'), ('pressed', '!focus', '#242424'), ('active', '#242424')], foreground = [('disabled', '#d1d1d1'), ('pressed', '#d1d1d1'), ('active', '#d1d1d1')])
-        style.configure("TButton", borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", compound="center", foreground='#000000', font=('Fixedsys', 10))
+        style.configure("TButton", borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", compound="center", foreground='#000000', font=ThisFont)
         config.notebook = ttk.Notebook(config_frame, style='TNotebook')
         config.notebook.pack(expand=True, fill='both')
 
@@ -2392,6 +2395,9 @@ if __name__ == "__main__":
             config_frame.grid_remove()
             frame.grid()
 
+    # Function to create the main window
+    windll.shcore.SetProcessDpiAwareness(1)
+
     root = CTk()
     root.title("Meshtastic Lora Logger")
     root.resizable(True, True)
@@ -2399,10 +2405,22 @@ if __name__ == "__main__":
     root.protocol('WM_DELETE_WINDOW', on_closing)
     root.tk_setPalette("#242424")
 
-    if root.winfo_screenwidth() > 1920 and root.winfo_screenheight() > 1080:
-        root.geometry(f'1600x990') 
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    if screen_width > 1920 and screen_height > 1080:
+        width_scale = (screen_width - 300) / 1920
+        height_scale = (screen_height - 300) / 1080
+        scale_factor = min(width_scale, height_scale)
+        new_width = int(1920 * scale_factor)
+        new_height = int(1080 * scale_factor)
+        root.geometry(f'{new_width}x{new_height}')
+        root.call('tk', 'scaling', scale_factor)
+        print(f"Geometry {new_width}x{new_height}, Scaling: {scale_factor}")
+        # ThisFont = ('InputMono', int(15 * scale_factor)) # Better for 2k screens and up, but this font is not default installed https://input.djr.com/download/
+        ThisFont = ('Fixedsys', int(12))
     else:
-        root.geometry(f'{str(root.winfo_screenwidth() - 70)}x{str(root.winfo_screenheight() - 70)}')
+        root.geometry(f'{screen_width - 70}x{screen_height - 70}')
+        ThisFont = ('Fixedsys', int(10))
 
     overlay = None
 
@@ -2462,14 +2480,14 @@ if __name__ == "__main__":
     tabControl.bind("<<NotebookTabChanged>>", reset_tab_highlight)
 
     # Left Box Chat input
-    padding_frame = LabelFrame(frame, background="#242424", padx=0, pady=4, bg='#242424', fg='#999999', font=('Fixedsys', 10), borderwidth=0, highlightthickness=0, labelanchor='n') # text=my_label.get()
+    padding_frame = LabelFrame(frame, background="#242424", padx=0, pady=4, bg='#242424', fg='#999999', font=ThisFont, borderwidth=0, highlightthickness=0, labelanchor='n') # text=my_label.get()
     padding_frame.grid(row=4, column=0, rowspan=1, columnspan=1, padx=0, pady=0, sticky="nsew")
     padding_frame.grid_rowconfigure(1, weight=1)
     padding_frame.grid_columnconfigure(0, weight=1)
 
-    text_box4 = Entry(padding_frame, textvariable=my_msg, width=68, bg='#242424', fg='#eeeeee', font=('Fixedsys', 10))
+    text_box4 = Entry(padding_frame, textvariable=my_msg, width=68, bg='#242424', fg='#eeeeee', font=ThisFont)
     text_box4.grid(row=4, column=0, padx=(1, 0))
-    send_box4 = Button(padding_frame, image=btn_img, command=lambda: prechat_chan(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+    send_box4 = Button(padding_frame, image=btn_img, command=lambda: prechat_chan(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=ThisFont)
     send_box4.grid(row=4, column=1, padx=(0, 18))
 
     text_box4.bind("<Return>", prechat_chan)
@@ -2480,10 +2498,13 @@ if __name__ == "__main__":
     frame_right.grid_rowconfigure(0, weight=1)
     frame_right.grid_columnconfigure(0, weight=1)
     database_path = None
+    myfilter = False
     if config.has_option('meshtastic', 'map_cache') and config.get('meshtastic', 'map_cache') == 'True':
         print("Using offline map cache")
         database_path = 'DataBase' + os.path.sep + 'MapTiles.db3'
-    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6, database_path=database_path)
+    if config.has_option('meshtastic', 'color_filter') and config.get('meshtastic', 'color_filter') == 'True':
+        myfilter = True
+    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6, database_path=database_path, use_filter=myfilter)
     mapview.pack(fill='both', expand=True) # grid(row=0, column=0, sticky='nsew')
     mapview.set_position(48.860381, 2.338594)
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
@@ -2530,7 +2551,7 @@ if __name__ == "__main__":
 
         # style = ttk.Style()
         # style.theme_use('default')
-        # style.configure(".", font=('Fixedsys', 10))
+        # style.configure(".", font=ThisFont)
         # style.configure("Treeview", background="#242424", foreground="#eeeeee", fieldbackground="#3d3d3d")
         # style.configure("Treeview.Heading", background="#242424", foreground="#eeeeee")
         tree = ttk.Treeview(new_window, columns=("nodeID", "timenow", "ShortName", "LongName", "latitude", "longitude", "altitude", "macaddr", "hardware", "timefirst", "rightbarstats", "mmqtt", "snr", "hops", "uptime"), show='headings')
@@ -2605,7 +2626,7 @@ if __name__ == "__main__":
     # Start OverLay window
     overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
     overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
-    info_label = Text(overlay, bg='#242424', fg='#dddddd', font=('Fixedsys', 10), width=51, height=8)
+    info_label = Text(overlay, bg='#242424', fg='#dddddd', font=ThisFont, width=51, height=8)
     info_label.pack(pady=2)
     insert_colored_text(info_label, '\n\nConnect to Meshtastic\n', "#d2d2d2", center=True)
     insert_colored_text(info_label, '─' * 34 + '\n', "#414141", center=True)
@@ -2616,7 +2637,7 @@ if __name__ == "__main__":
         insert_colored_text(info_label, 'Connect to Serial Port : ' + config.get('meshtastic', 'serial_port') + '\n', "#2bd5ff", center=True)
     else:
         insert_colored_text(info_label, 'Connect to IP : ' + config.get('meshtastic', 'host') + '\n', "#2bd5ff", center=True)
-    button = Button(overlay, image=btn_img, command=start_mesh, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Connect", compound="center", fg='#d1d1d1', font=('Fixedsys', 10))
+    button = Button(overlay, image=btn_img, command=start_mesh, borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Connect", compound="center", fg='#d1d1d1', font=ThisFont)
     button.pack(padx=8)
 
     try:
