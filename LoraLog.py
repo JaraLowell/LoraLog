@@ -96,7 +96,7 @@ def insert_colored_text(text_widget, text, color, center=False, tag=None):
     if "frame5" not in parent_frame or "notebook" in parent_frame:
         text_widget.configure(state="normal")
         if color == '#d1d1d1': # and "frame3" not in parent_frame:
-            text_widget.insert("end", "─" * 60 + "\n", '#414141')
+            text_widget.insert("end", "-" * 90 + "\n", '#414141')
             text_widget.tag_configure('#414141', foreground='#414141')
 
     if tag != None: # and tag != MyLora:
@@ -145,7 +145,7 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=False, 
     if nodeid == MyLora: tcolor = "#2bd5ff"
     timestamp = datetime.fromtimestamp(msgtime).strftime("%Y-%m-%d %H:%M:%S")
 
-    insert_colored_text(text_widget, "─" * 60, "#414141")
+    insert_colored_text(text_widget, "-" * 90, "#414141")
     insert_colored_text(text_widget,'\n From ' + unescape(label),tcolor)
     if private:
         dbcursor = dbconnection.cursor()
@@ -1990,7 +1990,7 @@ if __name__ == "__main__":
                 node_name = unescape(row[5]).strip()
                 node_time = row[1]
                 if tnow - row[1] >= map_delete:
-                    if node_id in MapMarkers:
+                    if node_id in MapMarkers and drawoldnodes == False:
                         MapMarkerDelete(node_id)
                     checknode(node_id, 4, '#aaaaaa', row[9], row[10], node_name, drawoldnodes)
                 else:
@@ -2004,7 +2004,7 @@ if __name__ == "__main__":
                         cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
                         cursor.close()
                         node_dist = "%.1f" % node_dist + "km"
-                    insert_colored_text(text_box_middle, ('─' * 14) + '\n', "#414141")
+                    insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
                     if row[15]:
                         insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
@@ -2029,7 +2029,7 @@ if __name__ == "__main__":
             logging.error(f"Error updating active nodes: {e}")
 
         # Just some stats for checks
-        insert_colored_text(text_box_middle, '\n' + ('─' * 14), "#3d3d3d")
+        insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
         time1 = (time.perf_counter() - start) * 1000
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms', "#9d9d9d")
 
@@ -2168,13 +2168,6 @@ if __name__ == "__main__":
 
     # Under construction, not sure yet if this be correct; needs testing!
     # option to manually send NeighborInfo
-    '''
-    Kanaal 0 -> Primair -> MeshNet      Key : AQ==
-    Kanaal 1 -> Sec     -> LongFast     Key : AQ==
-    Kanaal 2 -> Sec     -> LongMod      Key : AQ==
-    Kanaal 3 -> Sec     -> Longslow     Key : AQ==
-    Kanaal 4 -> Sec     -> Privé        Key: ....
-    '''
     def neighbors_update():
         global meshtastic_client, MyLoraID, MyLora, HeardDB
         tmp = 0
@@ -2395,7 +2388,7 @@ if __name__ == "__main__":
             config_frame.grid_remove()
             frame.grid()
 
-    # Function to create the main window
+    # Migt boost visuals a bit, but this might also be internet gosib, so not sure yet
     windll.shcore.SetProcessDpiAwareness(1)
 
     root = CTk()
@@ -2404,6 +2397,10 @@ if __name__ == "__main__":
     root.iconbitmap('Data' + os.path.sep + 'mesh.ico')
     root.protocol('WM_DELETE_WINDOW', on_closing)
     root.tk_setPalette("#242424")
+
+    if config.has_option('meshtastic', 'font'):
+        ThisFont = (config.get('meshtastic', 'font'), int(10))
+        logging.warning(f"Using font: {ThisFont}")
 
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
@@ -2415,12 +2412,11 @@ if __name__ == "__main__":
         new_height = int(1080 * scale_factor)
         root.geometry(f'{new_width}x{new_height}')
         root.call('tk', 'scaling', scale_factor)
-        print(f"Geometry {new_width}x{new_height}, Scaling: {scale_factor}")
-        # ThisFont = ('InputMono', int(15 * scale_factor)) # Better for 2k screens and up, but this font is not default installed https://input.djr.com/download/
-        ThisFont = ('Fixedsys', int(12))
+        logging.warning(f"Screen {screen_width}x{screen_height}, Geometry {new_width}x{new_height}, Font Scaling: {int(12 * scale_factor)}")
+        ThisFont = (ThisFont[0], int(14 * scale_factor))
     else:
         root.geometry(f'{screen_width - 70}x{screen_height - 70}')
-        ThisFont = ('Fixedsys', int(10))
+        ThisFont = (ThisFont[0], int(10))
 
     overlay = None
 
