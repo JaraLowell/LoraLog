@@ -1127,10 +1127,10 @@ from pandas import DataFrame
 from scipy.signal import savgol_filter
 
 plt.switch_backend('TkAgg') # No clue why we even need this
-plt.rcParams["font.family"] = 'sans-serif'
-plt.rcParams["font.size"] = 7
+plt.rcParams["font.family"] = 'DejaVu Sans' # Welp matplotlib no like fixedsys font, maybe not a true type ?
+plt.rcParams["font.size"] = int(9)
 
-def plot_rssi_log(node_id, frame, width=512, height=102):
+def plot_rssi_log(node_id, frame, width=512, height=128):
     global MyLora, dbconnection,metrics_age
 
     metrics = []
@@ -1211,7 +1211,7 @@ def plot_rssi_log(node_id, frame, width=512, height=102):
 
     return canvas.get_tk_widget()
 
-def plot_metrics_log(node_id, frame, width=512, height=102):
+def plot_metrics_log(node_id, frame, width=512, height=128):
     global MyLora, dbconnection, metrics_age
 
     metrics = []
@@ -1307,7 +1307,7 @@ def plot_metrics_log(node_id, frame, width=512, height=102):
 
     return canvas.get_tk_widget()
 
-def plot_environment_log(node_id, frame , width=512, height=106):
+def plot_environment_log(node_id, frame , width=512, height=128):
     global metrics_age
     metrics = []
     result = get_data_for_node('environment_metrics', node_id, days=metrics_age)
@@ -1398,7 +1398,7 @@ def plot_environment_log(node_id, frame , width=512, height=106):
 
     return canvas.get_tk_widget()
 
-def plot_movment_curve(node_id, frame, width=512, height=106):
+def plot_movment_curve(node_id, frame, width=512, height=128):
     global metrics_age
     positions = []
     result = get_data_for_node('movement_log', node_id, days=1)
@@ -1836,7 +1836,7 @@ if __name__ == "__main__":
         plot_functions = [plot_metrics_log, plot_rssi_log, plot_environment_log, plot_movment_curve]
         row, col = 0, 0
         for plot_func in plot_functions:
-            plot_widget = plot_func(marker.data, plot_frame, width=448, height=164)
+            plot_widget = plot_func(marker.data, plot_frame, width=512, height=256)
             if plot_widget:
                 plot_widget.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
                 col += 1
@@ -2259,8 +2259,9 @@ if __name__ == "__main__":
 
     # The Node Configuration Frame still a work in progress, for now the LoRa settings seem to be working; more to come
     def create_config_frame():
-        global config_frame, meshtastic_client, ourNode, MyLora_LN, MyLora_SN, NIenabled
+        global config_frame, meshtastic_client, ourNode, MyLora_LN, MyLora_SN, NIenabled, ThisFont
         style = ttk.Style()
+        style.configure(".", font=ThisFont)
         style.theme_use('classic')
         style.configure("TLabel", background="#242424", foreground="#d1d1d1", font=ThisFont)
         style.configure("TEntry", background="#242424", foreground="#000000", borderwidth=0, border=0, highlightthickness=0, font=ThisFont)
@@ -2545,9 +2546,9 @@ if __name__ == "__main__":
         new_window.configure(bg="#242424")
         new_window.iconbitmap('Data' + os.path.sep + 'mesh.ico')
 
-        # style = ttk.Style()
+        style = ttk.Style()
         # style.theme_use('default')
-        # style.configure(".", font=ThisFont)
+        style.configure(".", font=ThisFont)
         # style.configure("Treeview", background="#242424", foreground="#eeeeee", fieldbackground="#3d3d3d")
         # style.configure("Treeview.Heading", background="#242424", foreground="#eeeeee")
         tree = ttk.Treeview(new_window, columns=("nodeID", "timenow", "ShortName", "LongName", "latitude", "longitude", "altitude", "macaddr", "hardware", "timefirst", "rightbarstats", "mmqtt", "snr", "hops", "uptime"), show='headings')
