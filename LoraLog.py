@@ -34,6 +34,10 @@ import meshtastic.remote_hardware
 import meshtastic.version
 from copy import deepcopy
 
+import queue
+message_queue = queue.Queue()
+startup_complete = False
+
 try:
     from meshtastic.protobuf import config_pb2
 except ImportError:
@@ -324,7 +328,7 @@ def format_number(n):
         return f'{n:,}'
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode
+    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode, startup_complete
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -448,6 +452,7 @@ def connect_meshtastic(force_connect=False):
 
     time.sleep(0.5)
     updatesnodes()
+    startup_complete = True
     return meshtastic_client
 
 def channame(s):
@@ -475,7 +480,7 @@ def reset_tab_highlight(event):
                 break
 
 def on_lost_meshtastic_connection(interface):
-    global root, loop, telemetry_thread, position_thread, trace_thread, meshtastic_client
+    global root, loop, telemetry_thread, position_thread, trace_thread, meshtastic_client, startup_complete
 
     pub.unsubscribe(on_lost_meshtastic_connection, "meshtastic.connection.lost")
 
@@ -489,6 +494,7 @@ def on_lost_meshtastic_connection(interface):
 
     pub.unsubscribe(on_meshtastic_message, "meshtastic.receive")
     pub.unsubscribe(on_meshtastic_connection, "meshtastic.connection.established")
+    startup_complete = False
 
     insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
     insert_colored_text(text_box1, " Lost connection to node!, Reconnecting in 10 seconds\n", "#db6544")
@@ -586,7 +592,28 @@ def deloldheard(deltime):
             value[2] = None
         del HeardDB[key]
 
+def adjust_rx_time(rx_time):
+    rx_datetime = datetime.fromtimestamp(rx_time)
+    current_local_time = datetime.now()
+    # if bigger then 6 hours or 0 then set to current time
+    if rx_time == 0 or abs((current_local_time - rx_datetime).total_seconds()) > 21600:
+        rx_datetime = current_local_time
+    return rx_datetime
+
+# Lets add a small queue to handle the messages at startup, seeing we might get chat while the channels not yet loaded
 def on_meshtastic_message(packet, interface, loop=None):
+    if not startup_complete:
+        message_queue.put(("meshtastic.receive", packet))
+    else:
+        while not message_queue.empty():
+            topic, message = message_queue.get()
+            if topic == "meshtastic.receive":
+                on_meshtastic_message2(message)
+                time.sleep(0.15)
+        on_meshtastic_message2(packet)
+        pass
+
+def on_meshtastic_message2(packet):
     # print(yaml.dump(packet), end='\n\n')
     global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time
     if MyLora == '':
@@ -608,9 +635,18 @@ def on_meshtastic_message(packet, interface, loop=None):
     if "viaMqtt" in packet:
         viaMqtt = True
 
+    nodesnr = 0
+    if "rxSnr" in packet and packet['rxSnr'] is not None:
+        nodesnr = packet['rxSnr']
+    else:
+        # Apparently chat for some odd  reason does not have viaMqtt, but return no snr either
+        viaMqtt = True
+
     hopStart = -1
     if "hopStart" in packet:
         hopStart = packet.get('hopStart', 0) - packet.get('hopLimit', 0) # packet.get('hopStart', -1)
+
+    adjusted_time = adjust_rx_time(packet.get('rx_time', 0)).strftime("%H:%M:%S")
 
     with dbconnection:
         dbcursor = dbconnection.cursor()
@@ -619,9 +655,9 @@ def on_meshtastic_message(packet, interface, loop=None):
             if result is None:
                 sn = str(fromraw[-4:])
                 ln = "Meshtastic " + sn
-                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], tnow, text_from, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), tnow, sn, ln))
+                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], packet.get('rx_time', tnow), text_from, viaMqtt, nodesnr, packet.get('rxRssi', 0), tnow, sn, ln))
                 result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
-                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged\n", "#d1d1d1")
+                insert_colored_text(text_box1, "[" + adjusted_time + "] New Node Logged\n", "#d1d1d1")
                 insert_colored_text(text_box1, (' ' * 11) + "Node ID !" + fromraw + " (" + text_from + ")\n", "#e8643f", tag=fromraw)
                 playsound('Data' + os.path.sep + 'NewNode.mp3')
             else:
@@ -630,7 +666,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                 if result[4] == '': result[4] = "Meshtastic " + str(fromraw[-4:])
                 text_from = unescape(result[5]) + " (" + unescape(result[4]) + ")"
                 fromname = unescape(result[5])
-                dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ?, last_snr = ?, last_rssi = ?, hopstart = ? WHERE node_id = ?", (tnow, viaMqtt, packet.get('rxSnr', 0), packet.get('rxRssi', 0), hopStart, packet["from"]))
+                dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ?, last_snr = ?, last_rssi = ?, hopstart = ? WHERE node_id = ?", (packet.get('rx_time', tnow), viaMqtt, nodesnr, packet.get('rxRssi', 0), hopStart, packet["from"]))
 
         if "decoded" in packet:
             data = packet["decoded"]
@@ -719,10 +755,9 @@ def on_meshtastic_message(packet, interface, loop=None):
                         text_msgs = str(text.encode('ascii', 'xmlcharrefreplace'), 'ascii').rstrip()
                         text_raws = text
                         text_chns = 'Direct Message'
-                        if "toId" in packet:
-                            if packet["toId"] == '^all':
-                                text_chns = str(mylorachan[0])
-                        if "channel" in packet:
+                        if "toId" in packet and packet["toId"] == '^all' and mylorachan:
+                            text_chns = str(mylorachan[0])
+                        if "channel" in packet and mylorachan:
                             text_chns = str(mylorachan[packet["channel"]])
 
                         ischat = True
@@ -819,7 +854,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                             nbNide = '!' + nodeid
                             if tmp is not None:
                                 nbNide = str(tmp[5].encode('ascii', 'xmlcharrefreplace'), 'ascii') # unescape(tmp[5])
-                                if nodeid not in MapMarkers:
+                                if nodeid not in MapMarkers and nodeid != MyLora:
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
                                     MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=nodeid, command = click_command)
                                     dbcursor.execute("UPDATE node_info SET timerec = ? WHERE hex_id = ?", (tnow, nodeid)) # We dont need to update this as we only update if we hear it our self
@@ -900,11 +935,6 @@ def on_meshtastic_message(packet, interface, loop=None):
                     else:
                         text_raws = 'Node Unknown Packet'
 
-                nodesnr = 0
-                if "rxSnr" in packet and packet['rxSnr'] is not None:
-                    dbcursor.execute("UPDATE node_info SET last_snr = ?, last_rssi = ?, ismqtt = ? WHERE node_id = ?", (packet.get('rxSnr', 0), packet.get('rxRssi', 0), viaMqtt, packet["from"]))
-                    nodesnr = packet['rxSnr']
-
                 # Lets work the map
                 if fromraw != MyLora:
                     if fromraw in MapMarkers:
@@ -936,10 +966,11 @@ def on_meshtastic_message(packet, interface, loop=None):
                 text_from = unescape(text_from)
                 text_raws = unescape(text_raws)
                 text_via = ''
+
                 if viaMqtt == True:
                     text_via = ' via mqtt'
-                elif hopStart > 0:
-                    text_via = ' via ' + str(hopStart) + ' node'
+                if hopStart > 0:
+                    text_via += ' via ' + str(hopStart) + ' node'
 
                 chantxt = (' ' * 11)
                 if "channel" in packet:
@@ -950,7 +981,7 @@ def on_meshtastic_message(packet, interface, loop=None):
                         chantxt = chantxt[:8] + '.. '
 
                 if text_raws != '' and MyLora != fromraw:
-                    insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
+                    insert_colored_text(text_box1, '[' + adjusted_time + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
                     if ischat == True:
                         add_message(fromraw, text_raws, tnow, msend=text_chns)
 
@@ -965,15 +996,15 @@ def on_meshtastic_message(packet, interface, loop=None):
 
                         insert_colored_text(text_box1, chantxt + text_raws + text_from + '\n', "#00c983")
                 elif text_raws != '' and MyLora == fromraw:
-                    insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + text_via + "\n", "#d1d1d1")
+                    insert_colored_text(text_box2, "[" + adjusted_time + '] ' + text_from + text_via + "\n", "#d1d1d1")
                     insert_colored_text(text_box2, chantxt + text_raws + '\n', "#00c983")
                 else:
-                    insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
+                    insert_colored_text(text_box1, '[' + adjusted_time + '] ' + text_from + ' [!' + fromraw + ']' + text_via + "\n", "#d1d1d1", tag=fromraw)
             else:
                 logging.debug("No fromId in packet")
-                insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + '] No fromId in packet\n', "#c24400")
+                insert_colored_text(text_box1, '[' + adjusted_time + '] No fromId in packet\n', "#c24400")
         else:
-            insert_colored_text(text_box1, '[' + time.strftime("%H:%M:%S", time.localtime()) + ']', "#d1d1d1")
+            insert_colored_text(text_box1, '[' + adjusted_time + ']', "#d1d1d1")
             if hopStart > 0:
                 text_from += ' via ' + str(hopStart) + ' node'
             insert_colored_text(text_box1, ' Encrypted packet from ' + text_from + '\n', "#db6544", tag=fromraw)
@@ -1049,6 +1080,8 @@ def updatesnodes():
                                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 8), data=MyLora, command = click_command)
                                     MapMarkers[MyLora][0].text_color = '#e67a7f'
                                     zoomhome = False
+                                elif MapMarkers[MyLora][0] != None:
+                                    MapMarkers[MyLora][0].change_icon(1)
                             else:
                                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                                 insert_colored_text(text_box2, " My Node has no position !!\n", "#e8643f")
@@ -1983,6 +2016,7 @@ if __name__ == "__main__":
                 MapMarkers[node_id][0].delete()
                 MapMarkers[node_id][0] = None
                 del MapMarkers[node_id]
+                redrawnaibors(node_id)
 
             # Batch update nodes
             for node_id, node_time, row in nodes_to_update:
