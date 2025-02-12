@@ -14,6 +14,7 @@ import geocoder
 from PIL import Image, ImageTk, ImageEnhance, ImageOps, ImageChops
 from typing import Callable, List, Dict, Union, Tuple
 from functools import partial
+import colorsys
 
 from .canvas_position_marker import CanvasPositionMarker
 from .canvas_tile import CanvasTile
@@ -603,7 +604,7 @@ class TkinterMapView(tkinter.Frame):
                 image_org = enhancer.enhance(0.12)
 
             output = io.BytesIO()
-            image_org.save(output, format="JPEG", quality=74)  # Save the (possibly filtered) image to output
+            image_org.save(output, format="JPEG", quality=72)  # Save the (possibly filtered) image to output
             output.seek(0)  # Reset the stream position to the beginning
 
             if db_cursor is not None and output is not None:

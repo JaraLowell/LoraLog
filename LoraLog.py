@@ -609,7 +609,7 @@ def on_meshtastic_message(packet, interface, loop=None):
             topic, message = message_queue.get()
             if topic == "meshtastic.receive":
                 on_meshtastic_message2(message)
-                time.sleep(0.15)
+                time.sleep(0.05)
         on_meshtastic_message2(packet)
         pass
 
@@ -655,7 +655,7 @@ def on_meshtastic_message2(packet):
             if result is None:
                 sn = str(fromraw[-4:])
                 ln = "Meshtastic " + sn
-                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], packet.get('rx_time', tnow), text_from, viaMqtt, nodesnr, packet.get('rxRssi', 0), tnow, sn, ln))
+                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name, hopstart) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], packet.get('rx_time', tnow), text_from, viaMqtt, nodesnr, packet.get('rxRssi', 0), tnow, sn, ln, hopStart))
                 result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
                 insert_colored_text(text_box1, "[" + adjusted_time + "] New Node Logged\n", "#d1d1d1")
                 insert_colored_text(text_box1, (' ' * 11) + "Node ID !" + fromraw + " (" + text_from + ")\n", "#e8643f", tag=fromraw)
@@ -939,15 +939,15 @@ def on_meshtastic_message2(packet):
                 if fromraw != MyLora:
                     if fromraw in MapMarkers:
                         MapMarkers[fromraw][2] = tnow
-                        if viaMqtt == True and MapMarkers[fromraw][1] == False:
+                        if (viaMqtt == True or hopStart > 0) and MapMarkers[fromraw][1] == False:
                             MapMarkers[fromraw][1] = True
                             if MapMarkers[fromraw][0] != None:
                                 MapMarkers[fromraw][0].change_icon(3)
-                        elif viaMqtt == False and MapMarkers[fromraw][1] == True:
+                        elif (viaMqtt == False or hopStart == 0) and MapMarkers[fromraw][1] == True:
                             MapMarkers[fromraw][1] = False
                             if MapMarkers[fromraw][0] != None:
                                 MapMarkers[fromraw][0].change_icon(2)
-                    elif result[9] != -8.0 and result[10] != -8.0 and viaMqtt == True:
+                    elif result[9] != -8.0 and result[10] != -8.0 and (viaMqtt == True or hopStart > 0):
                         MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
                         MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                         MapMarkers[fromraw][0].text_color = '#2bd5ff'
@@ -985,7 +985,7 @@ def on_meshtastic_message2(packet):
                     if ischat == True:
                         add_message(fromraw, text_raws, tnow, msend=text_chns)
 
-                    if viaMqtt == True:
+                    if viaMqtt == True or hopStart > 0:
                         insert_colored_text(text_box1, chantxt + text_raws + '\n', "#c9a500")
                     else:
                         text_from = ''
@@ -1044,6 +1044,9 @@ def updatesnodes():
 
             if "user" in info:
                 tmp = info['user']
+                nodelat = -8.0
+                nodelon = -8.0
+                nodealt = 0
                 if "id" in tmp and tmp['id'] != '':
                     # Only push to DB if we actually get a node ID
                     nodeID = tmp.get('id', '')[1:]
@@ -1073,14 +1076,20 @@ def updatesnodes():
 
                         if nodeID == MyLora:
                             if MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
-                                if MyLora not in MapMarkers:
+                                if nodelat != -8.0 and nodelon != -8.0:
+                                    MyLora_Lat = nodelat
+                                    MyLora_Lon = nodelon
+                                else:
                                     MyLora_Lat = result[9]
                                     MyLora_Lon = result[10]
+
+                                if MyLora not in MapMarkers:
                                     MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None]
                                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 8), data=MyLora, command = click_command)
                                     MapMarkers[MyLora][0].text_color = '#e67a7f'
                                     zoomhome = False
                                 elif MapMarkers[MyLora][0] != None:
+                                    MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
                                     MapMarkers[MyLora][0].change_icon(1)
                             else:
                                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
@@ -2040,25 +2049,33 @@ if __name__ == "__main__":
                         node_dist = "%.1f" % node_dist + "km"
                     insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
                     if row[15]:
-                        insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
-                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}\n", "#9d9d9d")
-                        checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
-                    else:
-                        node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
-                        # ["#de6933", "#c9a500", "#00c983"] # red, yellow, green
-                        if row[16] > -7:
-                            color = "#00c983"  # green
-                        elif -15 <= row[16] <= -7:
-                            color = "#c9a500"  # orange
-                        else:
-                            color = "#de6933"  # red
-                        insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#00c983", tag=str(node_id))
+                        insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#9d6d00", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
                         insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f"{node_sig}\n", color)
+                        insert_colored_text(text_box_middle, f"MQTT\n".rjust(11), "#5d5d5d")
+                        checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                    else:
+                        if row[23] <= 0:
+                            insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#00c983", tag=str(node_id))
+                        else:
+                            insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#c9a500", tag=str(node_id))
+                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
+                        if row[23] <= 0:
+                            node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
+                            # ["#de6933", "#c9a500", "#00c983"] # red, yellow, green
+                            if row[16] > -7:
+                                color = "#00c983"  # green
+                            elif -15 <= row[16] <= -7:
+                                color = "#c9a500"  # orange
+                            else:
+                                color = "#de6933"  # red
+                            insert_colored_text(text_box_middle, f"{node_sig}\n", color)
+                            checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                        else:
+                            insert_colored_text(text_box_middle, f"{row[23]} Hops\n".rjust(11), "#c9a500")
+                            checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
 
-                        checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
         except Exception as e:
             logging.error(f"Error updating active nodes: {e}")
 
