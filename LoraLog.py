@@ -771,6 +771,7 @@ def on_meshtastic_message2(packet):
                     nodealt = position.get('altitude', 0)
                     node_dist = 0.0
                     extra = ''
+                    text_msgs = 'Node Position '
                     if nodelat != -8.0 and nodelon != -8.0:
                         if (result[9] != nodelat or result[10] != nodelon or result[11] != nodealt) and result[9] != -8.0 and result[10] != -8.0:
                             # We moved add to movement log ?
@@ -783,11 +784,11 @@ def on_meshtastic_message2(packet):
                         else:
                             node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
                         dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, precision_bits = ?, last_sats = ?, distance = ? WHERE node_id = ?", (nodelat, nodelon, position.get('altitude', 0), position.get('precisionBits', 0), position.get('satsInView', 0), node_dist, packet["from"]))
-                    text_msgs = 'Node Position '
-                    text_msgs += 'latitude ' + str(round(nodelat,4)) + ' '
-                    text_msgs += 'longitude ' + str(round(nodelon,4)) + ' '
-                    text_msgs += 'altitude ' + str(nodealt) + ' meter\n' + (' ' * 11)
-                    if nodelat != -8.0 and nodelon != -8.0:
+
+                        text_msgs += 'latitude ' + str(round(nodelat,4)) + ' '
+                        text_msgs += 'longitude ' + str(round(nodelon,4)) + ' '
+                        text_msgs += 'altitude ' + str(nodealt) + ' meter\n' + (' ' * 11)
+
                         if MyLora != fromraw and nodelat != -8.0 and nodelon != -8.0:
                             text_msgs += "Distance: ±" + str(node_dist) + "km "
                         if fromraw in MapMarkers:
@@ -936,31 +937,36 @@ def on_meshtastic_message2(packet):
                         text_raws = 'Node Unknown Packet'
 
                 # Lets work the map
+                isorange = False
+                if viaMqtt or hopStart > 0:
+                    isorange = True
                 if fromraw != MyLora:
-                    if fromraw in MapMarkers:
+                    if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
                         MapMarkers[fromraw][2] = tnow
-                        if (viaMqtt == True or hopStart > 0) and MapMarkers[fromraw][1] == False:
+                        if MapMarkers[fromraw][1] == False and isorange == True:
                             MapMarkers[fromraw][1] = True
-                            if MapMarkers[fromraw][0] != None:
-                                MapMarkers[fromraw][0].change_icon(3)
-                        elif (viaMqtt == False or hopStart == 0) and MapMarkers[fromraw][1] == True:
+                            MapMarkers[fromraw][0].change_icon(3)
+                        elif MapMarkers[fromraw][1] == True and isorange == False:
                             MapMarkers[fromraw][1] = False
-                            if MapMarkers[fromraw][0] != None:
-                                MapMarkers[fromraw][0].change_icon(2)
-                    elif result[9] != -8.0 and result[10] != -8.0 and (viaMqtt == True or hopStart > 0):
+                            MapMarkers[fromraw][0].change_icon(2)
+                    elif result[9] != -8.0 and result[10] != -8.0 and isorange == True:
                         MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
                         MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                         MapMarkers[fromraw][0].text_color = '#2bd5ff'
-                    elif result[9] != -8.0 and result[10] != -8.0 and viaMqtt == False:
+                    elif result[9] != -8.0 and result[10] != -8.0 and isorange == False:
                         MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None]
                         MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=2, text_color = '#2bd5ff', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                         MapMarkers[fromraw][0].text_color = '#2bd5ff'
 
                 # Lets add a indicator
-                if fromraw in MapMarkers and MapMarkers[fromraw][6] == None and 'localstats_metrics' not in packet:
-                    MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
-                elif fromraw in MapMarkers and MapMarkers[fromraw][6] != None and 'localstats_metrics' not in packet:
-                    MapMarkers[fromraw][6].change_icon(5)
+                if 'localstats_metrics' not in packet:
+                    if fromraw in MapMarkers and MapMarkers[fromraw][6] == None:
+                        if fromraw != MyLora:
+                            MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
+                        else:
+                            MapMarkers[fromraw][6] = mapview.set_marker(MyLora_Lat, MyLora_Lon, icon_index=5, data=fromraw, command = click_command)
+                    elif fromraw in MapMarkers and MapMarkers[fromraw][6] != None:
+                        MapMarkers[fromraw][6].change_icon(5)
 
                 # Cleanup and get ready to print
                 text_from = unescape(text_from)
@@ -985,7 +991,7 @@ def on_meshtastic_message2(packet):
                     if ischat == True:
                         add_message(fromraw, text_raws, tnow, msend=text_chns)
 
-                    if viaMqtt == True or hopStart > 0:
+                    if isorange == True:
                         insert_colored_text(text_box1, chantxt + text_raws + '\n', "#c9a500")
                     else:
                         text_from = ''
@@ -1015,7 +1021,7 @@ def on_meshtastic_message2(packet):
                     MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 8), data=fromraw, command = click_command)
                     MapMarkers[fromraw][0].text_color = '#aaaaaa'
                     MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
-            elif fromraw in MapMarkers and MapMarkers[fromraw][0] == None:
+            elif fromraw in MapMarkers and MapMarkers[fromraw][6] == None:
                 MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
 
         # Lets add the mheard lines
@@ -1091,6 +1097,9 @@ def updatesnodes():
                                 elif MapMarkers[MyLora][0] != None:
                                     MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
                                     MapMarkers[MyLora][0].change_icon(1)
+
+                                if MapMarkers[MyLora][6] != None:
+                                    MapMarkers[MyLora][6].set_position(MyLora_Lat, MyLora_Lon)
                             else:
                                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                                 insert_colored_text(text_box2, " My Node has no position !!\n", "#e8643f")
@@ -1942,6 +1951,8 @@ if __name__ == "__main__":
                     MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 8), data=node_id, command = click_command)
                     MapMarkers[node_id][0].text_color = color
                 MapMarkers[node_id][1] = tmp
+                if MapMarkers[node_id][6] != None:
+                    MapMarkers[node_id][6].set_position(lat, lon)
             else:
                 MapMarkerDelete(node_id)
                 MapMarkers[node_id][0].delete()
@@ -1956,6 +1967,8 @@ if __name__ == "__main__":
                     MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 8), data=node_id, command = click_command)
                     MapMarkers[node_id][0].text_color = color
                     MapMarkers[node_id][1] = tmp
+            else:
+                print(f"Node {node_id} has no position data")
 
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time
@@ -1991,7 +2004,6 @@ if __name__ == "__main__":
             insert_colored_text(text_box_middle, MyLoraText1, "#c1c1c1")
         if MyLoraText2:
             insert_colored_text(text_box_middle, MyLoraText2, "#c1c1c1")
-
 
         try:
             cursor = dbconnection.cursor()
@@ -2054,6 +2066,8 @@ if __name__ == "__main__":
                         insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
                         insert_colored_text(text_box_middle, f"MQTT\n".rjust(11), "#5d5d5d")
                         checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                        if node_id in MapMarkers:
+                            MapMarkers[node_id][1] = True
                     else:
                         if row[23] <= 0:
                             insert_colored_text(text_box_middle, f" {node_name.ljust(9)}", "#00c983", tag=str(node_id))
@@ -2075,7 +2089,8 @@ if __name__ == "__main__":
                         else:
                             insert_colored_text(text_box_middle, f"{row[23]} Hops\n".rjust(11), "#c9a500")
                             checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
-
+                        if node_id in MapMarkers:
+                            MapMarkers[node_id][1] = False
         except Exception as e:
             logging.error(f"Error updating active nodes: {e}")
 
