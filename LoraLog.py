@@ -674,6 +674,27 @@ def on_meshtastic_message2(packet):
             if text_from !='':
                 text_msgs = ''
 
+                # Lets work the map
+                isorange = False
+                if viaMqtt or hopStart > 0:
+                    isorange = True
+                if fromraw != MyLora:
+                    if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
+                        if MapMarkers[fromraw][1] == False and isorange == True:
+                            MapMarkers[fromraw][1] = True
+                            MapMarkers[fromraw][0].change_icon(3)
+                        elif MapMarkers[fromraw][1] == True and isorange == False:
+                            MapMarkers[fromraw][1] = False
+                            MapMarkers[fromraw][0].change_icon(2)
+                    elif result[9] != -8.0 and result[10] != -8.0 and isorange == True:
+                        MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
+                        MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=fromname, icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                        MapMarkers[fromraw][0].text_color = '#2bd5ff'
+                    elif result[9] != -8.0 and result[10] != -8.0 and isorange == False:
+                        MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None]
+                        MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=fromname, icon_index=2, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                        MapMarkers[fromraw][0].text_color = '#2bd5ff'
+
                 # Lets Work the Msgs
                 if data["portnum"] == "ADMIN_APP":
                     if "getDeviceMetadataResponse" in data["admin"]:
@@ -844,12 +865,15 @@ def on_meshtastic_message2(packet):
                         text_raws = 'Node Info No Data'
                 elif data["portnum"] == "NEIGHBORINFO_APP":
                     text_raws = 'Node Neighborinfo'
+                    '''
                     if fromraw not in MapMarkers:
                         if result[9] != -8.0 and result[10] != -8.0:
                             MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
                             MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                    '''
                     if "neighborinfo" in data and "neighbors" in data["neighborinfo"]:
                         text = data["neighborinfo"]["neighbors"]
+                        nbhobs = hopStart + 1
                         for neighbor in text:
                             nodeid = idToHex(neighbor["nodeId"])[1:]
                             tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ? AND latitude != -8 AND longitude != -8", (nodeid,)).fetchone()
@@ -859,7 +883,7 @@ def on_meshtastic_message2(packet):
                                 if nodeid not in MapMarkers and nodeid != MyLora:
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
                                     MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=nodeid, command = click_command)
-                                    dbcursor.execute("UPDATE node_info SET timerec = ? WHERE hex_id = ?", (tnow, nodeid)) # We dont need to update this as we only update if we hear it our self
+                                    dbcursor.execute("UPDATE node_info SET timerec = ?, hopstart = ?, ismqtt = ? WHERE hex_id = ?", (tnow, nbhobs, viaMqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
                                 nodeid = tmp[5]
                             else:
                                 nodeid = '!' + nodeid
@@ -937,27 +961,8 @@ def on_meshtastic_message2(packet):
                     else:
                         text_raws = 'Node Unknown Packet'
 
-                # Lets work the map
-                isorange = False
-                if viaMqtt or hopStart > 0:
-                    isorange = True
-                if fromraw != MyLora:
-                    if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
-                        if MapMarkers[fromraw][1] == False and isorange == True:
-                            MapMarkers[fromraw][1] = True
-                            MapMarkers[fromraw][0].change_icon(3)
-                        elif MapMarkers[fromraw][1] == True and isorange == False:
-                            MapMarkers[fromraw][1] = False
-                            MapMarkers[fromraw][0].change_icon(2)
-                    elif result[9] != -8.0 and result[10] != -8.0 and isorange == True:
-                        MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
-                        MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=fromname, icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
-                        MapMarkers[fromraw][0].text_color = '#2bd5ff'
-                    elif result[9] != -8.0 and result[10] != -8.0 and isorange == False:
-                        MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None]
-                        MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=fromname, icon_index=2, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
-                        MapMarkers[fromraw][0].text_color = '#2bd5ff'
-                MapMarkers[fromraw][2] = tnow
+                if fromraw in MapMarkers:
+                    MapMarkers[fromraw][2] = tnow
 
                 # Lets add a indicator
                 if 'localstats_metrics' not in packet:
