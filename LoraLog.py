@@ -1552,6 +1552,13 @@ if __name__ == "__main__":
     def on_closing():
         global isLora, meshtastic_client, mapview, root, dbconnection
         isLora = False
+        # Store window size and location in a file, to load on restart
+        try:
+            with open("LoraLog.ini", 'w') as ini_file:
+                ini_file.write(root.geometry())
+        except Exception as e:
+            logging.error("Error saving window size: ", str(e))
+
         if meshtastic_client is not None:
             try:
                 logging.error("Closing link to meshtastic client (Exit)")
@@ -2480,20 +2487,30 @@ if __name__ == "__main__":
         ThisFont = (config.get('meshtastic', 'font'), int(10))
         logging.warning(f"Using font: {ThisFont}")
 
+    # load the window size and position, then if somting is stored use that, else use the screen size
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
-    if screen_width > 1920 and screen_height > 1080:
+    overlay = None
+    if os.path.exists('LoraLog.ini'):
+        try:
+            with open("LoraLog.ini", "r") as conf: 
+                root.geometry(conf.read())
+                overlay = 1
+        except Exception as e:
+            logging.error(f"Error loading window size: {e}")
+
+    if overlay == None and screen_width > 1920 and screen_height > 1080:
         width_scale = (screen_width - 300) / 1920
         height_scale = (screen_height - 300) / 1080
         scale_factor = min(width_scale, height_scale)
         new_width = int(1920 * scale_factor)
         new_height = int(1080 * scale_factor)
-        root.geometry(f'{new_width}x{new_height}')
+        root.geometry(f'{new_width}x{new_height}+35+35')
         root.call('tk', 'scaling', scale_factor)
         logging.warning(f"Screen {screen_width}x{screen_height}, Geometry {new_width}x{new_height}, Font Scaling: {int(12 * scale_factor)}")
         ThisFont = (ThisFont[0], int(14 * scale_factor))
-    else:
-        root.geometry(f'{screen_width - 70}x{screen_height - 70}')
+    elif overlay == None:
+        root.geometry(f'{screen_width - 70}x{screen_height - 70}+35+35')
         ThisFont = (ThisFont[0], int(10))
 
     overlay = None

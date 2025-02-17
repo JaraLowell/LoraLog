@@ -9,3 +9,4 @@ venv/
 tkintermapview2/__pycache__/
 *.log
 config.ini
+LoraLog.ini
