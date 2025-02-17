@@ -880,7 +880,7 @@ def on_meshtastic_message2(packet):
                             nbNide = '!' + nodeid
                             if tmp is not None:
                                 nbNide = str(tmp[5].encode('ascii', 'xmlcharrefreplace'), 'ascii') # unescape(tmp[5])
-                                if nodeid not in MapMarkers and nodeid != MyLora:
+                                if nodeid not in MapMarkers: # and nodeid != MyLora:
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
                                     MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=nodeid, command = click_command)
                                     dbcursor.execute("UPDATE node_info SET timerec = ?, hopstart = ?, ismqtt = ? WHERE hex_id = ?", (tnow, nbhobs, viaMqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
@@ -2144,6 +2144,7 @@ if __name__ == "__main__":
             zoomhome = True
             mapview.set_zoom(11)
             mapview.set_position(MyLora_Lat, MyLora_Lon)
+            print(mapview.zoom)
 
         # Delete or check old heard nodes
         deloldheard(map_delete)
@@ -2544,7 +2545,7 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.4.1 (Jan 2025) By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.4.2 (Jan 2025) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.insert("end", "─" * 60 + "\n", '#414141')
     text_box1.tag_configure('#414141', foreground='#414141')
