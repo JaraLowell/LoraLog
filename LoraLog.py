@@ -2304,16 +2304,16 @@ if __name__ == "__main__":
                     banner = aprs_interface.recv(512).decode('latin-1')
                     text_widget = text_boxes['APRS Message']
                     insert_colored_text(text_widget, banner, '#ffa1a1', center=False, tag=None)
-                    aprsdata = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog 1.4\n"
+                    aprs2data = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog 1.4\n"
                     MyAPRSCall = config.get('APRS', 'callsign')
-                    aprs_interface.sendall(aprsdata.encode('utf-8'))
+                    aprs_interface.sendall(aprs2data.encode('utf-8'))
                     listener_thread = threading.Thread(target=listen_to_aprs, args=(aprs_interface,))
                     listener_thread.start()
                     aprsrange = int(config.get('APRS', 'filter_range'))
                     if aprsrange == 0:
                         aprsrange = 16
-                    aprsdata = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/{aprsrange}\r\n"
-                    aprs_interface.sendall(aprsdata.encode('utf-8'))
+                    aprs2data = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/{aprsrange}\r\n"
+                    aprs_interface.sendall(aprs2data.encode('utf-8'))
 
         if 'APRS' in config:
             if config.get('APRS', 'aprs_plugin') == 'True':
@@ -2412,6 +2412,7 @@ if __name__ == "__main__":
                     if config.get('APRS', 'aprs_plugin') == 'True':
                         time.sleep(0.10)
                         aprsbeacon = not aprsbeacon
+                        beacon_message = ''
                         if aprsbeacon:
                             tmp = 'APRS - iGate'
                             if MyLoraText1:
