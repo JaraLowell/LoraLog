@@ -2304,12 +2304,16 @@ if __name__ == "__main__":
                     banner = aprs_interface.recv(512).decode('latin-1')
                     text_widget = text_boxes['APRS Message']
                     insert_colored_text(text_widget, banner, '#ffa1a1', center=False, tag=None)
-                    login_info = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog 1.4\n"
+                    aprsdata = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog 1.4\n"
                     MyAPRSCall = config.get('APRS', 'callsign')
-                    aprs_interface.sendall(login_info.encode('utf-8'))
+                    aprs_interface.sendall(aprsdata.encode('utf-8'))
                     listener_thread = threading.Thread(target=listen_to_aprs, args=(aprs_interface,))
                     listener_thread.start()
-                    aprs_interface.sendall("#filter r/52.956365/7.03529/16\r\n".encode('utf-8'))
+                    aprsrange = int(config.get('APRS', 'filter_range'))
+                    if aprsrange == 0:
+                        aprsrange = 16
+                    aprsdata = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/26\r\n"
+                    aprs_interface.sendall(aprsdata.encode('utf-8'))
 
         if 'APRS' in config:
             if config.get('APRS', 'aprs_plugin') == 'True':
