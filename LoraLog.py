@@ -2312,7 +2312,7 @@ if __name__ == "__main__":
                     aprsrange = int(config.get('APRS', 'filter_range'))
                     if aprsrange == 0:
                         aprsrange = 16
-                    aprsdata = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/26\r\n"
+                    aprsdata = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/{aprsrange}\r\n"
                     aprs_interface.sendall(aprsdata.encode('utf-8'))
 
         if 'APRS' in config:
