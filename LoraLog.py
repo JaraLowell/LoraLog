@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sys import exit
 import asyncio
 import gc
@@ -18,6 +18,7 @@ import sqlite3
 # import ast
 # DEBUG
 # import yaml
+from aprslib import IS as aprsIS
 
 # Tkinter imports
 from PIL import Image, ImageTk
@@ -61,6 +62,7 @@ telemetry_thread = None
 position_thread  = None
 trace_thread = None
 MapMarkers = {}
+AprsMarkers = {}
 ok2Send = 0
 chan2send = -1
 MyLora = 'ffffffff'
@@ -71,6 +73,7 @@ MyLora_Lat = -8.0
 MyLora_Lon = -8.0
 MyLoraText1 = ''
 MyLoraText2 = ''
+MyAPRSCall = ''
 mylorachan = {}
 tlast = int(time.time())
 loop = None
@@ -81,6 +84,9 @@ zoomhome = False
 ourNode = None
 NIenabled = False
 ThisFont = ('Fixedsys', int(10))
+aprs_interface = None
+listener_thread = None
+aprsbeacon = True
 
 def showLink(event):
     try:
@@ -240,6 +246,12 @@ dbcursor.execute(create_tmp)
 create_tmp = """CREATE TABLE IF NOT EXISTS movement_log ("node_hex" text, "node_id" integer, "timerec" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "from_latitude" real DEFAULT -8.0, "from_longitude" real DEFAULT -8.0, "from_altitude" integer DEFAULT 0, "to_latitude" real DEFAULT -8.0, "to_longitude" real DEFAULT -8.0, "to_altitude" integer DEFAULT 0);"""
 dbcursor.execute(create_tmp)
 
+try:
+    create_tmp = """ALTER TABLE node_info ADD isaprs integer DEFAULT 0"""
+    dbcursor.execute(create_tmp)
+except Exception as e:
+    print("Error adding column to node_info: %s", str(e))
+
 dbcursor.execute("PRAGMA journal_mode=OFF")
 dbcursor.connection.commit()
 dbcursor.close()
@@ -293,6 +305,12 @@ if config.get('meshtastic', 'interface') == 'tcp':
     import meshtastic.tcp_interface
 else:
     import meshtastic.serial_interface
+
+if 'APRS' in config:
+    if config.get('APRS', 'aprs_plugin') == 'True':
+        import socket
+        from aprslib import parse
+
 #----------------------------------------------------------- Meshtastic Lora Con ------------------------------------------------------------------------    
 meshtastic_client = None
 
@@ -329,7 +347,7 @@ def format_number(n):
         return f'{n:,}'
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode, startup_complete
+    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode, startup_complete, config
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -397,8 +415,8 @@ def connect_meshtastic(force_connect=False):
     ## NEED AD MY SELF TO LOG 1ST TIME
 
     if 'position' in nodeInfo and 'latitude' in nodeInfo['position']:
-        MyLora_Lat = round(nodeInfo['position']['latitude'],6)
-        MyLora_Lon = round(nodeInfo['position']['longitude'],6)
+        MyLora_Lat = round(nodeInfo['position']['latitude'],7)
+        MyLora_Lon = round(nodeInfo['position']['longitude'],7)
         zoomhome = False
 
     nodeInfo = meshtastic_client.getNode('^local')
@@ -450,6 +468,17 @@ def connect_meshtastic(force_connect=False):
         text_area.grid(sticky='nsew')
         text_area.configure(state="disabled")
         text_boxes['Direct Message'] = text_area
+    if 'APRS' in config:
+        if config.get('APRS', 'aprs_plugin') == 'True':
+            if 'APRS Message' not in text_boxes:
+                tab = Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
+                tab.grid_rowconfigure(0, weight=1)
+                tab.grid_columnconfigure(0, weight=1)
+                tabControl.add(tab, text='APRS Message', padding=(0, 0, 0, 0))
+                text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
+                text_area.grid(sticky='nsew')
+                text_area.configure(state="disabled")
+                text_boxes['APRS Message'] = text_area
 
     time.sleep(0.5)
     updatesnodes()
@@ -637,11 +666,12 @@ def on_meshtastic_message2(packet):
         viaMqtt = True
 
     nodesnr = 0
-    if "rxSnr" in packet and packet['rxSnr'] is not None:
-        nodesnr = packet['rxSnr']
-    else:
+    if ("rxSnr" in packet and packet['rxSnr'] is not None) or ("rxRssi" in packet and packet['rxRssi'] is not None):
+        nodesnr = packet.get('rxSnr', 0.00)
+    # elif "viaMqtt" not in packet and fromraw != MyLora:
         # Apparently chat for some odd  reason does not have viaMqtt, but return no snr either
-        viaMqtt = True
+        #viaMqtt = True
+        # print(yaml.dump(packet), end='\n\n')
 
     hopStart = -1
     if "hopStart" in packet:
@@ -653,6 +683,12 @@ def on_meshtastic_message2(packet):
         dbcursor = dbconnection.cursor()
         if text_from != '':
             result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
+
+            if result:
+                if "decoded" in packet and ("CHAT_APP" in packet["decoded"] or "CHAT" in packet["decoded"]):
+                    # lets set viaMqtt to the last known value as apparently chat aint got not a single informmation about the radio part.
+                    viaMqtt = result[15]
+
             if result is None:
                 sn = str(fromraw[-4:])
                 ln = "Meshtastic " + sn
@@ -698,7 +734,7 @@ def on_meshtastic_message2(packet):
                 # Lets Work the Msgs
                 if data["portnum"] == "ADMIN_APP":
                     if "getDeviceMetadataResponse" in data["admin"]:
-                        text_raws = f"Firmware version : {data['admin']['getDeviceMetadataResponse']['firmwareVersion']}"
+                        text_raws = f"Lora Device Firmware version : {data['admin']['getDeviceMetadataResponse']['firmwareVersion']}"
                     else:
                         text_raws = 'Admin Data'
                 elif data["portnum"] == "TELEMETRY_APP":
@@ -788,8 +824,8 @@ def on_meshtastic_message2(packet):
                         text_raws = 'Node Chat Encrypted'
                 elif data["portnum"] == "POSITION_APP":
                     position = data["position"]
-                    nodelat = round(position.get('latitude', -8.0),6)
-                    nodelon = round(position.get('longitude', -8.0),6)
+                    nodelat = round(position.get('latitude', -8.0),7)
+                    nodelon = round(position.get('longitude', -8.0),7)
                     nodealt = position.get('altitude', 0)
                     node_dist = 0.0
                     extra = ''
@@ -884,6 +920,8 @@ def on_meshtastic_message2(packet):
                                     MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
                                     MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=nodeid, command = click_command)
                                     dbcursor.execute("UPDATE node_info SET timerec = ?, hopstart = ?, ismqtt = ? WHERE hex_id = ?", (tnow, nbhobs, viaMqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
+                                else:
+                                    dbcursor.execute("UPDATE node_info SET timerec = ? WHERE hex_id = ?", (tnow, nodeid))
                                 nodeid = tmp[5]
                             else:
                                 nodeid = '!' + nodeid
@@ -1077,8 +1115,8 @@ def updatesnodes():
 
                         if "position" in info:
                             tmp2 = info['position']
-                            nodelat = round(tmp2.get('latitude', -8.0),6)
-                            nodelon = round(tmp2.get('longitude', -8.0),6)
+                            nodelat = round(tmp2.get('latitude', -8.0),7)
+                            nodelon = round(tmp2.get('longitude', -8.0),7)
                             nodealt = tmp2.get('altitude', 0)
                             if nodelat != -8.0 and nodelon != -8.0:
                                 if result[9] == -8.0 or result[10] == -8.0: # We allready have your position
@@ -1088,7 +1126,7 @@ def updatesnodes():
 
                         if nodeID == MyLora:
                             if MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
-                                if nodelat != -8.0 and nodelon != -8.0:
+                                if nodelat != -8.0 and nodelon != -8.0 and result[9] == -8.0 and result[10] == -8.0:
                                     MyLora_Lat = nodelat
                                     MyLora_Lon = nodelon
                                 else:
@@ -1550,7 +1588,7 @@ if __name__ == "__main__":
     isLora = True
 
     def on_closing():
-        global isLora, meshtastic_client, mapview, root, dbconnection
+        global isLora, meshtastic_client, mapview, root, dbconnection, aprs_interface, listener_thread
         isLora = False
         # Store window size and location in a file, to load on restart
         try:
@@ -1558,6 +1596,10 @@ if __name__ == "__main__":
                 ini_file.write(root.geometry())
         except Exception as e:
             logging.error("Error saving window size: ", str(e))
+
+        if aprs_interface is not None:
+            aprs_interface.close()
+            listener_thread.join()
 
         if meshtastic_client is not None:
             try:
@@ -2080,13 +2122,18 @@ if __name__ == "__main__":
                         cursor.close()
                         node_dist = "%.1f" % node_dist + "km"
                     insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
-                    if row[15]:
+                    if row[25] == True:
                         insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#9d6d00", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
                         insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f"MQTT\n".rjust(11), "#5d5d5d")
+                        insert_colored_text(text_box_middle, f"APRS\n".rjust(11), "#006b64")
+                        checknode(node_id, 7, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                    elif row[15] == True:
+                        insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#9d6d00", tag=str(node_id))
+                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f"MQTT\n".rjust(11), "#6b4b00")
                         checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
-                        if node_id in MapMarkers: MapMarkers[node_id][1] = True
                     else:
                         if row[23] <= 0:
                             insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#00c983", tag=str(node_id))
@@ -2136,15 +2183,142 @@ if __name__ == "__main__":
             text_widget.tag_remove(tag, start, end)
             text_widget.tag_unbind(tag, "<Any-Event>")  # Unbind all events for the tag
 
+    def aprsdata(data):
+        global tlast, aprs_interface, text_boxes, AprsMarkers, mapview, MyAPRSCall
+        tnow = time.time()
+        text_widget = text_boxes['APRS Message']
+        data_str = data.decode('latin-1', errors='ignore').strip()
+        decoded = None
+        try:
+            decoded = parse(data_str)
+        except Exception as exp:
+            pass
+
+        if not data_str.startswith('#'):
+            if decoded:
+                # print(decoded)
+                nodeid = decoded['from']
+                nodeto = decoded['addresse'] if 'addresse' in decoded else decoded['to']
+                nodevia = decoded.get('via', '')
+                if nodevia.startswith('T2') or nodevia.startswith('WIDE') or nodevia.startswith('TCP'):
+                    nodevia = ''
+                if nodevia != '':
+                    nodevia = ' via ' + nodevia
+                nodetxt =  decoded.get('message_text', '')
+                nodetxt += decoded.get('comment', '')
+                nodetxt += decoded.get('status', '')
+                if 'weather' in decoded:
+                    if nodetxt != '': nodetxt += '\n' + (' ' * 11)
+                    wx = decoded['weather']
+                    if 'temperature' in wx:
+                        nodetxt += 'Temperature: ' + str(round(wx['temperature'],1)) + '°C '
+                    if 'humidity' in wx:
+                        nodetxt += 'Humidity: ' + str(wx['humidity']) + '% '
+                    if 'pressure' in wx:
+                        nodetxt += 'Pressure: ' + str(wx['pressure']) + 'hPa '
+                if nodetxt != '':
+                    nodetxt = (' ' * 11) + nodetxt + '\n'
+                if decoded['format'] == 'message':
+                    aprtxt = '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + nodeid.ljust(9) + ' > ' + nodeto.ljust(9) + nodevia + '\n'
+                    insert_colored_text(text_widget, aprtxt, '#d2d2d2', center=False, tag=None)
+                    if nodetxt != '': insert_colored_text(text_widget, nodetxt, '#a1a1ff', center=False, tag=None)
+                elif decoded['to'].startswith('APL'):
+                    aprtxt = '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + nodeid.ljust(9) + ' > ' + nodeto.ljust(9) + nodevia + '\n'
+                    insert_colored_text(text_widget, aprtxt, '#d2d2d2', center=False, tag=None)
+                    if nodetxt != '': insert_colored_text(text_widget, nodetxt, '#c9a500', center=False, tag=None)
+                else:
+                    aprtxt = '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + nodeid.ljust(9) + ' > ' + nodeto.ljust(9) + nodevia + '\n'
+                    insert_colored_text(text_widget, aprtxt, '#818181', center=False, tag=None)
+                    if nodetxt != '': insert_colored_text(text_widget, nodetxt, '#9d6d00', center=False, tag=None)
+                # Lets add or update the map
+                if 'latitude' in decoded and 'longitude' in decoded:
+                    sindex = nodeid.find('-')
+                    if sindex > 1: nodeid = nodeid[:sindex]
+
+                    if MyAPRSCall != decoded['from']:
+                        if nodeid not in AprsMarkers:
+                            lat = round(float(decoded.get('latitude', '-8.0')), 7)
+                            lon = round(float(decoded.get('longitude', '-8.0')), 7)
+                            if lat != -8.0 and lon != -8.0:
+                                AprsMarkers[nodeid] = [None, tnow]
+                                AprsMarkers[nodeid][0] = mapview.set_marker(lat, lon, text=nodeid, icon_index=4, text_color='#a1a1ff', font=('Fixedsys', 10), data=nodeid)
+                        else:
+                            lat = round(float(decoded.get('latitude', '-8.0')), 7)
+                            lon = round(float(decoded.get('longitude', '-8.0')), 7)
+                            if lat != -8.0 and lon != -8.0:
+                                AprsMarkers[nodeid][0].set_position(lat, lon)
+                                AprsMarkers[nodeid][1] = tnow
+        elif not data_str.startswith('# a'):
+            insert_colored_text(text_widget, data_str + '\n', '#ffa1a1', center=False, tag=None)
+
+    def aprs_passcode(callsign):
+        passcode = 0x73e2
+        base_call = callsign.split("-")[0].upper()
+        for i, c in enumerate(base_call):
+            passcode ^= (ord(c) << 8) if i % 2 == 0 else ord(c)
+        return str(passcode)
+
+    def APRSLatLon(lat, lon, symid = "L", symbol = "#"):
+        lat_deg = int(abs(lat) // 1)
+        lat_min = round(60. * (lat % 1), 2)
+        nw = "N" if lat >= 0 else "S"
+        lat_result = str(lat_deg).zfill(2) + '%05.2f' % lat_min + str(nw)
+
+        lon_deg = int(abs(lon) // 1)
+        lon_min = round(60 * (lon % 1), 2)
+        ew = "W" if lon <= 0 else "E"
+        lon_result = str(lon_deg).zfill(3) + '%05.2f' % lon_min + ew
+
+        return lat_result + symid + lon_result + symbol
+
+    # Treat the APRS data reciever
+    def listen_to_aprs(s):
+        try:
+            while True:
+                data = s.recv(1024)
+                if not data:
+                    break
+                aprsdata(data)
+        except (KeyboardInterrupt, ConnectionAbortedError):
+            print("Listener thread interrupted.")
+        finally:
+            s.close()
+
     def update_paths_nodes():
-        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome
+        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall
         tnow = int(time.time())
 
         if MyLora_Lat != -8.0 and MyLora_Lon != -8.0 and zoomhome == False:
+            tlast = time.time() - 840
             zoomhome = True
             mapview.set_zoom(11)
             mapview.set_position(MyLora_Lat, MyLora_Lon)
             print(mapview.zoom)
+            if 'APRS' in config:
+                if config.get('APRS', 'aprs_plugin') == 'True':
+                    host = config.get('APRS', 'server')
+                    port = int(config.get('APRS', 'port'))
+                    aprs_interface = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    aprs_interface.connect((host, port))
+                    aprs_interface.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                    banner = aprs_interface.recv(512).decode('latin-1')
+                    text_widget = text_boxes['APRS Message']
+                    insert_colored_text(text_widget, banner, '#ffa1a1', center=False, tag=None)
+                    login_info = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog 1.4\n"
+                    MyAPRSCall = config.get('APRS', 'callsign')
+                    aprs_interface.sendall(login_info.encode('utf-8'))
+                    listener_thread = threading.Thread(target=listen_to_aprs, args=(aprs_interface,))
+                    listener_thread.start()
+                    aprs_interface.sendall("#filter r/52.956365/7.03529/16\r\n".encode('utf-8'))
+
+        if 'APRS' in config:
+            if config.get('APRS', 'aprs_plugin') == 'True':
+                global AprsMarkers
+                markers_to_delete = [nodeid for nodeid, marker in AprsMarkers.items() if tnow - marker[1] > map_delete]
+                for nodeid in markers_to_delete:
+                    AprsMarkers[nodeid][0].delete()
+                    AprsMarkers[nodeid][0] = None
+                    del AprsMarkers[nodeid]
 
         # Delete or check old heard nodes
         deloldheard(map_delete)
@@ -2229,6 +2403,32 @@ if __name__ == "__main__":
                 # Send weather update
                 weather_update()
 
+                if 'APRS' in config:
+                    text_widget = text_boxes['APRS Message']
+                    if config.get('APRS', 'aprs_plugin') == 'True':
+                        time.sleep(0.10)
+                        aprsbeacon = not aprsbeacon
+                        if aprsbeacon:
+                            tmp = 'APRS - iGate'
+                            if MyLoraText1:
+                                tmp = MyLoraText1.replace("\n", ", ")
+                                tmp = ' '.join(tmp.split())
+                                if tmp.endswith(','): 
+                                    tmp = tmp[:-1]
+                            beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:>{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-4]}#L LoraLog v1.4 {tmp}\n"
+                            aprs_interface.sendall(beacon_message.encode('utf-8'))
+                        elif MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
+                            beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:={APRSLatLon(MyLora_Lat, MyLora_Lon)}{config.get('APRS', 'beacon')}\n"
+                            aprs_interface.sendall(beacon_message.encode('utf-8'))
+                        aprsdata(bytearray(beacon_message.encode('utf-8')))
+                    line_count = text_widget.count("1.0", "end-1c", "lines")[0]
+                    text_widget.configure(state="normal")
+                    if line_count > max_lines:
+                        delete_count = (line_count - max_lines) + 10
+                        text_widget.delete("1.0", f"{delete_count}.0")
+                        print(f"Clearing APRS Message ({delete_count} lines)")
+                    text_widget.configure(state="disabled")
+
                 gc.collect()
 
             cursor.close()
@@ -2283,8 +2483,29 @@ if __name__ == "__main__":
         insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + unescape(f"{MyLora_SN} ({MyLora_LN})") + "\n", "#d1d1d1")
         insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
 
+    def make_aprs_wx(wind_dir=None, wind_speed=None, wind_gust=None, temperature=None,
+                    rain_last_hr=None, rain_last_24_hrs=None, rain_since_midnight=None,
+                    humidity=None, pressure=None, position=False, luminosity=None):
+
+        wx_fmt = lambda n, l=3: '.' * l if n is None else "{:0{l}d}".format(int(n), l=l)
+        if position == True:
+            template = '{}/{}g{}t{}r{}p{}h{}b{}'.format
+        else:
+            template = 'c{}s{}g{}t{}r{}p{}h{}b{}'.format
+
+        return template(wx_fmt(wind_dir),
+                        wx_fmt(wind_speed),
+                        wx_fmt(wind_gust),
+                        wx_fmt(temperature),
+                        wx_fmt(rain_last_hr),
+                        wx_fmt(rain_last_24_hrs),
+                        # wx_fmt(rain_since_midnight), # P
+                        wx_fmt(humidity, 2) if humidity < 100 else '00',
+                        wx_fmt(pressure, 5))
+                        # wx_fmt(luminosity , 4)) # L
+
     def weather_update():
-        global meshtastic_client, MyLoraID, MyLora, dbconnection
+        global meshtastic_client, MyLoraID, MyLora, dbconnection, config
         if config.get('meshtastic', 'weatherbeacon') == 'True':
             weatherurl = config.get('meshtastic', 'weatherjson')
             if weatherurl != '':
@@ -2317,6 +2538,32 @@ if __name__ == "__main__":
                     insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + unescape(f"{MyLora_SN} ({MyLora_LN})") + "\n", "#d1d1d1")
                     insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
 
+                    # Lets see if we can make a correct APRS weather string
+                    '''
+                        272    - wind direction - 272 degrees
+                        /
+                        010    - wind speed - 10 mph
+                        g006   - wind gust - 6 mph
+                        t069   - temperature - 69 degrees F
+                        r010   - rain in last hour in hundredths of an inch - 0.1 inches
+                        p030   - rain in last 24 hours in hundredths of an inch - 0.3 inches
+                        P020   - rain since midnight in hundredths of an inch - 0.2 inches
+                        h61    - humidity 61% (00 = 100%)
+                        b10150 - barometric pressure in tenths of a millibar - 1015.0 millibars
+                    '''
+                    if 'APRS' in config:
+                        if config.get('APRS', 'aprs_plugin') == 'True' and MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
+                            global aprs_interface
+                            aprs_wx = make_aprs_wx(temperature=round(float(wjson['tempf'])),
+                                                   humidity   =int(wjson['humidity']),
+                                                   pressure   =round((float(wjson['baromabshpa']) * 10)),
+                                                   position   =True)
+                            now = datetime.now(timezone.utc)
+                            utc = now.strftime("%d%H%M")
+                            aprs_data = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*:@{utc}z{APRSLatLon(MyLora_Lat, MyLora_Lon, '/', '_')}{aprs_wx}{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-2]} Wx\n"
+                            aprs_interface.sendall(aprs_data.encode('utf-8'))
+                            aprsdata(bytearray(aprs_data.encode('utf-8')))
+
                 except Exception as e:
                     logging.error(f"Error sending Weather: {e}")
                     print(f"Error sending Weather: {e}")
@@ -2326,6 +2573,7 @@ if __name__ == "__main__":
         playsound('Data' + os.path.sep + 'Button.mp3')
         if overlay is not None:
             destroy_overlay()
+
         # Maybe add this to a connect button later via a overlay window and button as no window is shown duuring connect
         root.meshtastic_interface = connect_meshtastic()
         if root.meshtastic_interface is None:
@@ -2596,10 +2844,10 @@ if __name__ == "__main__":
         database_path = 'DataBase' + os.path.sep + 'MapTiles.db3'
     if config.has_option('meshtastic', 'color_filter') and config.get('meshtastic', 'color_filter') == 'True':
         myfilter = True
-    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=6, database_path=database_path, use_filter=myfilter)
+    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=0, database_path=database_path, use_filter=myfilter)
     mapview.pack(fill='both', expand=True) # grid(row=0, column=0, sticky='nsew')
-    mapview.set_position(48.860381, 2.338594)
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
+    mapview.set_position(48.860381, 2.338594)
     mapview.set_zoom(1)
 
     is_mapfullwindow = False
