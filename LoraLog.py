@@ -92,6 +92,7 @@ TemmpDB = None
 DBChange = True
 aprsondash = False
 mqttdash = True
+myversion = "1.4.3"
 
 def showLink(event):
     try:
@@ -2310,7 +2311,7 @@ if __name__ == "__main__":
             s.close()
 
     def update_paths_nodes():
-        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB
+        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion
         tnow = int(time.time())
 
         if MyLora_Lat != -8.0 and MyLora_Lon != -8.0 and zoomhome == False:
@@ -2329,7 +2330,7 @@ if __name__ == "__main__":
                     banner = aprs_interface.recv(512).decode('latin-1')
                     text_widget = text_boxes['APRS Message']
                     insert_colored_text(text_widget, banner, '#ffa1a1', center=False, tag=None)
-                    aprs2data = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog 1.4\n"
+                    aprs2data = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog v{myversion}\n"
                     MyAPRSCall = config.get('APRS', 'callsign')
                     aprs_interface.sendall(aprs2data.encode('utf-8'))
                     listener_thread = threading.Thread(target=listen_to_aprs, args=(aprs_interface,))
@@ -2445,7 +2446,7 @@ if __name__ == "__main__":
                                 tmp = ' '.join(tmp.split())
                                 if tmp.endswith(','): 
                                     tmp = tmp[:-1]
-                            beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:>{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-4]}#L LoraLog v1.4 {tmp}\n"
+                            beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:>{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-4]}#L LoraLog v{myversion} {tmp}\n"
                             aprs_interface.sendall(beacon_message.encode('utf-8'))
                         elif MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
                             beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:={APRSLatLon(MyLora_Lat, MyLora_Lon)}{config.get('APRS', 'beacon')}\n"
@@ -2823,7 +2824,7 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v 1.4.2 (Jan 2025) By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v" + myversion + " (Jan 2025) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.insert("end", "─" * 60 + "\n", '#414141')
     text_box1.tag_configure('#414141', foreground='#414141')
