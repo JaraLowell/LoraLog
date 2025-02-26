@@ -88,6 +88,11 @@ aprs_interface = None
 listener_thread = None
 aprsbeacon = True
 
+TemmpDB = None
+DBChange = True
+aprsondash = False
+mqttdash = True
+
 def showLink(event):
     try:
         tag_names = event.widget.tag_names("current")
@@ -101,28 +106,33 @@ def showLink(event):
         logging.error("Error in showLink: %s", str(e))
 
 # Function to insert colored text
-def insert_colored_text(text_widget, text, color, center=False, tag=None):
-    global MyLora
+def insert_colored_text(text_widget, text, color="#9d9d9d", center=False, tag=None):
     parent_frame = str(text_widget.winfo_parent())
-    if "frame5" not in parent_frame or "notebook" in parent_frame:
+    is_frame5 = "frame5" in parent_frame
+    is_notebook = "notebook" in parent_frame
+
+    if not is_frame5 or is_notebook:
         text_widget.configure(state="normal")
-        if color == '#d1d1d1': # and "frame3" not in parent_frame:
+        if color == '#d1d1d1':
             text_widget.insert("end", "-" * 90 + "\n", '#414141')
             text_widget.tag_configure('#414141', foreground='#414141')
+            color = '#9d9d9d'
 
-    if tag != None: # and tag != MyLora:
+    if tag:
         text_widget.tag_configure(tag, foreground=color, underline=False)
         text_widget.insert('end', text, (color, tag))
         text_widget.tag_bind(tag, "<Button-1>", showLink)
-    else:
+    elif color != "#9d9d9d":
+        text_widget.tag_configure(color, foreground=color)
         text_widget.insert('end', text, color)
-
-    text_widget.tag_configure(color, foreground=color)
+    else:
+        text_widget.insert('end', text)
 
     if center:
         text_widget.tag_configure("center", justify='center')
         text_widget.tag_add("center", "1.0", "end")
-    if "!frame5" not in parent_frame or "notebook" in parent_frame:
+
+    if not is_frame5 or is_notebook:
         text_widget.see('end')
         text_widget.configure(state="disabled")
 
@@ -167,12 +177,9 @@ def add_message(nodeid, mtext, msgtime, private=False, msend='all', ackn=False, 
             insert_colored_text(text_widget,' to ' + label, tcolor)
     ptext = unescape(mtext).strip()
     ptext = textwrap.fill(ptext, 87)
-    tcolor = "#d2d2d2"
-    if bulk == True:
-        tcolor = "#a1a1a1"
     ptext = textwrap.indent(text=ptext, prefix='  ', predicate=lambda line: True)
-    insert_colored_text(text_widget, '\n' + ptext + '\n', tcolor)
-    insert_colored_text(text_widget,timestamp.rjust(89) + '\n', "#818181")
+    insert_colored_text(text_widget, '\n' + ptext + '\n')
+    insert_colored_text(text_widget,timestamp.rjust(89) + '\n')
 
     if bulk == False:
         msend = str(msend.encode('ascii', 'xmlcharrefreplace'), 'ascii')
@@ -454,7 +461,7 @@ def connect_meshtastic(force_connect=False):
                         tab.grid_rowconfigure(0, weight=1)
                         tab.grid_columnconfigure(0, weight=1)
                         tabControl.add(tab, text=mylorachan[channel.index], padding=(0, 0, 0, 0))
-                        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
+                        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
                         text_area.grid(sticky='nsew')
                         text_area.configure(state="disabled")
                         text_boxes[mylorachan[channel.index]] = text_area
@@ -464,7 +471,7 @@ def connect_meshtastic(force_connect=False):
         tab.grid_rowconfigure(0, weight=1)
         tab.grid_columnconfigure(0, weight=1)
         tabControl.add(tab, text='Direct Message', padding=(0, 0, 0, 0))
-        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
+        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
         text_area.grid(sticky='nsew')
         text_area.configure(state="disabled")
         text_boxes['Direct Message'] = text_area
@@ -475,7 +482,7 @@ def connect_meshtastic(force_connect=False):
                 tab.grid_rowconfigure(0, weight=1)
                 tab.grid_columnconfigure(0, weight=1)
                 tabControl.add(tab, text='APRS Message', padding=(0, 0, 0, 0))
-                text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#dddddd', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
+                text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
                 text_area.grid(sticky='nsew')
                 text_area.configure(state="disabled")
                 text_boxes['APRS Message'] = text_area
@@ -645,7 +652,7 @@ def on_meshtastic_message(packet, interface, loop=None):
 
 def on_meshtastic_message2(packet):
     # print(yaml.dump(packet), end='\n\n')
-    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time
+    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, DBChange
     if MyLora == '':
         print('*** MyLora is empty ***\n')
         # return
@@ -1071,7 +1078,7 @@ def on_meshtastic_message2(packet):
         # Lets add the mheard lines
         if MyLoraID != 'ffffffff' and packet["from"] != '' and viaMqtt == False and hopStart == 0:
             logheard(MyLoraID, packet["from"], packet.get('rxSnr', 0.00), fromname)
-
+        DBChange = True
         dbcursor.close()
 
 def updatesnodes():
@@ -1634,7 +1641,7 @@ if __name__ == "__main__":
         padding_frame.grid_columnconfigure(0, weight=1)
         
         # Create a text widget inside the frame
-        text_area = Text(padding_frame, wrap='word', width=frwidth, height=frheight, bg='#242424', fg='#dddddd', font=ThisFont, undo=False)
+        text_area = Text(padding_frame, wrap='word', width=frwidth, height=frheight, bg='#242424', foreground='#9d9d9d', font=ThisFont, undo=False)
         text_area.grid(row=0, column=0, sticky='nsew')
         return text_area
 
@@ -2026,8 +2033,10 @@ if __name__ == "__main__":
     def is_full_width(char):
         return east_asian_width(char) in ('F', 'W', 'A')
 
+
     def update_active_nodes():
-        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time
+        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, AprsMarkers, MyAPRSCall
+        global TemmpDB, DBChange, aprsondash, mqttdash, config
         start = time.perf_counter()
         tnow = int(time.time())
 
@@ -2052,22 +2061,29 @@ if __name__ == "__main__":
             hours, remainder = divmod(delta.seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
             tmp = f"{days}d{hours}h" if days > 0 else f"{hours}h{minutes}m"
-            insert_colored_text(text_box_middle, tmp.rjust(7) + '\n', "#9d9d9d")
+            insert_colored_text(text_box_middle, tmp.rjust(7) + '\n')
         else:
-            insert_colored_text(text_box_middle,'\n', "#9d9d9d")
+            insert_colored_text(text_box_middle,'\n')
 
         if MyLoraText1:
-            insert_colored_text(text_box_middle, MyLoraText1, "#c1c1c1")
+            insert_colored_text(text_box_middle, MyLoraText1)
         if MyLoraText2:
-            insert_colored_text(text_box_middle, MyLoraText2, "#c1c1c1")
+            insert_colored_text(text_box_middle, MyLoraText2)
 
         try:
             cursor = dbconnection.cursor()
-            result = cursor.execute(
-                "SELECT * FROM node_info WHERE (? - timerec) <= ? ORDER BY timerec DESC",
-                (tnow, map_oldnode + 60)
-            ).fetchall()
-            cursor.close()
+            if DBChange == True:
+                result = cursor.execute("SELECT * FROM node_info WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode + 60)).fetchall()
+                cursor.close()
+                if aprsondash:
+                    for nodes, data in AprsMarkers.items():
+                        if nodes != MyAPRSCall:
+                            result.append((None, data[1], None, nodes, '', nodes, '', True, 0, -8.0, -8.0, 0, 0, 0, 0, 0, 0.0, 0, 0, 101, 0, 0.0, 0.0, 0, data[2], True))
+                    result.sort(key=lambda x: x[1], reverse=True)
+                TemmpDB = result
+                DBChange = False
+            else:
+                result = TemmpDB
 
             drawoldnodes = mapview.draw_oldnodes
             nodes_to_delete = []
@@ -2121,26 +2137,29 @@ if __name__ == "__main__":
                         cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
                         cursor.close()
                         node_dist = "%.1f" % node_dist + "km"
-                    insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
                     if row[25] == True:
-                        insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#9d6d00", tag=str(node_id))
-                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f"APRS\n".rjust(11), "#006b64")
+                        insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
+                        insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#a1a1ff")
+                        insert_colored_text(text_box_middle, f"{node_wtime}\n")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}")
+                        insert_colored_text(text_box_middle, f"APRS\n".rjust(11), "#a1a1ff")
                         checknode(node_id, 7, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                     elif row[15] == True:
-                        insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#9d6d00", tag=str(node_id))
-                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f"MQTT\n".rjust(11), "#6b4b00")
-                        checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                        if mqttdash:
+                            insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
+                            insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#9d6d00", tag=str(node_id))
+                            insert_colored_text(text_box_middle, f"{node_wtime}\n")
+                            insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}")
+                            insert_colored_text(text_box_middle, f"MQTT\n".rjust(11), "#9d6d00")
+                            checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                     else:
+                        insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
                         if row[23] <= 0:
                             insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#00c983", tag=str(node_id))
                         else:
                             insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#c9a500", tag=str(node_id))
-                        insert_colored_text(text_box_middle, f"{node_wtime}\n", "#9d9d9d")
-                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}", "#9d9d9d")
+                        insert_colored_text(text_box_middle, f"{node_wtime}\n")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}")
                         if row[23] <= 0:
                             node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
                             # ["#de6933", "#c9a500", "#00c983"] # red, yellow, green
@@ -2162,14 +2181,16 @@ if __name__ == "__main__":
         # Just some stats for checks
         insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
         time1 = (time.perf_counter() - start) * 1000
-        insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms', "#9d9d9d")
+        insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms')
 
         time1 = Process(os.getpid()).memory_full_info()[-1] / 1024 ** 2 # Process(os.getpid()).memory_info().rss / 1024 ** 2
         if peekmem < time1: peekmem = time1
-        insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n", "#9d9d9d")
-        insert_colored_text(text_box_middle, f" Mem Max : {peekmem:.1f}MB\n\n", "#9d9d9d")
+        insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n")
+        insert_colored_text(text_box_middle, f" Mem Max : {peekmem:.1f}MB\n\n")
 
-        insert_colored_text(text_box_middle, " F5 Show Node DB\n F6 Map Extend Mode\n", "#9d9d9d")
+        insert_colored_text(text_box_middle, " F5 Show Node DB\n F6 Map Extend Mode\n F2 Node Config\n F7 Hide MQTT\n")
+        if 'APRS' in config and config.get('APRS', 'aprs_plugin') == 'True':
+            insert_colored_text(text_box_middle, " F8 Hide APRS\n")
 
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
@@ -2184,7 +2205,7 @@ if __name__ == "__main__":
             text_widget.tag_unbind(tag, "<Any-Event>")  # Unbind all events for the tag
 
     def aprsdata(data):
-        global tlast, aprs_interface, text_boxes, AprsMarkers, mapview, MyAPRSCall
+        global tlast, aprs_interface, text_boxes, AprsMarkers, mapview, MyAPRSCall, DBChange, MyLora_Lat, MyLora_Lon
         tnow = time.time()
         text_widget = text_boxes['APRS Message']
         data_str = data.decode('latin-1', errors='ignore').strip()
@@ -2220,15 +2241,15 @@ if __name__ == "__main__":
                     nodetxt = (' ' * 11) + nodetxt + '\n'
                 if decoded['format'] == 'message':
                     aprtxt = '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + nodeid.ljust(9) + ' > ' + nodeto.ljust(9) + nodevia + '\n'
-                    insert_colored_text(text_widget, aprtxt, '#d2d2d2', center=False, tag=None)
+                    insert_colored_text(text_widget, aprtxt)
                     if nodetxt != '': insert_colored_text(text_widget, nodetxt, '#a1a1ff', center=False, tag=None)
                 elif decoded['to'].startswith('APL'):
                     aprtxt = '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + nodeid.ljust(9) + ' > ' + nodeto.ljust(9) + nodevia + '\n'
-                    insert_colored_text(text_widget, aprtxt, '#d2d2d2', center=False, tag=None)
+                    insert_colored_text(text_widget, aprtxt)
                     if nodetxt != '': insert_colored_text(text_widget, nodetxt, '#c9a500', center=False, tag=None)
                 else:
                     aprtxt = '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + nodeid.ljust(9) + ' > ' + nodeto.ljust(9) + nodevia + '\n'
-                    insert_colored_text(text_widget, aprtxt, '#818181', center=False, tag=None)
+                    insert_colored_text(text_widget, aprtxt)
                     if nodetxt != '': insert_colored_text(text_widget, nodetxt, '#9d6d00', center=False, tag=None)
                 # Lets add or update the map
                 if 'latitude' in decoded and 'longitude' in decoded:
@@ -2240,14 +2261,18 @@ if __name__ == "__main__":
                             lat = round(float(decoded.get('latitude', '-8.0')), 7)
                             lon = round(float(decoded.get('longitude', '-8.0')), 7)
                             if lat != -8.0 and lon != -8.0:
-                                AprsMarkers[nodeid] = [None, tnow]
+                                AprsMarkers[nodeid] = [None, tnow, 0]
                                 AprsMarkers[nodeid][0] = mapview.set_marker(lat, lon, text=nodeid, icon_index=4, text_color='#a1a1ff', font=('Fixedsys', 10), data=nodeid)
+                                AprsMarkers[nodeid][2] = round(calc_gc(lat, lon, MyLora_Lat, MyLora_Lon), 2)
                         else:
+                            AprsMarkers[nodeid][1] = tnow
                             lat = round(float(decoded.get('latitude', '-8.0')), 7)
                             lon = round(float(decoded.get('longitude', '-8.0')), 7)
                             if lat != -8.0 and lon != -8.0:
-                                AprsMarkers[nodeid][0].set_position(lat, lon)
-                                AprsMarkers[nodeid][1] = tnow
+                                if AprsMarkers[nodeid][0].get_position() != (lat, lon):
+                                    AprsMarkers[nodeid][0].set_position(lat, lon)
+                                    AprsMarkers[nodeid][2] = round(calc_gc(lat, lon, MyLora_Lat, MyLora_Lon), 2)
+                        DBChange = True
         elif not data_str.startswith('# a'):
             insert_colored_text(text_widget, data_str + '\n', '#ffa1a1', center=False, tag=None)
 
@@ -2285,7 +2310,7 @@ if __name__ == "__main__":
             s.close()
 
     def update_paths_nodes():
-        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall
+        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB
         tnow = int(time.time())
 
         if MyLora_Lat != -8.0 and MyLora_Lon != -8.0 and zoomhome == False:
@@ -2331,7 +2356,7 @@ if __name__ == "__main__":
         with dbconnection:
             cursor = dbconnection.cursor()
 
-            result = cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
+            result = TemmpDB # cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
             for row in result:
                 node_id = row[3]
                 node_time = row[1]
@@ -2735,7 +2760,7 @@ if __name__ == "__main__":
     root.resizable(True, True)
     root.iconbitmap('Data' + os.path.sep + 'mesh.ico')
     root.protocol('WM_DELETE_WINDOW', on_closing)
-    root.tk_setPalette("#242424")
+    root.tk_setPalette(background="#242424", foreground="#d9d9d9")
 
     if config.has_option('meshtastic', 'font'):
         ThisFont = (config.get('meshtastic', 'font'), int(10))
@@ -2825,12 +2850,12 @@ if __name__ == "__main__":
     tabControl.bind("<<NotebookTabChanged>>", reset_tab_highlight)
 
     # Left Box Chat input
-    padding_frame = LabelFrame(frame, background="#242424", padx=0, pady=4, bg='#242424', fg='#999999', font=ThisFont, borderwidth=0, highlightthickness=0, labelanchor='n') # text=my_label.get()
+    padding_frame = LabelFrame(frame, background="#242424", padx=0, pady=4, bg='#242424', fg='#9d9d9d', font=ThisFont, borderwidth=0, highlightthickness=0, labelanchor='n') # text=my_label.get()
     padding_frame.grid(row=4, column=0, rowspan=1, columnspan=1, padx=0, pady=0, sticky="nsew")
     padding_frame.grid_rowconfigure(1, weight=1)
     padding_frame.grid_columnconfigure(0, weight=1)
 
-    text_box4 = Entry(padding_frame, textvariable=my_msg, width=68, bg='#242424', fg='#eeeeee', font=ThisFont)
+    text_box4 = Entry(padding_frame, textvariable=my_msg, width=68, bg='#242424', fg='#9d9d9d', font=ThisFont)
     text_box4.grid(row=4, column=0, padx=(1, 0))
     send_box4 = Button(padding_frame, image=btn_img, command=lambda: prechat_chan(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=ThisFont)
     send_box4.grid(row=4, column=1, padx=(0, 18))
@@ -2849,7 +2874,8 @@ if __name__ == "__main__":
         database_path = 'DataBase' + os.path.sep + 'MapTiles.db3'
     if config.has_option('meshtastic', 'color_filter') and config.get('meshtastic', 'color_filter') == 'True':
         myfilter = True
-    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#000000', corner_radius=0, database_path=database_path, use_filter=myfilter)
+
+    mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#242424', corner_radius=0, database_path=database_path, use_filter=myfilter)
     mapview.pack(fill='both', expand=True) # grid(row=0, column=0, sticky='nsew')
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
     mapview.set_position(48.860381, 2.338594)
@@ -2870,6 +2896,18 @@ if __name__ == "__main__":
             mapview.master.grid(row=0, column=0, rowspan=5, columnspan=3, padx=0, pady=0, sticky='nsew')
         is_mapfullwindow = not is_mapfullwindow
     root.bind('<F6>', toggle_map)
+
+    def mqttshow(event=None):
+        global mqttdash, DBChange
+        mqttdash = not mqttdash
+        DBChange = True
+    root.bind('<F7>', mqttshow)
+
+    def aprsshow(event=None):
+        global aprsondash, DBChange
+        aprsondash = not aprsondash
+        DBChange = True
+    root.bind('<F8>', aprsshow)
 
     # Config Window
     config_frame = None
