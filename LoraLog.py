@@ -91,7 +91,7 @@ aprsbeacon = True
 TemmpDB = None
 DBChange = True
 aprsondash = False
-mqttdash = True
+mqttdash = False
 myversion = "1.4.3"
 
 def showLink(event):
@@ -711,7 +711,10 @@ def on_meshtastic_message2(packet):
                 if result[4] == '': result[4] = "Meshtastic " + str(fromraw[-4:])
                 text_from = unescape(result[5]) + " (" + unescape(result[4]) + ")"
                 fromname = unescape(result[5]).strip()
-                dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ?, last_snr = ?, last_rssi = ?, hopstart = ? WHERE node_id = ?", (packet.get('rx_time', tnow), viaMqtt, nodesnr, packet.get('rxRssi', 0), hopStart, packet["from"]))
+                if "decoded" in packet and ("CHAT_APP" in packet["decoded"] or "CHAT" in packet["decoded"]):
+                    dbcursor.execute("UPDATE node_info SET timerec = ? WHERE node_id = ?", (packet.get('rx_time', tnow), packet["from"]))
+                else:
+                    dbcursor.execute("UPDATE node_info SET timerec = ?, ismqtt = ?, last_snr = ?, last_rssi = ?, hopstart = ? WHERE node_id = ?", (packet.get('rx_time', tnow), viaMqtt, nodesnr, packet.get('rxRssi', 0), hopStart, packet["from"]))
 
         if "decoded" in packet:
             data = packet["decoded"]
@@ -1607,7 +1610,6 @@ if __name__ == "__main__":
 
         if aprs_interface is not None:
             aprs_interface.close()
-            listener_thread.join()
 
         if meshtastic_client is not None:
             try:
@@ -1787,16 +1789,19 @@ if __name__ == "__main__":
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Telemetry sending Telemetry request\n", "#2bd5ff")
                 telemetry_thread = threading.Thread(target=send_telemetry, args=(node_id,))
+                telemetry_thread.daemon = True
                 telemetry_thread.start()
             elif info == 'ReqPos':
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node Position sending Position request\n", "#2bd5ff")
                 position_thread = threading.Thread(target=send_position, args=(node_id,))
+                position_thread.daemon = True
                 position_thread.start()
             elif info == 'ReqTrace':
                 insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
                 insert_colored_text(text_box2, (' ' * 11) + "Node TraceRoute sending Trace Route request\n", "#2bd5ff")
                 trace_thread = threading.Thread(target=send_trace, args=(node_id,))
+                trace_thread.daemon = True
                 trace_thread.start()
         else:
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] " + unescape(text_from) + "\n", "#d1d1d1")
@@ -2049,8 +2054,8 @@ if __name__ == "__main__":
         current_view = text_box_middle.yview()
         
         # Unbind all tags from text_box_middle
-        for tag in text_box_middle.tag_names():
-            text_box_middle.tag_unbind(tag, "<Button-1>")
+        # for tag in text_box_middle.tag_names():
+        #     text_box_middle.tag_unbind(tag, "<Button-1>")
         text_box_middle.delete("1.0", 'end')
 
         insert_colored_text(text_box_middle, "\n " + MyLora_SN.ljust(12), "#e67a7f", tag=MyLora)
@@ -2189,9 +2194,9 @@ if __name__ == "__main__":
         insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n")
         insert_colored_text(text_box_middle, f" Mem Max : {peekmem:.1f}MB\n\n")
 
-        insert_colored_text(text_box_middle, " F5 Show Node DB\n F6 Map Extend Mode\n F2 Node Config\n F7 Hide MQTT\n")
+        insert_colored_text(text_box_middle, " F5 Show Node DB\n F6 Map Extend Mode\n F2 Node Config\n F7 Show/Hide MQTT\n")
         if 'APRS' in config and config.get('APRS', 'aprs_plugin') == 'True':
-            insert_colored_text(text_box_middle, " F8 Hide APRS\n")
+            insert_colored_text(text_box_middle, " F8 Show/Hide APRS\n")
 
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
@@ -2217,7 +2222,8 @@ if __name__ == "__main__":
             pass
 
         if not data_str.startswith('#'):
-            if decoded:
+            # Lets only handle packets that send to APLxxx used by mmost APrs-Lora Devices
+            if decoded is not None and ('to' in decoded and decoded['to'].startswith('APL')):
                 # print(decoded)
                 nodeid = decoded['from']
                 nodeto = decoded['addresse'] if 'addresse' in decoded else decoded['to']
@@ -2276,6 +2282,8 @@ if __name__ == "__main__":
                         DBChange = True
         elif not data_str.startswith('# a'):
             insert_colored_text(text_widget, data_str + '\n', '#ffa1a1', center=False, tag=None)
+            if data_str.startswith('# filter'):
+                insert_colored_text(text_widget,'# local_filter APL* active\n', '#ffa1a1', center=False, tag=None)
 
     def aprs_passcode(callsign):
         passcode = 0x73e2
@@ -2297,6 +2305,14 @@ if __name__ == "__main__":
 
         return lat_result + symid + lon_result + symbol
 
+    def is_socket_connected(sock):
+        try:
+            sock.getpeername()
+            return True
+        except (OSError, socket.error):
+            print("Socket not connected!")
+            return False
+
     # Treat the APRS data reciever
     def listen_to_aprs(s):
         try:
@@ -2305,10 +2321,35 @@ if __name__ == "__main__":
                 if not data:
                     break
                 aprsdata(data)
-        except (KeyboardInterrupt, ConnectionAbortedError):
-            print("Listener thread interrupted.")
+        except (KeyboardInterrupt, ConnectionAbortedError, ConnectionResetError):
+            aprsdata(f'# Connextion to APRS server lost\n'.encode('utf-8'))
+            print("Listener thread interrupted or connection lost.")
         finally:
             s.close()
+            # Prolly call a reconnect here
+
+    def connect_to_aprs():
+        global aprs_interface, config, text_boxes, listener_thread, MyAPRSCall, MyLora_Lat, MyLora_Lon, myversion
+
+        host = config.get('APRS', 'server')
+        port = int(config.get('APRS', 'port'))
+        aprs_interface = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        aprs_interface.connect((host, port))
+        aprs_interface.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        banner = aprs_interface.recv(512).decode('latin-1')
+        text_widget = text_boxes['APRS Message']
+        insert_colored_text(text_widget, banner, '#ffa1a1', center=False, tag=None)
+        aprs2data = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog v{myversion}\n"
+        MyAPRSCall = config.get('APRS', 'callsign')
+        aprs_interface.sendall(aprs2data.encode('utf-8'))
+        listener_thread = threading.Thread(target=listen_to_aprs, args=(aprs_interface,))
+        listener_thread.daemon = True
+        listener_thread.start()
+        aprsrange = int(config.get('APRS', 'filter_range'))
+        if aprsrange == 0:
+            aprsrange = 16
+        aprs2data = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/{aprsrange}\r\n"
+        aprs_interface.sendall(aprs2data.encode('utf-8'))
 
     def update_paths_nodes():
         global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion
@@ -2322,24 +2363,7 @@ if __name__ == "__main__":
             print(mapview.zoom)
             if 'APRS' in config:
                 if config.get('APRS', 'aprs_plugin') == 'True':
-                    host = config.get('APRS', 'server')
-                    port = int(config.get('APRS', 'port'))
-                    aprs_interface = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    aprs_interface.connect((host, port))
-                    aprs_interface.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-                    banner = aprs_interface.recv(512).decode('latin-1')
-                    text_widget = text_boxes['APRS Message']
-                    insert_colored_text(text_widget, banner, '#ffa1a1', center=False, tag=None)
-                    aprs2data = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog v{myversion}\n"
-                    MyAPRSCall = config.get('APRS', 'callsign')
-                    aprs_interface.sendall(aprs2data.encode('utf-8'))
-                    listener_thread = threading.Thread(target=listen_to_aprs, args=(aprs_interface,))
-                    listener_thread.start()
-                    aprsrange = int(config.get('APRS', 'filter_range'))
-                    if aprsrange == 0:
-                        aprsrange = 16
-                    aprs2data = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/{aprsrange}\r\n"
-                    aprs_interface.sendall(aprs2data.encode('utf-8'))
+                    connect_to_aprs()
 
         if 'APRS' in config:
             if config.get('APRS', 'aprs_plugin') == 'True':
@@ -2360,8 +2384,8 @@ if __name__ == "__main__":
             result = TemmpDB # cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
             for row in result:
                 node_id = row[3]
-                node_time = row[1]
                 if node_id in MapMarkers:
+                    node_time = MapMarkers[node_id][2]
                     if MapMarkers[node_id][6] != None and (tnow - node_time) >= 3:
                         MapMarkers[node_id][6].change_icon(7)
 
@@ -2436,22 +2460,23 @@ if __name__ == "__main__":
                 if 'APRS' in config:
                     text_widget = text_boxes['APRS Message']
                     if config.get('APRS', 'aprs_plugin') == 'True':
-                        time.sleep(0.10)
-                        aprsbeacon = not aprsbeacon
-                        beacon_message = ''
-                        if aprsbeacon:
-                            tmp = 'APRS - iGate'
-                            if MyLoraText1:
-                                tmp = MyLoraText1.replace("\n", ", ")
-                                tmp = ' '.join(tmp.split())
-                                if tmp.endswith(','): 
-                                    tmp = tmp[:-1]
-                            beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:>{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-4]}#L LoraLog v{myversion} {tmp}\n"
-                            aprs_interface.sendall(beacon_message.encode('utf-8'))
-                        elif MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
-                            beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:={APRSLatLon(MyLora_Lat, MyLora_Lon)}{config.get('APRS', 'beacon')}\n"
-                            aprs_interface.sendall(beacon_message.encode('utf-8'))
-                        aprsdata(bytearray(beacon_message.encode('utf-8')))
+                        if is_socket_connected(aprs_interface):
+                            time.sleep(0.10)
+                            aprsbeacon = not aprsbeacon
+                            beacon_message = ''
+                            if aprsbeacon:
+                                tmp = 'APRS - iGate'
+                                if MyLoraText1:
+                                    tmp = MyLoraText1.replace("\n", ", ")
+                                    tmp = ' '.join(tmp.split())
+                                    if tmp.endswith(','): 
+                                        tmp = tmp[:-1]
+                                beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:>{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-4]}#L LoraLog v{myversion} {tmp}\n"
+                                aprs_interface.sendall(beacon_message.encode('utf-8'))
+                            elif MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
+                                beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:={APRSLatLon(MyLora_Lat, MyLora_Lon)}{config.get('APRS', 'beacon')}\n"
+                                aprs_interface.sendall(beacon_message.encode('utf-8'))
+                            aprsdata(bytearray(beacon_message.encode('utf-8')))
                     line_count = text_widget.count("1.0", "end-1c", "lines")[0]
                     text_widget.configure(state="normal")
                     if line_count > max_lines:
@@ -2585,15 +2610,16 @@ if __name__ == "__main__":
                     if 'APRS' in config:
                         if config.get('APRS', 'aprs_plugin') == 'True' and MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
                             global aprs_interface
-                            aprs_wx = make_aprs_wx(temperature=round(float(wjson['tempf'])),
-                                                   humidity   =int(wjson['humidity']),
-                                                   pressure   =round((float(wjson['baromabshpa']) * 10)),
-                                                   position   =True)
-                            now = datetime.now(timezone.utc)
-                            utc = now.strftime("%d%H%M")
-                            aprs_data = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*:@{utc}z{APRSLatLon(MyLora_Lat, MyLora_Lon, '/', '_')}{aprs_wx}{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-2]} Wx\n"
-                            aprs_interface.sendall(aprs_data.encode('utf-8'))
-                            aprsdata(bytearray(aprs_data.encode('utf-8')))
+                            if is_socket_connected(aprs_interface):
+                                aprs_wx = make_aprs_wx(temperature=round(float(wjson['tempf'])),
+                                                    humidity   =int(wjson['humidity']),
+                                                    pressure   =round((float(wjson['baromabshpa']) * 10)),
+                                                    position   =True)
+                                now = datetime.now(timezone.utc)
+                                utc = now.strftime("%d%H%M")
+                                aprs_data = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*:@{utc}z{APRSLatLon(MyLora_Lat, MyLora_Lon, '/', '_')}{aprs_wx}{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-2]} Wx\n"
+                                aprs_interface.sendall(aprs_data.encode('utf-8'))
+                                aprsdata(bytearray(aprs_data.encode('utf-8')))
 
                 except Exception as e:
                     logging.error(f"Error sending Weather: {e}")
