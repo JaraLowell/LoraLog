@@ -2039,7 +2039,6 @@ if __name__ == "__main__":
     def is_full_width(char):
         return east_asian_width(char) in ('F', 'W', 'A')
 
-
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, AprsMarkers, MyAPRSCall
         global TemmpDB, DBChange, aprsondash, mqttdash, config
@@ -2149,7 +2148,6 @@ if __name__ == "__main__":
                         insert_colored_text(text_box_middle, f"{node_wtime}\n")
                         insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}")
                         insert_colored_text(text_box_middle, f"APRS\n".rjust(11), "#a1a1ff")
-                        checknode(node_id, 7, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                     elif row[15] == True:
                         if mqttdash:
                             insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
@@ -2157,7 +2155,7 @@ if __name__ == "__main__":
                             insert_colored_text(text_box_middle, f"{node_wtime}\n")
                             insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}")
                             insert_colored_text(text_box_middle, f"MQTT\n".rjust(11), "#9d6d00")
-                            checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                        checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                     else:
                         insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
                         if row[23] <= 0:
@@ -2186,6 +2184,7 @@ if __name__ == "__main__":
 
         # Just some stats for checks
         insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
+        insert_colored_text(text_box_middle, f'\n On Map  : {str(len(MapMarkers))}')
         time1 = (time.perf_counter() - start) * 1000
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms')
 
@@ -2419,7 +2418,7 @@ if __name__ == "__main__":
                 # Clear up text_box1 so it max has 1000 lines
                 line_count = text_box1.count("1.0", "end-1c", "lines")[0]
                 if line_count > max_lines:
-                    delete_count = (line_count - max_lines) + 10
+                    delete_count = (line_count - max_lines) + 20
                     text_box1.configure(state="normal")
 
                     # Unbind tags for the specific range before deleting
@@ -2427,12 +2426,12 @@ if __name__ == "__main__":
 
                     text_box1.delete("1.0", f"{delete_count}.0")
                     text_box1.configure(state="disabled")
-                    print(f"Clearing Frame 1 ({delete_count} lines)")
+                    print(f"Clearing Recieved Messages Log ({delete_count} lines)")
 
                 # Clear up text_box2 so it max has 1000 lines
                 line_count = text_box2.count("1.0", "end-1c", "lines")[0]
                 if line_count > max_lines:
-                    delete_count = (line_count - max_lines) + 10
+                    delete_count = (line_count - max_lines) + 20
                     text_box2.configure(state="normal")
 
                     # Unbind tags for the specific range before deleting
@@ -2440,7 +2439,7 @@ if __name__ == "__main__":
 
                     text_box2.delete("1.0", f"{delete_count}.0")
                     text_box2.configure(state="disabled")
-                    print(f"Clearing Frame 2 ({delete_count} lines)")
+                    print(f"Clearing Local Logs ({delete_count} lines)")
 
                 if overlay is None:
                     if has_open_figures():
@@ -2479,8 +2478,8 @@ if __name__ == "__main__":
                             aprsdata(bytearray(beacon_message.encode('utf-8')))
                     line_count = text_widget.count("1.0", "end-1c", "lines")[0]
                     text_widget.configure(state="normal")
-                    if line_count > max_lines:
-                        delete_count = (line_count - max_lines) + 10
+                    if line_count > (max_lines / 2):
+                        delete_count = (line_count - (max_lines / 2)) + 10
                         text_widget.delete("1.0", f"{delete_count}.0")
                         print(f"Clearing APRS Message ({delete_count} lines)")
                     text_widget.configure(state="disabled")
