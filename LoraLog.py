@@ -97,9 +97,8 @@ myversion = "1.4.3"
 def showLink(event):
     try:
         tag_names = event.widget.tag_names("current")
-        idx = tag_names[0] if '#' in tag_names[1] else tag_names[1]
-
-        if '#' not in idx:
+        idx = next((tag for tag in tag_names if not tag.startswith('#')), None)
+        if idx:
             temp = type('temp', (object,), {})()
             temp.data = idx
             click_command(temp)
@@ -112,25 +111,31 @@ def insert_colored_text(text_widget, text, color="#9d9d9d", center=False, tag=No
     is_frame5 = "frame5" in parent_frame
     is_notebook = "notebook" in parent_frame
 
+    mytags = text_widget.tag_names(index=None)
+    if "#414141" not in mytags:
+        text_widget.tag_configure("#414141", foreground='#414141')
+    if color != "#9d9d9d" and color not in mytags:
+        text_widget.tag_configure(color, foreground=color)
+    if center and "center" not in mytags:
+        text_widget.tag_configure("center", justify='center')
+    if tag and tag not in mytags:
+        text_widget.tag_configure(tag, underline=False)
+
     if not is_frame5 or is_notebook:
         text_widget.configure(state="normal")
         if color == '#d1d1d1':
             text_widget.insert("end", "-" * 90 + "\n", '#414141')
-            text_widget.tag_configure('#414141', foreground='#414141')
             color = '#9d9d9d'
 
     if tag:
-        text_widget.tag_configure(tag, foreground=color, underline=False)
         text_widget.insert('end', text, (color, tag))
         text_widget.tag_bind(tag, "<Button-1>", showLink)
     elif color != "#9d9d9d":
-        text_widget.tag_configure(color, foreground=color)
         text_widget.insert('end', text, color)
     else:
         text_widget.insert('end', text)
 
     if center:
-        text_widget.tag_configure("center", justify='center')
         text_widget.tag_add("center", "1.0", "end")
 
     if not is_frame5 or is_notebook:
@@ -2052,9 +2057,6 @@ if __name__ == "__main__":
         text_box_middle.configure(state="normal")
         current_view = text_box_middle.yview()
         
-        # Unbind all tags from text_box_middle
-        # for tag in text_box_middle.tag_names():
-        #     text_box_middle.tag_unbind(tag, "<Button-1>")
         text_box_middle.delete("1.0", 'end')
 
         insert_colored_text(text_box_middle, "\n " + MyLora_SN.ljust(12), "#e67a7f", tag=MyLora)
@@ -2206,8 +2208,9 @@ if __name__ == "__main__":
     # Function to unbind tags for a specific range
     def unbind_tags_for_range(text_widget, start, end):
         for tag in text_widget.tag_names(start):
-            text_widget.tag_remove(tag, start, end)
             text_widget.tag_unbind(tag, "<Any-Event>")  # Unbind all events for the tag
+            text_widget.tag_remove(tag, start, end)
+
 
     def aprsdata(data):
         global tlast, aprs_interface, text_boxes, AprsMarkers, mapview, MyAPRSCall, DBChange, MyLora_Lat, MyLora_Lon
@@ -2440,6 +2443,12 @@ if __name__ == "__main__":
                     text_box2.delete("1.0", f"{delete_count}.0")
                     text_box2.configure(state="disabled")
                     print(f"Clearing Local Logs ({delete_count} lines)")
+
+                # Unbind all tags from text_box_middle
+                for tag in text_box_middle.tag_names():
+                    if not tag.startswith("#"):
+                        text_box_middle.tag_unbind(tag, "<Button-1>")
+                        text_box_middle.tag_delete(tag, "1.0", "end")
 
                 if overlay is None:
                     if has_open_figures():
