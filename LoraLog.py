@@ -2457,8 +2457,8 @@ if __name__ == "__main__":
                 weather_update()
 
                 if 'APRS' in config:
-                    text_widget = text_boxes['APRS Message']
                     if config.get('APRS', 'aprs_plugin') == 'True':
+                        text_widget = text_boxes['APRS Message']
                         if is_socket_connected(aprs_interface):
                             time.sleep(0.10)
                             aprsbeacon = not aprsbeacon
@@ -2476,13 +2476,14 @@ if __name__ == "__main__":
                                 beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:={APRSLatLon(MyLora_Lat, MyLora_Lon)}{config.get('APRS', 'beacon')}\n"
                                 aprs_interface.sendall(beacon_message.encode('utf-8'))
                             aprsdata(bytearray(beacon_message.encode('utf-8')))
-                    line_count = text_widget.count("1.0", "end-1c", "lines")[0]
-                    text_widget.configure(state="normal")
-                    if line_count > (max_lines / 2):
-                        delete_count = (line_count - (max_lines / 2)) + 10
-                        text_widget.delete("1.0", f"{delete_count}.0")
-                        print(f"Clearing APRS Message ({delete_count} lines)")
-                    text_widget.configure(state="disabled")
+
+                        line_count = text_widget.count("1.0", "end-1c", "lines")[0]
+                        text_widget.configure(state="normal")
+                        if line_count > (max_lines / 2):
+                            delete_count = (line_count - (max_lines / 2)) + 10
+                            text_widget.delete("1.0", f"{delete_count}.0")
+                            print(f"Clearing APRS Message ({delete_count} lines)")
+                        text_widget.configure(state="disabled")
 
                 gc.collect()
 
