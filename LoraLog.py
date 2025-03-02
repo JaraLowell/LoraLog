@@ -18,6 +18,7 @@ import sqlite3
 # import ast
 # DEBUG
 # import yaml
+import serial
 from aprslib import IS as aprsIS
 
 # Tkinter imports
@@ -467,7 +468,7 @@ def connect_meshtastic(force_connect=False):
                         tab.grid_rowconfigure(0, weight=1)
                         tab.grid_columnconfigure(0, weight=1)
                         tabControl.add(tab, text=mylorachan[channel.index], padding=(0, 0, 0, 0))
-                        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
+                        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0, selectforeground='#9d9d9d', selectbackground='#555555')
                         text_area.grid(sticky='nsew')
                         text_area.configure(state="disabled")
                         text_boxes[mylorachan[channel.index]] = text_area
@@ -477,7 +478,7 @@ def connect_meshtastic(force_connect=False):
         tab.grid_rowconfigure(0, weight=1)
         tab.grid_columnconfigure(0, weight=1)
         tabControl.add(tab, text='Direct Message', padding=(0, 0, 0, 0))
-        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
+        text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0, selectforeground='#9d9d9d', selectbackground='#555555')
         text_area.grid(sticky='nsew')
         text_area.configure(state="disabled")
         text_boxes['Direct Message'] = text_area
@@ -488,7 +489,7 @@ def connect_meshtastic(force_connect=False):
                 tab.grid_rowconfigure(0, weight=1)
                 tab.grid_columnconfigure(0, weight=1)
                 tabControl.add(tab, text='APRS Message', padding=(0, 0, 0, 0))
-                text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0)
+                text_area = Text(tab, wrap='word', width=90, height=15, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, borderwidth=1, highlightthickness=0, selectforeground='#9d9d9d', selectbackground='#555555')
                 text_area.grid(sticky='nsew')
                 text_area.configure(state="disabled")
                 text_boxes['APRS Message'] = text_area
@@ -681,9 +682,9 @@ def on_meshtastic_message2(packet):
     nodesnr = 0
     if ("rxSnr" in packet and packet['rxSnr'] is not None) or ("rxRssi" in packet and packet['rxRssi'] is not None):
         nodesnr = packet.get('rxSnr', 0.00)
-    # elif "viaMqtt" not in packet and fromraw != MyLora:
+    elif "viaMqtt" not in packet and fromraw != MyLora:
         # Apparently chat for some odd  reason does not have viaMqtt, but return no snr either
-        #viaMqtt = True
+        viaMqtt = True
         # print(yaml.dump(packet), end='\n\n')
 
     hopStart = -1
@@ -700,7 +701,7 @@ def on_meshtastic_message2(packet):
             if result:
                 if "decoded" in packet and ("CHAT_APP" in packet["decoded"] or "CHAT" in packet["decoded"]):
                     # lets set viaMqtt to the last known value as apparently chat aint got not a single informmation about the radio part.
-                    viaMqtt = result[15]
+                    viaMqtt = True if result[15] == 1 else False
 
             if result is None:
                 sn = str(fromraw[-4:])
@@ -1649,7 +1650,7 @@ if __name__ == "__main__":
         padding_frame.grid_columnconfigure(0, weight=1)
         
         # Create a text widget inside the frame
-        text_area = Text(padding_frame, wrap='word', width=frwidth, height=frheight, bg='#242424', foreground='#9d9d9d', font=ThisFont, undo=False)
+        text_area = Text(padding_frame, wrap='word', width=frwidth, height=frheight, bg='#242424', fg='#9d9d9d', font=ThisFont, undo=False, selectforeground='#9d9d9d', selectbackground='#555555')
         text_area.grid(row=0, column=0, sticky='nsew')
         return text_area
 
@@ -1881,6 +1882,10 @@ if __name__ == "__main__":
         close_button = Button(button_frame, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close Chat", compound="center", fg='#d1d1d1', font=ThisFont)
         close_button.pack(side='left', padx=2)
 
+    def update_position_and_height(nodeid, lat = -8.0, lon = -8.0, alt = 0.0):
+        # Under construction !
+        print(f"Updating !{nodeid} position : {lat}/{lon}, {alt}m")
+
     def click_command(marker):
         global MyLora, overlay, mapview, dbconnection
         # Destroy the existing overlay if it exists
@@ -1897,28 +1902,40 @@ if __name__ == "__main__":
             logging.error(f"Node {marker.data} not in database")
             return
 
-        overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#777777', highlightcolor="#777777",highlightthickness=1, takefocus=True, border=1)
+        overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#777777', highlightcolor="#777777",highlightthickness=1, takefocus=True, border=1, width=720)
         overlay.place(relx=0.5, rely=0.5, anchor='center')  # Center the frame
 
-        info_label = Text(overlay, bg='#242424', fg='#dddddd', font=ThisFont, width=64, height=13, highlightbackground='#242424', highlightthickness=0)
+        info_label = Text(overlay, bg='#242424', fg='#dddddd', font=ThisFont, width=64, height=13, highlightbackground='#242424', highlightthickness=0, selectforeground='#9d9d9d', selectbackground='#555555')
         info_label.grid(row=0, column=0, columnspan=2, padx=1, pady=1, sticky='nsew')
 
         insert_colored_text(info_label, "⬢ ", "#" + marker.data[-6:],  center=True)
         if result[4] != '':
-            text_loc = unescape(result[5]) + '\n' + unescape(result[4]) + '\n'
+            text_loc = unescape(result[5]) + ' - ' + unescape(result[4]) + '\n'
         else:
             text_loc = unescape(result[5]) + '\n'
-        insert_colored_text(info_label, text_loc, "#2bd5ff",  center=True)
-        insert_colored_text(info_label, "─" * 30 + "\n", "#414141",  center=True)
+        insert_colored_text(info_label, text_loc + '\n', "#2bd5ff",  center=True)
 
-        if result[9] != -8.0 and result[10] != -8.0:
-            text_loc = '  Position : ' + str(result[9]) + ' / ' + str(result[10]) + ' (' + LatLon2qth(result[9],result[10])[:-2] + ')'
-            text_loc += ' Altitude ' + str(result[11]) + 'm\n'
-        else:
-            text_loc = '  Position : Unknown\n'
-
-        insert_colored_text(info_label, text_loc, "#d2d2d2",  center=True)
-        insert_colored_text(info_label, "─" * 30 + "\n", "#414141",  center=True)
+        # info_label.insert("end", "Latitude: ")
+        insert_colored_text(info_label, "Latitude:")
+        lat_var = StringVar()
+        lat_var.set(result[9] if result[9] != -8.0 else 'Unknown')
+        lat_entry = Entry(info_label, textvariable=lat_var, width=11, font=ThisFont, borderwidth=1, highlightthickness=0, selectforeground='#9d9d9d', selectbackground='#555555')
+        info_label.window_create("end", window=lat_entry, padx=5)
+        # info_label.insert("end", " Longitude: ")
+        insert_colored_text(info_label, "Longitude:")
+        lon_var = StringVar()
+        lon_var.set(result[10] if result[10] != -8.0 else 'Unknown')
+        lon_entry = Entry(info_label, textvariable=lon_var, width=11, font=ThisFont, borderwidth=1, highlightthickness=0, selectforeground='#9d9d9d', selectbackground='#555555')
+        info_label.window_create("end", window=lon_entry, padx=5)
+        # info_label.insert("end", " Altitude: ")
+        insert_colored_text(info_label, "Altitude:")
+        alt_var = StringVar()
+        alt_var.set(result[11])
+        alt_entry = Entry(info_label, textvariable=alt_var, width=4, font=ThisFont, borderwidth=1, highlightthickness=0, selectforeground='#9d9d9d', selectbackground='#555555')
+        info_label.window_create("end", window=alt_entry, padx=5)
+        insert_colored_text(info_label, "\n")
+        buttonz = Button(info_label, image=btn_img, command=lambda: update_position_and_height(str(result[3]), lat_var.get(), lon_var.get(), alt_var.get()), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Update", compound="center", fg='#d1d1d1', font=ThisFont)
+        info_label.window_create("end", window=buttonz, pady=5)
 
         text_loc = '\n  HW Model : ' + str(result[6]) + '\n'
         text_loc += '  Hex ID   : ' + '!' + str(result[3]).ljust(18)
@@ -1998,7 +2015,6 @@ if __name__ == "__main__":
 
     # Function to update the middle frame with the last 30 active nodes
     peekmem = 0
-
     def checknode(node_id, icon, color, lat, lon, nodesn, drawme=True):
         global MapMarkers, mapview
         tmp = False
@@ -2045,7 +2061,7 @@ if __name__ == "__main__":
         return east_asian_width(char) in ('F', 'W', 'A')
 
     def update_active_nodes():
-        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, AprsMarkers, MyAPRSCall
+        global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, AprsMarkers, MyAPRSCall, tlast
         global TemmpDB, DBChange, aprsondash, mqttdash, config
         start = time.perf_counter()
         tnow = int(time.time())
@@ -2056,8 +2072,12 @@ if __name__ == "__main__":
 
         text_box_middle.configure(state="normal")
         current_view = text_box_middle.yview()
-        
+
         text_box_middle.delete("1.0", 'end')
+        if DBChange == True and tnow % 4:
+            for tag in text_box_middle.tag_names():
+                if tag != 'sel' and tag != MyLora and tag != '#e67a7f' and tag != '#414141':
+                    text_box_middle.tag_delete(tag)
 
         insert_colored_text(text_box_middle, "\n " + MyLora_SN.ljust(12), "#e67a7f", tag=MyLora)
 
@@ -2067,8 +2087,7 @@ if __name__ == "__main__":
             days = delta.days
             hours, remainder = divmod(delta.seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
-            tmp = f"{days}d{hours}h" if days > 0 else f"{hours}h{minutes}m"
-            insert_colored_text(text_box_middle, tmp.rjust(7) + '\n')
+            insert_colored_text(text_box_middle, (f"{days}d{hours}h".rjust(7) + '\n') if days > 0 else (f"{hours}h{minutes}m".rjust(7) + '\n'))
         else:
             insert_colored_text(text_box_middle,'\n')
 
@@ -2201,8 +2220,9 @@ if __name__ == "__main__":
 
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
-
-        root.after(1000, update_paths_nodes)
+        if time1 >= 1000.0:
+            time1 = 999.0
+        root.after(1000 - int(time1), update_paths_nodes)
     ### end
 
     # Function to unbind tags for a specific range
@@ -2210,9 +2230,13 @@ if __name__ == "__main__":
         for tag in text_widget.tag_names(start):
             text_widget.tag_unbind(tag, "<Any-Event>")  # Unbind all events for the tag
             text_widget.tag_remove(tag, start, end)
+            # text_widget.tag_delete(tag)
 
+    def aprsdata(data, fromradio=False):
+        # Skip empty data
+        if data is None or data == b'' or data == b'\r\n':
+            return
 
-    def aprsdata(data):
         global tlast, aprs_interface, text_boxes, AprsMarkers, mapview, MyAPRSCall, DBChange, MyLora_Lat, MyLora_Lon
         tnow = time.time()
         text_widget = text_boxes['APRS Message']
@@ -2224,6 +2248,10 @@ if __name__ == "__main__":
             pass
 
         if not data_str.startswith('#'):
+            if decoded is not None and fromradio == True:
+                if 'raw' in decoded and decoded['raw'] != '':
+                    print('Sending to APRS-IS:', decoded['raw'])
+                    # aprs_interface.sendall(decoded['raw'].encode('utf-8'))
             # Lets only handle packets that send to APLxxx used by mmost APrs-Lora Devices
             if decoded is not None and ('to' in decoded and decoded['to'].startswith('APL')):
                 # print(decoded)
@@ -2316,10 +2344,10 @@ if __name__ == "__main__":
             return False
 
     # Treat the APRS data reciever
-    def listen_to_aprs(s):
+    def check_aprs_net(aprsnetdata):
         try:
             while True:
-                data = s.recv(1024)
+                data = aprsnetdata.recv(1024)
                 if not data:
                     break
                 aprsdata(data)
@@ -2327,7 +2355,29 @@ if __name__ == "__main__":
             aprsdata(f'# Connextion to APRS server lost\n'.encode('utf-8'))
             print("Listener thread interrupted or connection lost.")
         finally:
-            s.close()
+            aprsnetdata.close()
+            # Prolly call a reconnect here
+
+    def check_aprs_radio(radioserial):
+        # https://github.com/EricAndrechek/aprs-receiver
+        # Needs import serial
+        # radioserial = serial.Serial()
+        # radioserial.port = '/dev/ttyUSB0'
+        # radioserial.baudrate = 9600
+        # radioserial.timeout = 5
+        # try:
+        #   radioserial.open()
+        # except Exception as e:
+        #   print("Error opening serial port" + repr(e))
+        try:
+            aprs_packet = radioserial.readline()
+            if aprs_packet:
+                aprsdata(aprs_packet, fromradio=True)
+        except (KeyboardInterrupt, ConnectionAbortedError, ConnectionResetError):
+            aprsdata(f'# Connextion to APRS radio lost\n'.encode('utf-8'))
+            print("Listener thread interrupted or connection lost.")
+        finally:
+            radioserial.close()
             # Prolly call a reconnect here
 
     def connect_to_aprs():
@@ -2344,13 +2394,12 @@ if __name__ == "__main__":
         aprs2data = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog v{myversion}\n"
         MyAPRSCall = config.get('APRS', 'callsign')
         aprs_interface.sendall(aprs2data.encode('utf-8'))
-        listener_thread = threading.Thread(target=listen_to_aprs, args=(aprs_interface,))
+        listener_thread = threading.Thread(target=check_aprs_net, args=(aprs_interface,))
         listener_thread.daemon = True
         listener_thread.start()
         aprsrange = int(config.get('APRS', 'filter_range'))
-        if aprsrange == 0:
-            aprsrange = 16
-        aprs2data = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/{aprsrange}\r\n"
+        if aprsrange != 0:
+            aprs2data = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/{aprsrange}\r\n"
         aprs_interface.sendall(aprs2data.encode('utf-8'))
 
     def update_paths_nodes():
@@ -2443,12 +2492,6 @@ if __name__ == "__main__":
                     text_box2.delete("1.0", f"{delete_count}.0")
                     text_box2.configure(state="disabled")
                     print(f"Clearing Local Logs ({delete_count} lines)")
-
-                # Unbind all tags from text_box_middle
-                for tag in text_box_middle.tag_names():
-                    if not tag.startswith("#"):
-                        text_box_middle.tag_unbind(tag, "<Button-1>")
-                        text_box_middle.tag_delete(tag, "1.0", "end")
 
                 if overlay is None:
                     if has_open_figures():

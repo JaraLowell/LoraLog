@@ -23,6 +23,8 @@ from .canvas_button import CanvasButton
 from .canvas_path import CanvasPath
 from .canvas_polygon import CanvasPolygon
 
+import os  # Add this import at the top of the file
+
 class TkinterMapView(tkinter.Frame):
     def __init__(self, *args,
                  width: int = 300,
@@ -604,6 +606,14 @@ class TkinterMapView(tkinter.Frame):
                 image_org = enhancer.enhance(0.12)
 
             output = io.BytesIO()
+
+            # Save to Disk 
+            # folder_path = os.path.join('jaramaps', str(zoom), str(x))
+            # os.makedirs(folder_path, exist_ok=True)
+            # file_path = os.path.join(folder_path, str(y) + ".png")
+            # image_org.save(file_path, format="PNG")
+            # output.seek(0)  # Reset the stream position to the beginning
+
             image_org.save(output, format="JPEG", quality=72)  # Save the (possibly filtered) image to output
             output.seek(0)  # Reset the stream position to the beginning
 
