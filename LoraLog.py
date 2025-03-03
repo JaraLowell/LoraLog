@@ -407,7 +407,7 @@ def connect_meshtastic(force_connect=False):
                 insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
                 insert_colored_text(text_box1, " Connect re-try:" + str(e), "#db6544")
                 logging.error("Connect re-try: " + str(e))
-                time.sleep(5)
+                time.sleep(12)
             else:
                 logging.error("Could not connect: " + str(e))
                 isLora = False
@@ -548,7 +548,7 @@ def on_lost_meshtastic_connection(interface):
         meshtastic_client = None
     except Exception as e:
         logging.error("Error closing connection: %s", str(e))
-    time.sleep(10)
+    time.sleep(12)
     root.meshtastic_interface = connect_meshtastic(force_connect=True)
  
 def on_meshtastic_connection(interface, topic=pub.AUTO_TOPIC):
@@ -740,11 +740,11 @@ def on_meshtastic_message2(packet):
                             MapMarkers[fromraw][1] = False
                             MapMarkers[fromraw][0].change_icon(2)
                     elif result[9] != -8.0 and result[10] != -8.0 and isorange == True:
-                        MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
+                        MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None, None]
                         MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=fromname, icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
                         MapMarkers[fromraw][0].text_color = '#2bd5ff'
                     elif result[9] != -8.0 and result[10] != -8.0 and isorange == False:
-                        MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None]
+                        MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None, None]
                         MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=fromname, icon_index=2, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
                         MapMarkers[fromraw][0].text_color = '#2bd5ff'
 
@@ -769,9 +769,9 @@ def on_meshtastic_message2(packet):
                             if 'uptimeSeconds' in device_metrics:
                                 text_raws += '\n' + (' ' * 11) + uptimmehuman(device_metrics.get('uptimeSeconds', 0), tnow)
                             if MyLora == fromraw:
-                                MyLoraText1 = (' ChUtil').ljust(13) + str(round(device_metrics.get('channelUtilization', 0.00),2)).rjust(6) + '%\n' + (' AirUtilTX').ljust(13) + str(round(device_metrics.get('airUtilTx', 0.00),2)).rjust(6) + '%\n'
-                                if device_metrics.get('voltage', 0.00) > 0.00: MyLoraText1 += (' Power').ljust(13) + str(round(device_metrics.get('voltage', 0.00),2)).rjust(6) + 'v\n' 
-                                if device_metrics.get('batteryLevel', 0) > 0: MyLoraText1 += (' Battery').ljust(13) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
+                                MyLoraText1 = (' ChUtil').ljust(15) + str(round(device_metrics.get('channelUtilization', 0.00),2)).rjust(6) + '%\n' + (' AirUtilTX').ljust(15) + str(round(device_metrics.get('airUtilTx', 0.00),2)).rjust(6) + '%\n'
+                                if device_metrics.get('voltage', 0.00) > 0.00: MyLoraText1 += (' Power').ljust(15) + str(round(device_metrics.get('voltage', 0.00),2)).rjust(6) + 'v\n' 
+                                if device_metrics.get('batteryLevel', 0) > 0: MyLoraText1 += (' Battery').ljust(15) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
                         power_metrics = telemetry.get('powerMetrics', {})
                         if power_metrics:
                             text_raws += '\n' + (' ' * 11) + 'CH1 Voltage: ' + str(round(power_metrics.get('ch1_voltage', 'N/A'),2)) + 'v'
@@ -803,15 +803,15 @@ def on_meshtastic_message2(packet):
                                 text_raws += ' TxCanceled: ' + str(localstats_metrics.get('numTxRelayCanceled', 0))
                             text_raws += ' Nodes: ' + str(localstats_metrics.get('numOnlineNodes', 0)) + '/' + str(localstats_metrics.get('numTotalNodes', 0))
 
-                            MyLoraText2 = (' Packets Tx').ljust(13) + format_number(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n'
+                            MyLoraText2 = (' Packets Tx').ljust(15) + format_number(localstats_metrics.get('numPacketsTx', 0)).rjust(7) + '\n'
                             if localstats_metrics.get('numTxRelay', 0) > 0:
-                                MyLoraText2 += (' Tx Relay').ljust(13) + format_number(localstats_metrics.get('numTxRelay', 0)).rjust(7) + '\n'
+                                MyLoraText2 += (' Tx Relay').ljust(15) + format_number(localstats_metrics.get('numTxRelay', 0)).rjust(7) + '\n'
                             if localstats_metrics.get('numTxRelayCanceled', 0) > 0:
-                                MyLoraText2 += (' Tx Cancel').ljust(13) + format_number(localstats_metrics.get('numTxRelayCanceled', 0)).rjust(7) + '\n'
-                            MyLoraText2 += (' Packets Rx').ljust(13) + format_number(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' + (' Rx Bad').ljust(13) + format_number(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n'
+                                MyLoraText2 += (' Tx Cancel').ljust(15) + format_number(localstats_metrics.get('numTxRelayCanceled', 0)).rjust(7) + '\n'
+                            MyLoraText2 += (' Packets Rx').ljust(15) + format_number(localstats_metrics.get('numPacketsRx', 0)).rjust(7) + '\n' + (' Rx Bad').ljust(15) + format_number(localstats_metrics.get('numPacketsRxBad', 0)).rjust(7) + '\n'
                             if localstats_metrics.get('numRxDupe', 0) > 0:
-                                MyLoraText2 += (' Rx Dupe').ljust(13) + format_number(localstats_metrics.get('numRxDupe', 0)).rjust(7) + '\n'
-                            MyLoraText2 += (' Nodes').ljust(13) + (format_number(localstats_metrics.get('numOnlineNodes', 0)) + '/' + format_number(localstats_metrics.get('numTotalNodes', 0))).rjust(7) + '\n'
+                                MyLoraText2 += (' Rx Dupe').ljust(15) + format_number(localstats_metrics.get('numRxDupe', 0)).rjust(7) + '\n'
+                            MyLoraText2 += (' Nodes').ljust(15) + (format_number(localstats_metrics.get('numOnlineNodes', 0)) + '/' + format_number(localstats_metrics.get('numTotalNodes', 0))).rjust(7) + '\n'
 
                         if 'uptimeSeconds' in device_metrics and fromraw == MyLora:
                             incoming_uptime = device_metrics.get('uptimeSeconds', 0)
@@ -881,7 +881,9 @@ def on_meshtastic_message2(packet):
                                     # Lets draw only a circle if distance bigger then 30m or smaller then 5km
                                     if len(MapMarkers[fromraw]) == 7:
                                         MapMarkers[fromraw].append(None)
+                                    if MapMarkers[fromraw][7] == None:
                                         MapMarkers[fromraw][7] = mapview.set_polygon(position=(nodelat, nodelon), range_in_meters=(AcMeters * 2),fill_color="gray25")
+                                    # How can this be IndexError: list assignment index out of range, mean we append if len = 7; so should be 8
                     if "satsInView" in position:
                         text_msgs += '(' + str(position.get('satsInView', 0)) + ' satelites)'
                     if extra == '(Moved!) ':
@@ -934,7 +936,7 @@ def on_meshtastic_message2(packet):
                             if tmp is not None:
                                 nbNide = str(tmp[5].encode('ascii', 'xmlcharrefreplace'), 'ascii') # unescape(tmp[5])
                                 if nodeid not in MapMarkers: # and nodeid != MyLora:
-                                    MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None]
+                                    MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None, None]
                                     MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=nodeid, command = click_command)
                                     dbcursor.execute("UPDATE node_info SET timerec = ?, hopstart = ?, ismqtt = ? WHERE hex_id = ?", (tnow, nbhobs, viaMqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
                                 else:
@@ -1078,7 +1080,7 @@ def on_meshtastic_message2(packet):
 
             if fromraw not in MapMarkers:
                 if result[9] != -8.0 and result[10] != -8.0:
-                    MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None]
+                    MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None, None]
                     MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 10), data=fromraw, command = click_command)
                     MapMarkers[fromraw][0].text_color = '#aaaaaa'
                     MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
@@ -1151,7 +1153,7 @@ def updatesnodes():
                                     MyLora_Lon = result[10]
 
                                 if MyLora not in MapMarkers:
-                                    MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None]
+                                    MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
                                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 10), data=MyLora, command = click_command)
                                     MapMarkers[MyLora][0].text_color = '#e67a7f'
                                     zoomhome = False
@@ -2021,6 +2023,7 @@ if __name__ == "__main__":
         if icon == 2: tmp = True
         
         if node_id in MapMarkers:
+            tmp = MapMarkers[node_id][1]
             if (drawme == False and icon != 4) or drawme == True:
                 if MapMarkers[node_id][0] != None:
                     if hasattr(MapMarkers[node_id][0], 'text_color'):
@@ -2039,7 +2042,6 @@ if __name__ == "__main__":
                 else:
                     MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 10), data=node_id, command = click_command)
                     MapMarkers[node_id][0].text_color = color
-                MapMarkers[node_id][1] = tmp
                 if MapMarkers[node_id][6] != None:
                     MapMarkers[node_id][6].set_position(lat, lon)
             else:
@@ -2050,9 +2052,7 @@ if __name__ == "__main__":
         else:
             if lat != -8.0 and lon != -8.0:
                 if (drawme == False and icon != 4) or drawme == True:
-                    tmp = False
-                    if icon == 2: tmp = True
-                    MapMarkers[node_id] = [None, tmp, int(time.time()), None, None, 0, None]
+                    MapMarkers[node_id] = [None, tmp, int(time.time()), None, None, 0, None, None]
                     MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 10), data=node_id, command = click_command)
                     MapMarkers[node_id][0].text_color = color
                     MapMarkers[node_id][1] = tmp
@@ -2079,7 +2079,7 @@ if __name__ == "__main__":
                 if tag != 'sel' and tag != MyLora and tag != '#e67a7f' and tag != '#414141':
                     text_box_middle.tag_delete(tag)
 
-        insert_colored_text(text_box_middle, "\n " + MyLora_SN.ljust(12), "#e67a7f", tag=MyLora)
+        insert_colored_text(text_box_middle, "\n " + MyLora_SN.ljust(14), "#e67a7f", tag=MyLora)
 
         if incoming_uptime != 0:
             elapsed_time = tnow - package_received_time
@@ -2143,9 +2143,9 @@ if __name__ == "__main__":
 
                 # Adjust the name length for full width characters (Emojie)
                 node_name = unescape(row[5]).strip()
-                nameadj = 9
+                nameadj = 11
                 if len(node_name) == 1 and is_full_width(node_name):
-                    nameadj = 8;
+                    nameadj = 10;
 
                 node_time = row[1]
                 if tnow - row[1] >= map_delete:
@@ -2167,16 +2167,17 @@ if __name__ == "__main__":
                         insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
                         insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#a1a1ff")
                         insert_colored_text(text_box_middle, f"{node_wtime}\n")
-                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(11)}")
                         insert_colored_text(text_box_middle, f"APRS\n".rjust(11), "#a1a1ff")
                     elif row[15] == True:
                         if mqttdash:
                             insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
                             insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#9d6d00", tag=str(node_id))
                             insert_colored_text(text_box_middle, f"{node_wtime}\n")
-                            insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}")
+                            insert_colored_text(text_box_middle, f" {node_dist.ljust(11)}")
                             insert_colored_text(text_box_middle, f"MQTT\n".rjust(11), "#9d6d00")
-                        checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                        if node_id not in MapMarkers:
+                            checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                     else:
                         insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
                         if row[23] <= 0:
@@ -2184,7 +2185,7 @@ if __name__ == "__main__":
                         else:
                             insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#c9a500", tag=str(node_id))
                         insert_colored_text(text_box_middle, f"{node_wtime}\n")
-                        insert_colored_text(text_box_middle, f" {node_dist.ljust(9)}")
+                        insert_colored_text(text_box_middle, f" {node_dist.ljust(11)}")
                         if row[23] <= 0:
                             node_sig = (' ' + str(row[16]) + 'dB').rjust(10)
                             # ["#de6933", "#c9a500", "#00c983"] # red, yellow, green
@@ -2195,11 +2196,12 @@ if __name__ == "__main__":
                             else:
                                 color = "#de6933"  # red
                             insert_colored_text(text_box_middle, f"{node_sig}\n", color)
-                            checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                            if node_id not in MapMarkers:
+                                checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                         else:
                             insert_colored_text(text_box_middle, f"{row[23]} Hops\n".rjust(11), "#c9a500")
-                            checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
-                        if node_id in MapMarkers: MapMarkers[node_id][1] = False
+                            if node_id not in MapMarkers:
+                                checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
         except Exception as e:
             logging.error(f"Error updating active nodes: {e}")
 
@@ -2290,8 +2292,9 @@ if __name__ == "__main__":
                     if nodetxt != '': insert_colored_text(text_widget, nodetxt, '#9d6d00', center=False, tag=None)
                 # Lets add or update the map
                 if 'latitude' in decoded and 'longitude' in decoded:
+                    nodeid2 = nodeid
                     sindex = nodeid.find('-')
-                    if sindex > 1: nodeid = nodeid[:sindex]
+                    if sindex > 1: nodeid2 = nodeid[:sindex]
 
                     if MyAPRSCall != decoded['from']:
                         if nodeid not in AprsMarkers:
@@ -2299,7 +2302,7 @@ if __name__ == "__main__":
                             lon = round(float(decoded.get('longitude', '-8.0')), 7)
                             if lat != -8.0 and lon != -8.0:
                                 AprsMarkers[nodeid] = [None, tnow, 0]
-                                AprsMarkers[nodeid][0] = mapview.set_marker(lat, lon, text=nodeid, icon_index=4, text_color='#a1a1ff', font=('Fixedsys', 10), data=nodeid)
+                                AprsMarkers[nodeid][0] = mapview.set_marker(lat, lon, text=nodeid2, icon_index=4, text_color='#a1a1ff', font=('Fixedsys', 10), data=nodeid)
                                 AprsMarkers[nodeid][2] = round(calc_gc(lat, lon, MyLora_Lat, MyLora_Lon), 2)
                         else:
                             AprsMarkers[nodeid][1] = tnow
@@ -2335,13 +2338,15 @@ if __name__ == "__main__":
 
         return lat_result + symid + lon_result + symbol
 
-    def is_socket_connected(sock):
+    def send_aprs_is(data):
+        global aprs_interface
         try:
-            sock.getpeername()
-            return True
-        except (OSError, socket.error):
-            print("Socket not connected!")
-            return False
+            aprs_interface.sendall(data.encode('utf-8'))
+        except (OSError, socket.error, socket.timeout):
+            logging.error("Error sending data to APRS-IS")
+            print("APRS-IS connection lost.")
+            aprs_interface.close()
+            aprs_interface = None
 
     # Treat the APRS data reciever
     def check_aprs_net(aprsnetdata):
@@ -2385,22 +2390,35 @@ if __name__ == "__main__":
 
         host = config.get('APRS', 'server')
         port = int(config.get('APRS', 'port'))
-        aprs_interface = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        aprs_interface.connect((host, port))
-        aprs_interface.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        banner = aprs_interface.recv(512).decode('latin-1')
-        text_widget = text_boxes['APRS Message']
-        insert_colored_text(text_widget, banner, '#ffa1a1', center=False, tag=None)
-        aprs2data = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog v{myversion}\n"
-        MyAPRSCall = config.get('APRS', 'callsign')
-        aprs_interface.sendall(aprs2data.encode('utf-8'))
-        listener_thread = threading.Thread(target=check_aprs_net, args=(aprs_interface,))
-        listener_thread.daemon = True
-        listener_thread.start()
-        aprsrange = int(config.get('APRS', 'filter_range'))
-        if aprsrange != 0:
-            aprs2data = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/{aprsrange}\r\n"
-        aprs_interface.sendall(aprs2data.encode('utf-8'))
+        try:
+            if aprs_interface == None:
+                aprs_interface = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                aprs_interface.connect((host, port))
+                aprs_interface.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                banner = aprs_interface.recv(512).decode('latin-1')
+                text_widget = text_boxes['APRS Message']
+                insert_colored_text(text_widget, banner, '#ffa1a1', center=False, tag=None)
+                logging.warning(f"Connected to APRS-IS: {host}:{port} > {banner}")
+                mypass = aprs_passcode(config.get('APRS', 'passcode'))
+                if mypass.capitalize() == 'AUTO':
+                    mypass = aprs_passcode(config.get('APRS', 'callsign')) # Crerate a passcode for callsign
+                    logging.warning(f"Auto generated passcode for {config.get('APRS', 'callsign')} is {mypass}")
+                if mypass == '':
+                    mypass = '-1' # Listen only
+                aprs2data = f"user {config.get('APRS', 'callsign')} pass {config.get('APRS', 'passcode')} vers LoraLog v{myversion}\n"
+                MyAPRSCall = config.get('APRS', 'callsign')
+                send_aprs_is(aprs2data)
+                listener_thread = threading.Thread(target=check_aprs_net, args=(aprs_interface,))
+                listener_thread.daemon = True
+                listener_thread.start()
+                aprsrange = int(config.get('APRS', 'filter_range'))
+                if aprsrange != 0:
+                    aprs2data = f"#filter r/{MyLora_Lat}/{MyLora_Lon}/{aprsrange}\r\n"
+                send_aprs_is(aprs2data)
+            else:
+                logging.warning(f"Already connected to APRS-IS {host}:{port}")
+        except Exception as e:
+            logging.error(f"Error connecting to APRS-IS: {e}")
 
     def update_paths_nodes():
         global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion
@@ -2510,8 +2528,7 @@ if __name__ == "__main__":
 
                 if 'APRS' in config:
                     if config.get('APRS', 'aprs_plugin') == 'True':
-                        text_widget = text_boxes['APRS Message']
-                        if is_socket_connected(aprs_interface):
+                        if aprs_interface == None:
                             time.sleep(0.10)
                             aprsbeacon = not aprsbeacon
                             beacon_message = ''
@@ -2522,20 +2539,26 @@ if __name__ == "__main__":
                                     tmp = ' '.join(tmp.split())
                                     if tmp.endswith(','): 
                                         tmp = tmp[:-1]
-                                beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:>{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-4]}#L LoraLog v{myversion} {tmp}\n"
-                                aprs_interface.sendall(beacon_message.encode('utf-8'))
+                                beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:>{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-4]}#L LoraLog v{str(myversion)} {tmp}\n"
+                                send_aprs_is(beacon_message)
                             elif MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
                                 beacon_message = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*,qAC,WIDE1-1:={APRSLatLon(MyLora_Lat, MyLora_Lon)}{config.get('APRS', 'beacon')}\n"
-                                aprs_interface.sendall(beacon_message.encode('utf-8'))
+                                send_aprs_is(beacon_message)
                             aprsdata(bytearray(beacon_message.encode('utf-8')))
 
-                        line_count = text_widget.count("1.0", "end-1c", "lines")[0]
-                        text_widget.configure(state="normal")
-                        if line_count > (max_lines / 2):
-                            delete_count = (line_count - (max_lines / 2)) + 10
-                            text_widget.delete("1.0", f"{delete_count}.0")
-                            print(f"Clearing APRS Message ({delete_count} lines)")
-                        text_widget.configure(state="disabled")
+                            text_widget = text_boxes['APRS Message']
+                            line_count = round(text_widget.count("1.0", "end-1c", "lines")[0])
+                            print(f"APRS Message Lines: {line_count}")
+                            if line_count > round(max_lines / 2):
+                                try:
+                                    text_widget.configure(state="normal")
+                                    delete_count = round(max_lines / 2) + 5
+                                    text_widget.delete("1.0", f"{delete_count}.0")
+                                    print(f"Clearing APRS Message ({delete_count} lines)")
+                                    text_widget.configure(state="disabled")
+                                except Exception as e:
+                                    logging.error(f"Error clearing APRS Message: {e}")
+                                    print(f"Error clearing APRS Message: {e}")
 
                 gc.collect()
 
@@ -2662,7 +2685,7 @@ if __name__ == "__main__":
                     if 'APRS' in config:
                         if config.get('APRS', 'aprs_plugin') == 'True' and MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
                             global aprs_interface
-                            if is_socket_connected(aprs_interface):
+                            if aprs_interface != None:
                                 aprs_wx = make_aprs_wx(temperature=round(float(wjson['tempf'])),
                                                     humidity   =int(wjson['humidity']),
                                                     pressure   =round((float(wjson['baromabshpa']) * 10)),
@@ -2670,7 +2693,7 @@ if __name__ == "__main__":
                                 now = datetime.now(timezone.utc)
                                 utc = now.strftime("%d%H%M")
                                 aprs_data = f"{config.get('APRS', 'callsign')}>APLRG1,TCPIP*:@{utc}z{APRSLatLon(MyLora_Lat, MyLora_Lon, '/', '_')}{aprs_wx}{LatLon2qth(MyLora_Lat,MyLora_Lon)[:-2]} Wx\n"
-                                aprs_interface.sendall(aprs_data.encode('utf-8'))
+                                send_aprs_is(aprs_data)
                                 aprsdata(bytearray(aprs_data.encode('utf-8')))
 
                 except Exception as e:
@@ -2988,6 +3011,18 @@ if __name__ == "__main__":
         DBChange = True
     root.bind('<F8>', aprsshow)
 
+    mystate = False
+    def toggle_fullscreen(event=None):
+        global mystate, root, mylastgeon
+        mystate = not mystate
+        if mystate:
+            root.attributes("-fullscreen", True)
+        else:
+            root.attributes("-fullscreen", False)
+        return "break"
+
+    root.bind('<F11>', toggle_fullscreen)
+
     # Config Window
     config_frame = None
     config_frame = Frame(root, borderwidth=0, highlightthickness=1, highlightcolor="#121212", highlightbackground="#121212") # was root
@@ -3083,7 +3118,7 @@ if __name__ == "__main__":
     frame_middle.grid(row=0, column=2, rowspan=5, columnspan=1, padx=0, pady=0, sticky='nsew')
     frame_middle.grid_rowconfigure(0, weight=1)
     frame_middle.grid_columnconfigure(0, weight=0)
-    text_box_middle = create_text(frame_middle, 0, 0, 0, 21)
+    text_box_middle = create_text(frame_middle, 0, 0, 0, 23)
 
     # Start OverLay window
     overlay = Frame(root, bg='#242424', padx=3, pady=2, highlightbackground='#999999', highlightthickness=1)
