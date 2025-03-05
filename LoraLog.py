@@ -774,10 +774,10 @@ def on_meshtastic_message2(packet):
                                 if device_metrics.get('batteryLevel', 0) > 0: MyLoraText1 += (' Battery').ljust(15) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
                         power_metrics = telemetry.get('powerMetrics', {})
                         if power_metrics:
-                            text_raws += '\n' + (' ' * 11) + 'CH1 Voltage: ' + str(round(power_metrics.get('ch1_voltage', 'N/A'),2)) + 'v'
-                            text_raws += ' CH1 Current: ' + str(round(power_metrics.get('ch1_current', 'N/A'),2)) + 'mA'
-                            text_raws += ' CH2 Voltage: ' + str(round(power_metrics.get('ch2_voltage', 'N/A'),2)) + 'v'
-                            text_raws += ' CH2 Current: ' + str(round(power_metrics.get('ch2_current', 'N/A'),2)) + 'mA'
+                            text_raws += '\n' + (' ' * 11) + 'CH1 Voltage: ' + str(round(power_metrics.get('ch1_voltage', '0.0'),2)) + 'v'
+                            text_raws += ' CH1 Current: ' + str(round(power_metrics.get('ch1_current', '0.0'),2)) + 'mA'
+                            text_raws += ' CH2 Voltage: ' + str(round(power_metrics.get('ch2_voltage', '0.0'),2)) + 'v'
+                            text_raws += ' CH2 Current: ' + str(round(power_metrics.get('ch2_current', '0.0'),2)) + 'mA'
                         environment_metrics = telemetry.get('environmentMetrics', {})
                         if environment_metrics:
                             dbcursor.execute("INSERT INTO environment_metrics (node_hex, node_id, temperature, relative_humidity, barometric_pressure) VALUES (?, ?, ?, ?, ?)", (fromraw, packet["from"], environment_metrics.get('temperature', 0.0), environment_metrics.get('relativeHumidity', 0.0), environment_metrics.get('barometricPressure', 0.0)))
@@ -2164,14 +2164,14 @@ if __name__ == "__main__":
                         cursor.close()
                         node_dist = "%.1f" % node_dist + "km"
                     if row[25] == True:
-                        insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
+                        insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
                         insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#a1a1ff")
                         insert_colored_text(text_box_middle, f"{node_wtime}\n")
                         insert_colored_text(text_box_middle, f" {node_dist.ljust(11)}")
                         insert_colored_text(text_box_middle, f"APRS\n".rjust(11), "#a1a1ff")
                     elif row[15] == True:
                         if mqttdash:
-                            insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
+                            insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
                             insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#9d6d00", tag=str(node_id))
                             insert_colored_text(text_box_middle, f"{node_wtime}\n")
                             insert_colored_text(text_box_middle, f" {node_dist.ljust(11)}")
@@ -2179,7 +2179,7 @@ if __name__ == "__main__":
                         if node_id not in MapMarkers:
                             checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
                     else:
-                        insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
+                        insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
                         if row[23] <= 0:
                             insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#00c983", tag=str(node_id))
                         else:
@@ -2206,7 +2206,7 @@ if __name__ == "__main__":
             logging.error(f"Error updating active nodes: {e}")
 
         # Just some stats for checks
-        insert_colored_text(text_box_middle, ('-' * 21) + '\n', "#414141")
+        insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
         insert_colored_text(text_box_middle, f'\n On Map  : {str(len(MapMarkers))}')
         time1 = (time.perf_counter() - start) * 1000
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms')
@@ -2528,7 +2528,7 @@ if __name__ == "__main__":
 
                 if 'APRS' in config:
                     if config.get('APRS', 'aprs_plugin') == 'True':
-                        if aprs_interface == None:
+                        if aprs_interface != None:
                             time.sleep(0.10)
                             aprsbeacon = not aprsbeacon
                             beacon_message = ''
@@ -2552,7 +2552,7 @@ if __name__ == "__main__":
                             if line_count > round(max_lines / 2):
                                 try:
                                     text_widget.configure(state="normal")
-                                    delete_count = round(max_lines / 2) + 5
+                                    delete_count = round(line_count - (max_lines / 2)) + 5
                                     text_widget.delete("1.0", f"{delete_count}.0")
                                     print(f"Clearing APRS Message ({delete_count} lines)")
                                     text_widget.configure(state="disabled")
