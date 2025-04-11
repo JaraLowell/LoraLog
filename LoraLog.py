@@ -17,8 +17,8 @@ import threading
 import sqlite3
 # import ast
 # DEBUG
-# import yaml
-import serial
+import yaml
+# import serial
 from aprslib import IS as aprsIS
 
 # Tkinter imports
@@ -81,14 +81,14 @@ loop = None
 pingcount = 0
 incoming_uptime = 0
 package_received_time = 0
-zoomhome = False
+zoomhome = 0
 ourNode = None
 NIenabled = False
 ThisFont = ('Fixedsys', int(10))
 aprs_interface = None
 listener_thread = None
 aprsbeacon = True
-
+DBTotal = 0
 TemmpDB = None
 DBChange = True
 aprsondash = False
@@ -266,6 +266,9 @@ try:
 except Exception as e:
     print("Error adding column to node_info: %s", str(e))
 
+dbcursor.execute("SELECT COUNT(*) FROM node_info")
+DBTotal = dbcursor.fetchone()[0]
+
 dbcursor.execute("PRAGMA journal_mode=OFF")
 dbcursor.connection.commit()
 dbcursor.close()
@@ -431,7 +434,7 @@ def connect_meshtastic(force_connect=False):
     if 'position' in nodeInfo and 'latitude' in nodeInfo['position']:
         MyLora_Lat = round(nodeInfo['position']['latitude'],7)
         MyLora_Lon = round(nodeInfo['position']['longitude'],7)
-        zoomhome = False
+        zoomhome += 1
 
     nodeInfo = meshtastic_client.getNode('^local')
     ourNode = nodeInfo
@@ -659,7 +662,7 @@ def on_meshtastic_message(packet, interface, loop=None):
 
 def on_meshtastic_message2(packet):
     # print(yaml.dump(packet), end='\n\n')
-    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, DBChange
+    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, DBChange, zoomhome
     if MyLora == '':
         print('*** MyLora is empty ***\n')
         # return
@@ -774,10 +777,13 @@ def on_meshtastic_message2(packet):
                                 if device_metrics.get('batteryLevel', 0) > 0: MyLoraText1 += (' Battery').ljust(15) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
                         power_metrics = telemetry.get('powerMetrics', {})
                         if power_metrics:
-                            text_raws += '\n' + (' ' * 11) + 'CH1 Voltage: ' + str(round(power_metrics.get('ch1_voltage', '0.0'),2)) + 'v'
-                            text_raws += ' CH1 Current: ' + str(round(power_metrics.get('ch1_current', '0.0'),2)) + 'mA'
-                            text_raws += ' CH2 Voltage: ' + str(round(power_metrics.get('ch2_voltage', '0.0'),2)) + 'v'
-                            text_raws += ' CH2 Current: ' + str(round(power_metrics.get('ch2_current', '0.0'),2)) + 'mA'
+                            print(yaml.dump(power_metrics), end='\n\n')
+                            if "ch1_voltage" in power_metrics:
+                                text_raws += '\n' + (' ' * 11) + 'CH1 Voltage: ' + str(power_metrics.get('ch1_voltage', '0.0')) + 'v'
+                                text_raws += ' CH1 Current: ' + str(power_metrics.get('ch1_current', '0.0')) + 'mA'
+                            if "ch2_voltage" in power_metrics:
+                                text_raws += ' CH2 Voltage: ' + str(power_metrics.get('ch2_voltage', '0.0')) + 'v'
+                                text_raws += ' CH2 Current: ' + str(power_metrics.get('ch2_current', '0.0')) + 'mA'
                         environment_metrics = telemetry.get('environmentMetrics', {})
                         if environment_metrics:
                             dbcursor.execute("INSERT INTO environment_metrics (node_hex, node_id, temperature, relative_humidity, barometric_pressure) VALUES (?, ?, ?, ?, ?)", (fromraw, packet["from"], environment_metrics.get('temperature', 0.0), environment_metrics.get('relativeHumidity', 0.0), environment_metrics.get('barometricPressure', 0.0)))
@@ -856,6 +862,16 @@ def on_meshtastic_message2(packet):
                         if fromraw == MyLora:
                             MyLora_Lat = nodelat
                             MyLora_Lon = nodelon
+                            
+                            if MyLora not in MapMarkers:
+                                MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
+                                MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 10), data=MyLora, command = click_command)
+                                MapMarkers[MyLora][0].text_color = '#e67a7f'
+                                zoomhome += 1
+                            elif MapMarkers[MyLora][0] != None:
+                                MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
+                                MapMarkers[MyLora][0].change_icon(1)
+
                         else:
                             node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
                         dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, precision_bits = ?, last_sats = ?, distance = ? WHERE node_id = ?", (nodelat, nodelon, position.get('altitude', 0), position.get('precisionBits', 0), position.get('satsInView', 0), node_dist, packet["from"]))
@@ -869,7 +885,7 @@ def on_meshtastic_message2(packet):
                         if fromraw in MapMarkers:
                             if MapMarkers[fromraw][0] != None:
                                 MapMarkers[fromraw][0].set_position(nodelat, nodelon)
-                                MapMarkers[fromraw][0].set_text(fromname)
+                                # MapMarkers[fromraw][0].set_text(fromname)
                             if MapMarkers[fromraw][6] != None:
                                 MapMarkers[fromraw][6].set_position(nodelat, nodelon)
                         text_msgs += extra
@@ -1156,7 +1172,7 @@ def updatesnodes():
                                     MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
                                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 10), data=MyLora, command = click_command)
                                     MapMarkers[MyLora][0].text_color = '#e67a7f'
-                                    zoomhome = False
+                                    zoomhome += 1
                                 elif MapMarkers[MyLora][0] != None:
                                     MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
                                     MapMarkers[MyLora][0].change_icon(1)
@@ -1910,11 +1926,15 @@ if __name__ == "__main__":
         info_label = Text(overlay, bg='#242424', fg='#dddddd', font=ThisFont, width=64, height=13, highlightbackground='#242424', highlightthickness=0, selectforeground='#9d9d9d', selectbackground='#555555')
         info_label.grid(row=0, column=0, columnspan=2, padx=1, pady=1, sticky='nsew')
 
+        posvar = ''
+        if result[9] != -8.0 and result[10] != -8.0:
+            posvar = f" ({LatLon2qth(result[9],result[10])[:-2]})"
+
         insert_colored_text(info_label, "⬢ ", "#" + marker.data[-6:],  center=True)
         if result[4] != '':
-            text_loc = unescape(result[5]) + ' - ' + unescape(result[4]) + '\n'
+            text_loc = unescape(result[5]) + ' - ' + unescape(result[4]) + posvar + '\n'
         else:
-            text_loc = unescape(result[5]) + '\n'
+            text_loc = unescape(result[5]) + posvar + '\n'
         insert_colored_text(info_label, text_loc + '\n', "#2bd5ff",  center=True)
 
         # info_label.insert("end", "Latitude: ")
@@ -2062,7 +2082,7 @@ if __name__ == "__main__":
 
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, AprsMarkers, MyAPRSCall, tlast
-        global TemmpDB, DBChange, aprsondash, mqttdash, config
+        global TemmpDB, DBChange, aprsondash, mqttdash, config, DBTotal
         start = time.perf_counter()
         tnow = int(time.time())
 
@@ -2208,6 +2228,8 @@ if __name__ == "__main__":
         # Just some stats for checks
         insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
         insert_colored_text(text_box_middle, f'\n On Map  : {str(len(MapMarkers))}')
+        if DBTotal != 0:
+            insert_colored_text(text_box_middle, f'/{str(DBTotal)}')
         time1 = (time.perf_counter() - start) * 1000
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms')
 
@@ -2279,9 +2301,20 @@ if __name__ == "__main__":
                 if nodetxt != '':
                     nodetxt = (' ' * 11) + nodetxt + '\n'
                 if decoded['format'] == 'message':
+                    '''
+                    Thing we might need to auto reply to
+                        tmp = decoded.get('message_text', '')
+                        if tmp == '?APRS?':
+                            # All posible replies
+                        elif tmp == '?ABOUT' or tmp == '?APRSV' or tmp == '?VER':
+                            # Station's software version, operating system, CPU load (Exp : APRSIS32 Win v6.1 b7601 p2 9.1/6.4%)
+                    '''
                     aprtxt = '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + nodeid.ljust(9) + ' > ' + nodeto.ljust(9) + nodevia + '\n'
                     insert_colored_text(text_widget, aprtxt)
-                    if nodetxt != '': insert_colored_text(text_widget, nodetxt, '#a1a1ff', center=False, tag=None)
+                    if nodetxt != '':
+                        insert_colored_text(text_widget, nodetxt, '#a1a1ff', center=False, tag=None)
+                        playsound('Data' + os.path.sep + 'NewChat.mp3')
+                        print('APRS Message: ', nodetxt)
                 elif decoded['to'].startswith('APL'):
                     aprtxt = '[' + time.strftime("%H:%M:%S", time.localtime()) + '] ' + nodeid.ljust(9) + ' > ' + nodeto.ljust(9) + nodevia + '\n'
                     insert_colored_text(text_widget, aprtxt)
@@ -2421,21 +2454,22 @@ if __name__ == "__main__":
             logging.error(f"Error connecting to APRS-IS: {e}")
 
     def update_paths_nodes():
-        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion
+        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion, DBTotal
         tnow = int(time.time())
 
-        if MyLora_Lat != -8.0 and MyLora_Lon != -8.0 and zoomhome == False:
+        if MyLora_Lat != -8.0 and MyLora_Lon != -8.0 and zoomhome != 0 and zoomhome <= 3:
             tlast = time.time() - 840
-            zoomhome = True
+            zoomhome = 10
             mapview.set_zoom(11)
             mapview.set_position(MyLora_Lat, MyLora_Lon)
             print(mapview.zoom)
-            if 'APRS' in config:
-                if config.get('APRS', 'aprs_plugin') == 'True':
-                    connect_to_aprs()
 
         if 'APRS' in config:
             if config.get('APRS', 'aprs_plugin') == 'True':
+                # Lets reconect if we lost the connection
+                if aprs_interface == None:
+                    connect_to_aprs()
+
                 global AprsMarkers
                 markers_to_delete = [nodeid for nodeid, marker in AprsMarkers.items() if tnow - marker[1] > map_delete]
                 for nodeid in markers_to_delete:
@@ -2526,6 +2560,10 @@ if __name__ == "__main__":
                 # Send weather update
                 weather_update()
 
+                # Return total nodes in database
+                cursor.execute("SELECT COUNT(*) FROM node_info")
+                DBTotal = cursor.fetchone()[0]
+
                 if 'APRS' in config:
                     if config.get('APRS', 'aprs_plugin') == 'True':
                         if aprs_interface != None:
@@ -2548,17 +2586,14 @@ if __name__ == "__main__":
 
                             text_widget = text_boxes['APRS Message']
                             line_count = round(text_widget.count("1.0", "end-1c", "lines")[0])
-                            print(f"APRS Message Lines: {line_count}")
                             if line_count > round(max_lines / 2):
                                 try:
                                     text_widget.configure(state="normal")
                                     delete_count = round(line_count - (max_lines / 2)) + 5
                                     text_widget.delete("1.0", f"{delete_count}.0")
-                                    print(f"Clearing APRS Message ({delete_count} lines)")
                                     text_widget.configure(state="disabled")
                                 except Exception as e:
                                     logging.error(f"Error clearing APRS Message: {e}")
-                                    print(f"Error clearing APRS Message: {e}")
 
                 gc.collect()
 
