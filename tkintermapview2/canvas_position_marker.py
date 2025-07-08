@@ -132,12 +132,6 @@ class CanvasPositionMarker:
         self.draw()
 
     def set_temperature(self, temperature: float, unit: str = "°C"):
-        """Set the temperature to display under the marker.
-        
-        Args:
-            temperature (float): Temperature value to display
-            unit (str): Temperature unit (default: "°C")
-        """
         self.temperature = temperature
         self.temperature_unit = unit
         self.draw()
@@ -157,13 +151,19 @@ class CanvasPositionMarker:
         elif temperature >= 40:
             return "#de6933"  # Orange-red for 40 and above
         else:
-            # Linear interpolation between #2bd5ff and #de6933
-            ratio = temperature / 40.0
+            # Three-color gradient: #2bd5ff -> #c9a500 -> #de6933
+            # Split the range: 0-20 (blue to yellow), 20-40 (yellow to orange)
             
-            # Start color: #2bd5ff (43, 213, 255)
-            start_r, start_g, start_b = 43, 213, 255
-            # End color: #de6933 (222, 105, 51)
-            end_r, end_g, end_b = 222, 105, 51
+            if temperature <= 20:
+                # Interpolate between blue (#2bd5ff) and yellow (#c9a500)
+                ratio = temperature / 20.0
+                start_r, start_g, start_b = 43, 213, 255    # #2bd5ff
+                end_r, end_g, end_b = 201, 165, 0          # #c9a500
+            else:
+                # Interpolate between yellow (#c9a500) and orange (#de6933)
+                ratio = (temperature - 20) / 20.0
+                start_r, start_g, start_b = 201, 165, 0     # #c9a500
+                end_r, end_g, end_b = 222, 105, 51         # #de6933
             
             # Interpolate between the colors
             red = int(start_r + (end_r - start_r) * ratio)
