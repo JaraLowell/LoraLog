@@ -94,7 +94,7 @@ TemmpDB = None
 DBChange = True
 aprsondash = False
 mqttdash = False
-myversion = "1.4.3"
+myversion = "1.4.5"
 
 def showLink(event):
     try:
@@ -794,6 +794,11 @@ def on_meshtastic_message2(packet):
                             text_raws += '\n' + (' ' * 11) + 'Temperature: ' + str(round(environment_metrics.get('temperature', 0.0),1)) + '°C'
                             text_raws += ' Humidity: ' + str(round(environment_metrics.get('relativeHumidity', 0.0),1)) + '%'
                             text_raws += ' Pressure: ' + str(round(environment_metrics.get('barometricPressure', 0.00),2)) + 'hPa'
+
+                            if fromraw in MapMarkers:
+                                if MapMarkers[fromraw][0] is not None:
+                                    MapMarkers[fromraw][0].set_temperature(round(environment_metrics.get('temperature', 0.0),1))
+
                         localstats_metrics = telemetry.get('localStats', {})
                         if localstats_metrics:
                             text_raws += '\n' + (' ' * 11) + 'PacketsTx: ' + str(localstats_metrics.get('numPacketsTx', 0))
@@ -1903,7 +1908,14 @@ if __name__ == "__main__":
 
     def update_position_and_height(nodeid, lat = -8.0, lon = -8.0, alt = 0.0):
         # Under construction !
-        print(f"Updating !{nodeid} position : {lat}/{lon}, {alt}m")
+        if lat != -8.0 and lon != -8.0:
+            global dbconnection
+            dbcursor = dbconnection.cursor()
+            dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ? WHERE hex_id = ?", (lat, lon, alt, nodeid))
+            dbconnection.commit()
+            dbcursor.close()
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] ", "#d1d1d1")
+            insert_colored_text(text_box2, f"Updating !{nodeid} position : {lat}/{lon}, {alt}m\n", "#2bd5ff")
 
     def click_command(marker):
         global MyLora, overlay, mapview, dbconnection
@@ -2275,6 +2287,8 @@ if __name__ == "__main__":
             pass
 
         if not data_str.startswith('#'):
+            hastemp = False
+            tempr = 0.0
             if decoded is not None and fromradio == True:
                 if 'raw' in decoded and decoded['raw'] != '':
                     print('Sending to APRS-IS:', decoded['raw'])
@@ -2297,6 +2311,8 @@ if __name__ == "__main__":
                     wx = decoded['weather']
                     if 'temperature' in wx:
                         nodetxt += 'Temperature: ' + str(round(wx['temperature'],1)) + '°C '
+                        hastemp = True
+                        tempr = round(wx['temperature'],1)
                     if 'humidity' in wx:
                         nodetxt += 'Humidity: ' + str(wx['humidity']) + '% '
                     if 'pressure' in wx:
@@ -2349,6 +2365,10 @@ if __name__ == "__main__":
                                     AprsMarkers[nodeid][0].set_position(lat, lon)
                                     AprsMarkers[nodeid][2] = round(calc_gc(lat, lon, MyLora_Lat, MyLora_Lon), 2)
                         DBChange = True
+                if hastemp and nodeid in AprsMarkers:
+                    if AprsMarkers[nodeid][0] is not None:
+                        AprsMarkers[nodeid][0].set_temperature(tempr)
+
         elif not data_str.startswith('# a'):
             insert_colored_text(text_widget, data_str + '\n', '#ffa1a1', center=False, tag=None)
             if data_str.startswith('# filter'):
@@ -2523,6 +2543,8 @@ if __name__ == "__main__":
                             updated += 1
             cursor.close()
             logging.warning(f"Updated {updated} nodes with lat/lon from JSON.")
+            insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] ", "#d1d1d1")
+            insert_colored_text(text_box2, f"Updated {updated} nodes with lat/lon from JSON.\n", "#2bd5ff")
 
     def update_paths_nodes():
         global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion, DBTotal
@@ -2779,6 +2801,11 @@ if __name__ == "__main__":
                     text_raws += ' Pressure: ' + str(round(wjson['baromabshpa'], 2)) + 'hPa'
                     insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + '] ' + unescape(f"{MyLora_SN} ({MyLora_LN})") + "\n", "#d1d1d1")
                     insert_colored_text(text_box2, (' ' * 11) + text_raws + '\n', "#00c983")
+                    # Now update the temprature on the map
+                    if MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
+                        if MyLora in MapMarkers:
+                            if MapMarkers[MyLora][0] is not None:
+                                MapMarkers[MyLora][0].set_temperature(round(wjson['tempc'], 1))
 
                     # Lets see if we can make a correct APRS weather string
                     '''

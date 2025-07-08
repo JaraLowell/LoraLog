@@ -64,6 +64,8 @@ class CanvasPositionMarker:
         self.command = command
         self.data = data
         self.text_background_image = CanvasPositionMarker.iconspack[6]
+        self.temperature = None  # Temperature value to display
+        self.temperature_unit = "°C"  # Default temperature unit
 
         self.polygon = None
         self.big_circle = None
@@ -71,6 +73,7 @@ class CanvasPositionMarker:
         self.canvas_text_bg = None
         self.canvas_image = None
         self.canvas_icon = None
+        self.canvas_temperature = None  # Canvas element for temperature display
 
         if font is None:
             if sys.platform == "darwin":
@@ -108,8 +111,9 @@ class CanvasPositionMarker:
         self.map_widget.canvas.delete(self.canvas_text_bg)
         self.map_widget.canvas.delete(self.canvas_icon)
         self.map_widget.canvas.delete(self.canvas_image)
+        self.map_widget.canvas.delete(self.canvas_temperature)
 
-        self.polygon, self.big_circle, self.canvas_text, self.canvas_text_bg, self.canvas_image, self.canvas_icon = None, None, None, None, None, None
+        self.polygon, self.big_circle, self.canvas_text, self.canvas_text_bg, self.canvas_image, self.canvas_icon, self.canvas_temperature = None, None, None, None, None, None, None
         self.deleted = True
         self.map_widget.canvas.update()
 
@@ -123,6 +127,58 @@ class CanvasPositionMarker:
     def set_text(self, text):
         self.text = text
         self.draw()
+
+    def set_temperature(self, temperature: float, unit: str = "°C"):
+        """Set the temperature to display under the marker.
+        
+        Args:
+            temperature (float): Temperature value to display
+            unit (str): Temperature unit (default: "°C")
+        """
+        self.temperature = temperature
+        self.temperature_unit = unit
+        self.draw()
+
+    def clear_temperature(self):
+        """Clear the temperature display."""
+        self.temperature = None
+        self.draw()
+
+    def get_temperature(self):
+        """Get the current temperature value."""
+        return self.temperature
+
+    def get_temperature_color(self, temperature: float) -> str:
+        """Get color based on temperature value with gradient from blue (cold) to red (hot).
+        
+        Args:
+            temperature (float): Temperature value
+            
+        Returns:
+            str: Hex color code
+        """
+        if temperature <= 0:
+            return "#0000FF"  # Blue for 0 and below
+        elif temperature >= 40:
+            return "#FF0000"  # Red for 40 and above
+        else:
+            # Linear interpolation between blue and red through green/yellow
+            # 0-20: Blue to Green
+            # 20-40: Green to Red
+            if temperature <= 20:
+                # Blue to Green (0-20)
+                ratio = temperature / 20.0
+                blue = int(255 * (1 - ratio))
+                green = int(255 * ratio)
+                red = 0
+            else:
+                # Green to Red (20-40)
+                ratio = (temperature - 20) / 20.0
+                red = int(255 * ratio)
+                green = int(255 * (1 - ratio))
+                blue = 0
+            
+            return f"#{red:02X}{green:02X}{blue:02X}"
 
     def change_icon(self, new_icon: int = 0):
         if new_icon == 0:
@@ -259,6 +315,27 @@ class CanvasPositionMarker:
                     if self.canvas_image is not None:
                         self.map_widget.canvas.delete(self.canvas_image)
                         self.canvas_image = None
+
+                # draw temperature under the marker if set
+                if self.temperature is not None:
+                    temp_text = f"{self.temperature}{self.temperature_unit}"
+                    temp_y_pos = canvas_pos_y + self.text_y_offset - 18
+                    temp_color = self.get_temperature_color(self.temperature)
+                    
+                    if self.canvas_temperature is None:
+                        self.canvas_temperature = self.map_widget.canvas.create_text(canvas_pos_x, temp_y_pos,
+                                                                                    anchor=tkinter.S,
+                                                                                    text=temp_text,
+                                                                                    fill=temp_color,
+                                                                                    font=("Tahoma", 9, "bold"),
+                                                                                    tag=("marker", "marker_temperature"))
+                    else:
+                        self.map_widget.canvas.coords(self.canvas_temperature, canvas_pos_x, temp_y_pos)
+                        self.map_widget.canvas.itemconfig(self.canvas_temperature, text=temp_text, fill=temp_color)
+                else:
+                    if self.canvas_temperature is not None:
+                        self.map_widget.canvas.delete(self.canvas_temperature)
+                        self.canvas_temperature = None
             else:
                 self.map_widget.canvas.delete(self.canvas_icon)
                 self.map_widget.canvas.delete(self.canvas_text)
@@ -266,6 +343,7 @@ class CanvasPositionMarker:
                 self.map_widget.canvas.delete(self.polygon)
                 self.map_widget.canvas.delete(self.big_circle)
                 self.map_widget.canvas.delete(self.canvas_image)
-                self.canvas_text, self.polygon, self.big_circle, self.canvas_text_bg,  self.canvas_image, self.canvas_icon = None, None, None, None, None, None
+                self.map_widget.canvas.delete(self.canvas_temperature)
+                self.canvas_text, self.polygon, self.big_circle, self.canvas_text_bg, self.canvas_image, self.canvas_icon, self.canvas_temperature = None, None, None, None, None, None, None
 
             self.map_widget.manage_z_order()
