@@ -36,6 +36,7 @@ from pubsub import pub
 import meshtastic.remote_hardware
 import meshtastic.version
 from copy import deepcopy
+from json import load as json_load
 
 import queue
 message_queue = queue.Queue()
@@ -2453,6 +2454,74 @@ if __name__ == "__main__":
         except Exception as e:
             logging.error(f"Error connecting to APRS-IS: {e}")
 
+    def update_missing_latlon_from_json(json_path):
+        """
+        Update nodes in the database with missing lat/lon using data from a JSON file.
+        Only updates nodes where lat/lon are -8.0 and JSON has valid values.
+        """
+        if not os.path.exists(json_path):
+            logging.error(f"JSON file not found: {json_path}")
+            return
+
+        with open(json_path, "r", encoding="utf-8") as f:
+            try:
+                nodes_json = json_load(f)
+                if isinstance(nodes_json, dict) and "nodes" in nodes_json:
+                    nodes_json = nodes_json["nodes"]
+            except Exception as e:
+                logging.error(f"Error loading JSON: {e}")
+                return
+
+        # Helper to get canonical hex string (no '!', lower, leading zeros as needed)
+        def canonical_hex(node_id):
+            # Accepts int or numeric string
+            if isinstance(node_id, str) and node_id.isdigit():
+                node_id = int(node_id)
+            if isinstance(node_id, int) and node_id > 0:
+                in_hex = hex(node_id)[2:]
+                if len(in_hex) % 2:
+                    in_hex = '0' + in_hex
+                return in_hex.lower()
+            return None
+
+        # Build lookup: canonical hex string -> node
+        json_lookup = {}
+        for node in nodes_json:
+            node_id = node.get("node_id")
+            hex_id = canonical_hex(node_id)
+            if hex_id:
+                json_lookup[hex_id] = node
+
+        logging.warning(f"Loaded {len(json_lookup)} nodes from JSON.")
+
+        with dbconnection:
+            cursor = dbconnection.cursor()
+            # Find all nodes with missing lat/lon
+            missing_nodes = cursor.execute(
+                "SELECT node_id, hex_id FROM node_info WHERE latitude = -8.0 AND longitude = -8.0"
+            ).fetchall()
+
+            updated = 0
+            for node_id, hex_id in missing_nodes:
+                # hex_id in DB is already canonical (no '!', lower, leading zeros as needed)
+                json_node = json_lookup.get(hex_id.lower())
+                if json_node:
+                    lat = json_node.get("latitude")
+                    lon = json_node.get("longitude")
+                    if isinstance(lat, int) and isinstance(lon, int):
+                        lat_f = lat / 1e7
+                        lon_f = lon / 1e7
+                        longname = str(json_node.get("long_name").encode('ascii', 'xmlcharrefreplace'), 'ascii')
+                        shortname = str(json_node.get("short_name").encode('ascii', 'xmlcharrefreplace'), 'ascii')
+                        if lat_f != 0.0 and lon_f != 0.0:
+                            cursor.execute(
+                                "UPDATE node_info SET short_name = ?, long_name = ?, latitude = ?, longitude = ? WHERE node_id = ?",
+                                (shortname, longname, lat_f, lon_f, node_id)
+                            )
+                            updated += 1
+            cursor.close()
+            logging.warning(f"Updated {updated} nodes with lat/lon from JSON.")
+
     def update_paths_nodes():
         global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion, DBTotal
         tnow = int(time.time())
@@ -2614,7 +2683,6 @@ if __name__ == "__main__":
     # A Litle Fun with Weather, using the json file from a weather station and sending it to mesh
     if config.get('meshtastic', 'weatherbeacon') == 'True':
         from urllib.request import urlopen
-        from json import load as json_load
         from meshtastic.protobuf import portnums_pb2, telemetry_pb2, mesh_pb2
 
     # Under construction, not sure yet if this be correct; needs testing!
@@ -3057,6 +3125,9 @@ if __name__ == "__main__":
         return "break"
 
     root.bind('<F11>', toggle_fullscreen)
+
+    # we grab this file from https://meshtastic.liamcottle.net/api/v1/nodes
+    root.bind('<F9>', lambda event: update_missing_latlon_from_json(r"nodes.json"))
 
     # Config Window
     config_frame = None
