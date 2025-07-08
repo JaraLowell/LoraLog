@@ -776,6 +776,9 @@ def on_meshtastic_message2(packet):
                                 MyLoraText1 = (' ChUtil').ljust(15) + str(round(device_metrics.get('channelUtilization', 0.00),2)).rjust(6) + '%\n' + (' AirUtilTX').ljust(15) + str(round(device_metrics.get('airUtilTx', 0.00),2)).rjust(6) + '%\n'
                                 if device_metrics.get('voltage', 0.00) > 0.00: MyLoraText1 += (' Power').ljust(15) + str(round(device_metrics.get('voltage', 0.00),2)).rjust(6) + 'v\n' 
                                 if device_metrics.get('batteryLevel', 0) > 0: MyLoraText1 += (' Battery').ljust(15) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
+                            if fromraw in MapMarkers:
+                                if MapMarkers[fromraw][0] is not None:
+                                    MapMarkers[fromraw][0].set_battery_percentage(device_metrics.get('batteryLevel', 101))
                         power_metrics = telemetry.get('powerMetrics', {})
                         if power_metrics:
                             print(yaml.dump(power_metrics), end='\n\n')

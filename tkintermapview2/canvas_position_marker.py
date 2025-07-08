@@ -66,6 +66,7 @@ class CanvasPositionMarker:
         self.text_background_image = CanvasPositionMarker.iconspack[6]
         self.temperature = None  # Temperature value to display
         self.temperature_unit = "°C"  # Default temperature unit
+        self.battery_percentage = None  # Battery percentage to display
 
         self.polygon = None
         self.big_circle = None
@@ -74,6 +75,7 @@ class CanvasPositionMarker:
         self.canvas_image = None
         self.canvas_icon = None
         self.canvas_temperature = None  # Canvas element for temperature display
+        self.canvas_battery = None  # Canvas element for battery display
 
         if font is None:
             if sys.platform == "darwin":
@@ -112,8 +114,9 @@ class CanvasPositionMarker:
         self.map_widget.canvas.delete(self.canvas_icon)
         self.map_widget.canvas.delete(self.canvas_image)
         self.map_widget.canvas.delete(self.canvas_temperature)
+        self.map_widget.canvas.delete(self.canvas_battery)
 
-        self.polygon, self.big_circle, self.canvas_text, self.canvas_text_bg, self.canvas_image, self.canvas_icon, self.canvas_temperature = None, None, None, None, None, None, None
+        self.polygon, self.big_circle, self.canvas_text, self.canvas_text_bg, self.canvas_image, self.canvas_icon, self.canvas_temperature, self.canvas_battery = None, None, None, None, None, None, None, None
         self.deleted = True
         self.map_widget.canvas.update()
 
@@ -149,36 +152,47 @@ class CanvasPositionMarker:
         return self.temperature
 
     def get_temperature_color(self, temperature: float) -> str:
-        """Get color based on temperature value with gradient from blue (cold) to red (hot).
-        
-        Args:
-            temperature (float): Temperature value
-            
-        Returns:
-            str: Hex color code
-        """
         if temperature <= 0:
-            return "#0000FF"  # Blue for 0 and below
+            return "#2bd5ff"  # Light blue for 0 and below
         elif temperature >= 40:
-            return "#FF0000"  # Red for 40 and above
+            return "#de6933"  # Orange-red for 40 and above
         else:
-            # Linear interpolation between blue and red through green/yellow
-            # 0-20: Blue to Green
-            # 20-40: Green to Red
-            if temperature <= 20:
-                # Blue to Green (0-20)
-                ratio = temperature / 20.0
-                blue = int(255 * (1 - ratio))
-                green = int(255 * ratio)
-                red = 0
-            else:
-                # Green to Red (20-40)
-                ratio = (temperature - 20) / 20.0
-                red = int(255 * ratio)
-                green = int(255 * (1 - ratio))
-                blue = 0
+            # Linear interpolation between #2bd5ff and #de6933
+            ratio = temperature / 40.0
+            
+            # Start color: #2bd5ff (43, 213, 255)
+            start_r, start_g, start_b = 43, 213, 255
+            # End color: #de6933 (222, 105, 51)
+            end_r, end_g, end_b = 222, 105, 51
+            
+            # Interpolate between the colors
+            red = int(start_r + (end_r - start_r) * ratio)
+            green = int(start_g + (end_g - start_g) * ratio)
+            blue = int(start_b + (end_b - start_b) * ratio)
             
             return f"#{red:02X}{green:02X}{blue:02X}"
+
+    def set_battery_percentage(self, percentage: int):
+        if percentage >= 99:
+            self.battery_percentage = None
+        else:
+            self.battery_percentage = percentage
+        self.draw()
+
+    def clear_battery_percentage(self):
+        self.battery_percentage = None
+        self.draw()
+
+    def get_battery_percentage(self):
+        return self.battery_percentage
+
+    def get_battery_color(self, percentage: int) -> str:
+        if percentage <= 20:
+            return "#de6933"  # Red for low battery
+        elif percentage <= 50:
+            return "#c9a500"  # Orange for medium battery
+        else:
+            return "#00c983"  # Green for good battery
 
     def change_icon(self, new_icon: int = 0):
         if new_icon == 0:
@@ -327,7 +341,7 @@ class CanvasPositionMarker:
                                                                                     anchor=tkinter.S,
                                                                                     text=temp_text,
                                                                                     fill=temp_color,
-                                                                                    font=("Tahoma", 9, "bold"),
+                                                                                    font=self.font,
                                                                                     tag=("marker", "marker_temperature"))
                     else:
                         self.map_widget.canvas.coords(self.canvas_temperature, canvas_pos_x, temp_y_pos)
@@ -336,6 +350,28 @@ class CanvasPositionMarker:
                     if self.canvas_temperature is not None:
                         self.map_widget.canvas.delete(self.canvas_temperature)
                         self.canvas_temperature = None
+
+                # draw battery percentage on opposite side from text if set and under 99%
+                if self.battery_percentage is not None and self.battery_percentage < 99:
+                    battery_text = f"{self.battery_percentage}%"
+                    # Position on opposite side from text_y_offset
+                    battery_y_pos = canvas_pos_y + (-self.text_y_offset)
+                    battery_color = self.get_battery_color(self.battery_percentage)
+
+                    if self.canvas_battery is None:
+                        self.canvas_battery = self.map_widget.canvas.create_text(canvas_pos_x, battery_y_pos,
+                                                                                anchor=tkinter.N,
+                                                                                text=battery_text,
+                                                                                fill=battery_color,
+                                                                                font=self.font,
+                                                                                tag=("marker", "marker_battery"))
+                    else:
+                        self.map_widget.canvas.coords(self.canvas_battery, canvas_pos_x, battery_y_pos)
+                        self.map_widget.canvas.itemconfig(self.canvas_battery, text=battery_text, fill=battery_color)
+                else:
+                    if self.canvas_battery is not None:
+                        self.map_widget.canvas.delete(self.canvas_battery)
+                        self.canvas_battery = None
             else:
                 self.map_widget.canvas.delete(self.canvas_icon)
                 self.map_widget.canvas.delete(self.canvas_text)
@@ -344,6 +380,7 @@ class CanvasPositionMarker:
                 self.map_widget.canvas.delete(self.big_circle)
                 self.map_widget.canvas.delete(self.canvas_image)
                 self.map_widget.canvas.delete(self.canvas_temperature)
-                self.canvas_text, self.polygon, self.big_circle, self.canvas_text_bg, self.canvas_image, self.canvas_icon, self.canvas_temperature = None, None, None, None, None, None, None
+                self.map_widget.canvas.delete(self.canvas_battery)
+                self.canvas_text, self.polygon, self.big_circle, self.canvas_text_bg, self.canvas_image, self.canvas_icon, self.canvas_temperature, self.canvas_battery = None, None, None, None, None, None, None, None
 
             self.map_widget.manage_z_order()
