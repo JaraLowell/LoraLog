@@ -15,6 +15,7 @@ class CanvasPath:
                  color: str = "#3E69CB",
                  command=None,
                  name: str = None,
+                 signal_strength: str = None,
                  width: int = 9,
                  data: any = None):
 
@@ -27,6 +28,7 @@ class CanvasPath:
         self.command = command
         self.width = width
         self.name = name
+        self.signal_strength = signal_strength
         self.data = data
 
         self.last_upper_left_tile_pos = None
@@ -44,6 +46,10 @@ class CanvasPath:
 
     def set_position_list(self, position_list: list):
         self.position_list = position_list
+        self.draw()
+
+    def set_signal_strength(self, signal_strength: str):
+        self.signal_strength = signal_strength
         self.draw()
 
     def add_position(self, deg_x, deg_y, index=-1):

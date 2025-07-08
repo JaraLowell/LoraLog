@@ -604,6 +604,10 @@ def MapMarkerDelete(node_id):
 HeardDB = {}
 def logheard(sourseIDx, nodeIDx, dbdata, nodesname):
     global HeardDB, MapMarkers, mapview
+    if sourseIDx == nodeIDx:
+        # Do not log self heard
+        return
+
     tnow = int(time.time())
     key = (sourseIDx, nodeIDx)
     sourseID = idToHex(sourseIDx)[1:]
@@ -616,10 +620,17 @@ def logheard(sourseIDx, nodeIDx, dbdata, nodesname):
     if sourseID in MapMarkers and nodeID in MapMarkers:
         if heard_entry[2] is None:
             listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position() ]
-            heard_entry[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID)
+            # dbdata contains the signal strength as float, so can later on add it to path
+            signal_strength_text = f"{dbdata:.1f}dB"
+            heard_entry[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text)
+        elif heard_entry[2] is not None:
+            # Update existing path with new signal strength
+            signal_strength_text = f"{dbdata:.1f}dB"
+            heard_entry[2].set_signal_strength(signal_strength_text)
 
 # We moved need re draw 
 def redrawnaibors(sourceIDx):
+    global HeardDB, MapMarkers, mapview
     for key, value in HeardDB.items():
         if value[2] is not None and (key[0] == sourceIDx or key[1] == sourceIDx):
             value[2].delete()
@@ -628,9 +639,12 @@ def redrawnaibors(sourceIDx):
             nodeID = idToHex(key[1])[1:]
             if sourseID in MapMarkers and nodeID in MapMarkers:
                 listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position()]
-                value[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID)
+                # value[1] contains the signal strength (dbdata)
+                signal_strength_text = f"{value[1]:.1f}dB"
+                value[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text)
 
 def deloldheard(deltime):
+    global HeardDB, MapMarkers, mapview
     tnow = int(time.time())
     keys_to_delete = [key for key, value in HeardDB.items() if tnow - value[0] > (deltime / 3)]
     for key in keys_to_delete:
