@@ -2067,8 +2067,9 @@ if __name__ == "__main__":
                     MapMarkers[node_id][6].set_position(lat, lon)
             else:
                 MapMarkerDelete(node_id)
-                MapMarkers[node_id][0].delete()
-                MapMarkers[node_id][0] = None
+                if MapMarkers[node_id][0] is not None:
+                    MapMarkers[node_id][0].delete()
+                    MapMarkers[node_id][0] = None
                 del MapMarkers[node_id]
         else:
             if lat != -8.0 and lon != -8.0:
@@ -2153,8 +2154,9 @@ if __name__ == "__main__":
             # Batch delete nodes
             for node_id in nodes_to_delete:
                 MapMarkerDelete(node_id)
-                MapMarkers[node_id][0].delete()
-                MapMarkers[node_id][0] = None
+                if MapMarkers[node_id][0] is not None:
+                    MapMarkers[node_id][0].delete()
+                    MapMarkers[node_id][0] = None
                 del MapMarkers[node_id]
                 redrawnaibors(node_id)
 
@@ -2542,8 +2544,9 @@ if __name__ == "__main__":
                 global AprsMarkers
                 markers_to_delete = [nodeid for nodeid, marker in AprsMarkers.items() if tnow - marker[1] > map_delete]
                 for nodeid in markers_to_delete:
-                    AprsMarkers[nodeid][0].delete()
-                    AprsMarkers[nodeid][0] = None
+                    if AprsMarkers[nodeid][0] is not None:
+                        AprsMarkers[nodeid][0].delete()
+                        AprsMarkers[nodeid][0] = None
                     del AprsMarkers[nodeid]
 
         # Delete or check old heard nodes
@@ -2677,6 +2680,11 @@ if __name__ == "__main__":
                 except Exception as e:
                     logging.error(f"Error sending Ping: {e}")
                     print(f"Error sending Ping: {e}")
+                    # Call connection lost handler when heartbeat fails
+                    try:
+                        on_lost_meshtastic_connection(root.meshtastic_interface)
+                    except Exception as reconnect_error:
+                        logging.error(f"Error handling lost connection: {reconnect_error}")
 
         root.after(1000, update_active_nodes)
 
