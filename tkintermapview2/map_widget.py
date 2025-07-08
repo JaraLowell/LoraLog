@@ -106,9 +106,9 @@ class TkinterMapView(tkinter.Frame):
         self.btoggle_oldnodes = CanvasButton(self, (20, 240), text="☠", command=self.toggle_oldnodes)
 
         # Radio buttons for oldnodes filter (initially hidden)
-        self.bradio_7days = CanvasButton(self, (70, 240), text="7d", command=lambda: self.set_oldnodes_filter("7days"), width=30, height=20)
-        self.bradio_1month = CanvasButton(self, (105, 240), text="1m", command=lambda: self.set_oldnodes_filter("1month"), width=30, height=20)
-        self.bradio_all = CanvasButton(self, (140, 240), text="All", command=lambda: self.set_oldnodes_filter("all"), width=30, height=20)
+        self.bradio_7days = CanvasButton(self, (20, 275), text="7d", command=lambda: self.set_oldnodes_filter("7days"), width=30, height=20)
+        self.bradio_1month = CanvasButton(self, (20, 297), text="1m", command=lambda: self.set_oldnodes_filter("1month"), width=30, height=20)
+        self.bradio_all = CanvasButton(self, (20, 319), text="All", command=lambda: self.set_oldnodes_filter("all"), width=30, height=20)
         
         # Initially hide the radio buttons
         self.update_oldnodes_radio_buttons()
@@ -1137,17 +1137,17 @@ class TkinterMapView(tkinter.Frame):
             
             # Update button states based on current selection
             if self.oldnodes_filter == "7days":
-                self.bradio_7days.config(fg="white", bg="#404040")
+                self.bradio_7days.config(fg="white", bg="#00c27e")
                 self.bradio_1month.config(fg="gray", bg="#2D2D2D")
                 self.bradio_all.config(fg="gray", bg="#2D2D2D")
             elif self.oldnodes_filter == "1month":
                 self.bradio_7days.config(fg="gray", bg="#2D2D2D")
-                self.bradio_1month.config(fg="white", bg="#404040")
+                self.bradio_1month.config(fg="white", bg="#00c27e")
                 self.bradio_all.config(fg="gray", bg="#2D2D2D")
             else:  # "all"
                 self.bradio_7days.config(fg="gray", bg="#2D2D2D")
                 self.bradio_1month.config(fg="gray", bg="#2D2D2D")
-                self.bradio_all.config(fg="white", bg="#404040")
+                self.bradio_all.config(fg="white", bg="#00c27e")
         else:
             # Hide radio buttons
             self.bradio_7days.hide()

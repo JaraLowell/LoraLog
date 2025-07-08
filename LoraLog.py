@@ -1925,12 +1925,25 @@ if __name__ == "__main__":
 
     def update_position_and_height(nodeid, lat = -8.0, lon = -8.0, alt = 0.0):
         # Under construction !
+
+        nodelat = round(float(lat),7)
+        nodelon = round(float(lon),7)
+
         if lat != -8.0 and lon != -8.0:
-            global dbconnection
+            global dbconnection, MapMarkers
             dbcursor = dbconnection.cursor()
-            dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ? WHERE hex_id = ?", (lat, lon, alt, nodeid))
+            dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ? WHERE hex_id = ?", (nodelat, nodelon, int(alt), nodeid))
+            # Need add update pos to mapview
             dbconnection.commit()
             dbcursor.close()
+
+            if nodeid in MapMarkers:
+                if MapMarkers[nodeid][0] != None:
+                    MapMarkers[nodeid][0].set_position(nodelat, nodelon)
+                    # MapMarkers[fromraw][0].set_text(fromname)
+                if MapMarkers[nodeid][6] != None:
+                    MapMarkers[nodeid][6].set_position(nodelat, nodelon)
+
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] ", "#d1d1d1")
             insert_colored_text(text_box2, f"Updating !{nodeid} position : {lat}/{lon}, {alt}m\n", "#2bd5ff")
 
