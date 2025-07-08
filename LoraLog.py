@@ -621,11 +621,11 @@ def logheard(sourseIDx, nodeIDx, dbdata, nodesname):
         if heard_entry[2] is None:
             listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position() ]
             # dbdata contains the signal strength as float, so can later on add it to path
-            signal_strength_text = f"{dbdata:.0f}dB"
+            signal_strength_text = f"{dbdata:.2f}"
             heard_entry[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text)
         elif heard_entry[2] is not None:
             # Update existing path with new signal strength
-            signal_strength_text = f"{dbdata:.0f}dB"
+            signal_strength_text = f"{dbdata:.2f}"
             heard_entry[2].set_signal_strength(signal_strength_text)
 
 # We moved need re draw 
@@ -640,7 +640,7 @@ def redrawnaibors(sourceIDx):
             if sourseID in MapMarkers and nodeID in MapMarkers:
                 listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position()]
                 # value[1] contains the signal strength (dbdata)
-                signal_strength_text = f"{value[1]:.0f}dB"
+                signal_strength_text = f"{value[1]:.2f}"
                 value[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text)
 
 def deloldheard(deltime):
@@ -3080,7 +3080,7 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v" + myversion + " (Jan 2025) By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v" + myversion + " (July 2025) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.insert("end", "─" * 60 + "\n", '#414141')
     text_box1.tag_configure('#414141', foreground='#414141')

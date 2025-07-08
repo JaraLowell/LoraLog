@@ -341,7 +341,7 @@ class CanvasPositionMarker:
                                                                                     anchor=tkinter.S,
                                                                                     text=temp_text,
                                                                                     fill=temp_color,
-                                                                                    font=self.font,
+                                                                                    font=(self.font[0], int(self.font[1]) - 2),
                                                                                     tag=("marker", "marker_temperature"))
                     else:
                         self.map_widget.canvas.coords(self.canvas_temperature, canvas_pos_x, temp_y_pos)
@@ -363,7 +363,7 @@ class CanvasPositionMarker:
                                                                                 anchor=tkinter.N,
                                                                                 text=battery_text,
                                                                                 fill=battery_color,
-                                                                                font=self.font,
+                                                                                font=(self.font[0], int(self.font[1]) - 2),
                                                                                 tag=("marker", "marker_battery"))
                     else:
                         self.map_widget.canvas.coords(self.canvas_battery, canvas_pos_x, battery_y_pos)

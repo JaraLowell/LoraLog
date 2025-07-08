@@ -292,9 +292,7 @@ class CanvasPath:
             # Create background rectangle
             self.canvas_text_bg = self.map_widget.canvas.create_rectangle(
                 x1, y1, x2, y2,
-                fill="#464646",
-                outline="#464646",
-                width=1,
+                fill="#323232",
                 tags="signal_text_bg"
             )
             
