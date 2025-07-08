@@ -3253,7 +3253,7 @@ if __name__ == "__main__":
             data[2] = unescape(entry[4])
             data[3] = "%.6f" % entry[9] if entry[9] != -8.0 else 'N/A'
             data[4] = "%.6f" % entry[10] if entry[10] != -8.0 else 'N/A'
-            data[5] = "%.0f" % entry[11]
+            data[5] = "%.0f" % entry[11] if entry[11] != None else 'N/A'
             data[6] = entry[2]
             data[7] = entry[6]
             data[8] = datetime.fromtimestamp(int(entry[13])).strftime('%d %b %y')

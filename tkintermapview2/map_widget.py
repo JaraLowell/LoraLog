@@ -51,6 +51,7 @@ class TkinterMapView(tkinter.Frame):
         self.draw_range = False
         self.draw_heard = True
         self.draw_oldnodes = False
+        self.oldnodes_filter = "7days"  # Options: "7days", "1month", "all"
 
         # detect color of master widget for rounded corners
         if bg_color is None:
@@ -103,6 +104,14 @@ class TkinterMapView(tkinter.Frame):
         self.btoggle_heard  = CanvasButton(self, (20, 160), text="⇢", command=self.toggle_heard, fg="#00c27e")
         self.btoggle_range  = CanvasButton(self, (20, 200), text="⚆", command=self.toggle_range)
         self.btoggle_oldnodes = CanvasButton(self, (20, 240), text="☠", command=self.toggle_oldnodes)
+
+        # Radio buttons for oldnodes filter (initially hidden)
+        self.bradio_7days = CanvasButton(self, (70, 240), text="7d", command=lambda: self.set_oldnodes_filter("7days"), width=30, height=20)
+        self.bradio_1month = CanvasButton(self, (105, 240), text="1m", command=lambda: self.set_oldnodes_filter("1month"), width=30, height=20)
+        self.bradio_all = CanvasButton(self, (140, 240), text="All", command=lambda: self.set_oldnodes_filter("all"), width=30, height=20)
+        
+        # Initially hide the radio buttons
+        self.update_oldnodes_radio_buttons()
 
         # bind events for mouse button pressed, mouse movement, and scrolling
         self.canvas.bind("<B1-Motion>", self.mouse_move)
@@ -464,7 +473,7 @@ class TkinterMapView(tkinter.Frame):
                 del self.tile_image_cache[key]
 
     def pre_cache(self):
-        """ single threaded pre-chache tile images in area of self.pre_cache_position """
+        """ single threaded pre-chace tile images in area of self.pre_cache_position """
 
         last_pre_cache_position = None
         radius = 1
@@ -1104,4 +1113,43 @@ class TkinterMapView(tkinter.Frame):
             self.btoggle_oldnodes.config(fg="white")
         else:
             self.btoggle_oldnodes.config(fg="gray")
+        self.update_oldnodes_radio_buttons()
         self.draw_move()
+
+    def get_oldnodes_filter(self):
+        """Get the current oldnodes filter setting"""
+        return self.oldnodes_filter
+
+    def set_oldnodes_filter(self, filter_type):
+        """Set the oldnodes filter type and update radio button states"""
+
+        self.oldnodes_filter = filter_type
+        self.update_oldnodes_radio_buttons()
+        self.draw_move()
+
+    def update_oldnodes_radio_buttons(self):
+        """Update the visibility and state of oldnodes radio buttons"""
+        if self.draw_oldnodes:
+            # Show radio buttons
+            self.bradio_7days.show()
+            self.bradio_1month.show()
+            self.bradio_all.show()
+            
+            # Update button states based on current selection
+            if self.oldnodes_filter == "7days":
+                self.bradio_7days.config(fg="white", bg="#404040")
+                self.bradio_1month.config(fg="gray", bg="#2D2D2D")
+                self.bradio_all.config(fg="gray", bg="#2D2D2D")
+            elif self.oldnodes_filter == "1month":
+                self.bradio_7days.config(fg="gray", bg="#2D2D2D")
+                self.bradio_1month.config(fg="white", bg="#404040")
+                self.bradio_all.config(fg="gray", bg="#2D2D2D")
+            else:  # "all"
+                self.bradio_7days.config(fg="gray", bg="#2D2D2D")
+                self.bradio_1month.config(fg="gray", bg="#2D2D2D")
+                self.bradio_all.config(fg="white", bg="#404040")
+        else:
+            # Hide radio buttons
+            self.bradio_7days.hide()
+            self.bradio_1month.hide()
+            self.bradio_all.hide()

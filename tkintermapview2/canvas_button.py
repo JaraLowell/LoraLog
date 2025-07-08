@@ -8,24 +8,26 @@ if TYPE_CHECKING:
 
 
 class CanvasButton:
-    def __init__(self, map_widget: "TkinterMapView", canvas_position, text="", command=None, fg="grey"):
+    def __init__(self, map_widget: "TkinterMapView", canvas_position, text="", command=None, fg="grey", width=None, height=None, bg="gray20"):
         self.map_widget = map_widget
         self.canvas_position = canvas_position
 
         if sys.platform == "darwin":
-            self.width = 16
-            self.height = 16
+            self.width = width or 16
+            self.height = height or 16
             self.border_width = 16
         else:
-            self.width = 29
-            self.height = 29
+            self.width = width or 29
+            self.height = height or 29
             self.border_width = 1
 
         self.text = text
         self.command = command
         self.fg = fg
+        self.bg = bg
         self.canvas_rect = None
         self.canvas_text = None
+        self.is_visible = True
 
         self.draw()
 
@@ -34,6 +36,24 @@ class CanvasButton:
             setattr(self, key, value)
             if key == "fg" and self.canvas_text is not None:
                 self.map_widget.canvas.itemconfig(self.canvas_text, fill=value)
+            elif key == "bg" and self.canvas_rect is not None:
+                self.map_widget.canvas.itemconfig(self.canvas_rect, fill=value)
+
+    def show(self):
+        """Show the button"""
+        if self.canvas_rect is not None:
+            self.map_widget.canvas.itemconfig(self.canvas_rect, state="normal")
+        if self.canvas_text is not None:
+            self.map_widget.canvas.itemconfig(self.canvas_text, state="normal")
+        self.is_visible = True
+
+    def hide(self):
+        """Hide the button"""
+        if self.canvas_rect is not None:
+            self.map_widget.canvas.itemconfig(self.canvas_rect, state="hidden")
+        if self.canvas_text is not None:
+            self.map_widget.canvas.itemconfig(self.canvas_text, state="hidden")
+        self.is_visible = False
 
     def click(self, event):
         if self.command is not None:
@@ -53,7 +73,7 @@ class CanvasButton:
 
     def hover_off(self, event):
         if self.canvas_rect is not None:
-            self.map_widget.canvas.itemconfig(self.canvas_rect, fill="gray20", outline="gray10")
+            self.map_widget.canvas.itemconfig(self.canvas_rect, fill=self.bg, outline="gray10")
             self.map_widget.canvas.itemconfig(self.canvas_text, fill=self.fg)
         
         self.map_widget.canvas.config(cursor="arrow")
@@ -65,7 +85,7 @@ class CanvasButton:
                                                                  self.canvas_position[1] + self.height,
                                                                  self.canvas_position[0], self.canvas_position[1] + self.height,
                                                                  width=self.border_width,
-                                                                 fill="gray20", outline="gray10",
+                                                                 fill=self.bg, outline="gray10",
                                                                  tag="button")
 
         self.canvas_text = self.map_widget.canvas.create_text(math.floor(self.canvas_position[0] + self.width / 2),
@@ -73,7 +93,7 @@ class CanvasButton:
                                                               anchor=tkinter.CENTER,
                                                               text=self.text,
                                                               fill=self.fg,
-                                                              font="Tahoma 16",
+                                                              font="Tahoma 12" if self.width < 35 else "Tahoma 16",
                                                               tag="button")
 
         self.map_widget.canvas.tag_bind(self.canvas_rect, "<Button-1>", self.click)

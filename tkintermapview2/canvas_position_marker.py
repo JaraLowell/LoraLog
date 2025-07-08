@@ -187,9 +187,9 @@ class CanvasPositionMarker:
         return self.battery_percentage
 
     def get_battery_color(self, percentage: int) -> str:
-        if percentage <= 20:
+        if percentage <= 40:
             return "#de6933"  # Red for low battery
-        elif percentage <= 50:
+        elif percentage <= 60:
             return "#c9a500"  # Orange for medium battery
         else:
             return "#00c983"  # Green for good battery
