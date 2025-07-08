@@ -89,7 +89,7 @@ class TkinterMapView(tkinter.Frame):
 
         self.canvas = tkinter.Canvas(master=self,
                                      highlightthicknes=0,
-                                     bg="#F1EFEA",
+                                     bg="#1D1D1D",
                                      width=self.width,
                                      height=self.height)
         self.canvas.grid(row=0, column=0, sticky="nsew")
@@ -432,6 +432,8 @@ class TkinterMapView(tkinter.Frame):
     def manage_z_order(self):
         self.canvas.lift("polygon")
         self.canvas.lift("path")
+        self.canvas.lift("signal_text_bg")  # Text background above path lines
+        self.canvas.lift("signal_text")     # Text above text background
         self.canvas.lift("signal")
         self.canvas.lift("marker")
         self.canvas.lift("marker_image")

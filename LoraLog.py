@@ -621,11 +621,11 @@ def logheard(sourseIDx, nodeIDx, dbdata, nodesname):
         if heard_entry[2] is None:
             listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position() ]
             # dbdata contains the signal strength as float, so can later on add it to path
-            signal_strength_text = f"{dbdata:.1f}dB"
+            signal_strength_text = f"{dbdata:.0f}dB"
             heard_entry[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text)
         elif heard_entry[2] is not None:
             # Update existing path with new signal strength
-            signal_strength_text = f"{dbdata:.1f}dB"
+            signal_strength_text = f"{dbdata:.0f}dB"
             heard_entry[2].set_signal_strength(signal_strength_text)
 
 # We moved need re draw 
@@ -640,7 +640,7 @@ def redrawnaibors(sourceIDx):
             if sourseID in MapMarkers and nodeID in MapMarkers:
                 listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position()]
                 # value[1] contains the signal strength (dbdata)
-                signal_strength_text = f"{value[1]:.1f}dB"
+                signal_strength_text = f"{value[1]:.0f}dB"
                 value[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text)
 
 def deloldheard(deltime):
