@@ -333,7 +333,7 @@ class CanvasPositionMarker:
                 # draw temperature under the marker if set
                 if self.temperature is not None:
                     temp_text = f"{self.temperature}{self.temperature_unit}"
-                    temp_y_pos = canvas_pos_y + self.text_y_offset - 18
+                    temp_y_pos = canvas_pos_y + self.text_y_offset - 16
                     temp_color = self.get_temperature_color(self.temperature)
                     
                     if self.canvas_temperature is None:
@@ -341,7 +341,7 @@ class CanvasPositionMarker:
                                                                                     anchor=tkinter.S,
                                                                                     text=temp_text,
                                                                                     fill=temp_color,
-                                                                                    font=(self.font[0], int(self.font[1]) - 2),
+                                                                                    font=("Arial", int(8), "bold"),
                                                                                     tag=("marker", "marker_temperature"))
                     else:
                         self.map_widget.canvas.coords(self.canvas_temperature, canvas_pos_x, temp_y_pos)
@@ -363,7 +363,7 @@ class CanvasPositionMarker:
                                                                                 anchor=tkinter.N,
                                                                                 text=battery_text,
                                                                                 fill=battery_color,
-                                                                                font=(self.font[0], int(self.font[1]) - 2),
+                                                                                font=(self.font[0], int(self.font[1]) -2),
                                                                                 tag=("marker", "marker_battery"))
                     else:
                         self.map_widget.canvas.coords(self.canvas_battery, canvas_pos_x, battery_y_pos)
