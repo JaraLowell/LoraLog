@@ -2130,6 +2130,17 @@ if __name__ == "__main__":
         start = time.perf_counter()
         tnow = int(time.time())
 
+        drawoldnodes = mapview.draw_oldnodes
+        # the value for map_oldnode is 10080 * 60 seconds = 7 days
+        # we need check oldnodes_filter in mapview ?
+        if mapview.oldnodes_filter == "all":
+            map_oldnode =  31536000  # 1 year
+        elif mapview.oldnodes_filter == "30 days":
+            map_oldnode = 2592000  # 30 days
+        else:
+            map_oldnode = 604800 # 7 days
+            # map_oldnode = int(config.get('meshtastic', 'map_oldnode_time')) * 60 # or use the config value
+
         if ok2Send != 0:
             ok2Send -= 1
             if ok2Send < 0: ok2Send = 0
@@ -2175,7 +2186,6 @@ if __name__ == "__main__":
             else:
                 result = TemmpDB
 
-            drawoldnodes = mapview.draw_oldnodes
             nodes_to_delete = []
             nodes_to_update = []
             yeet = map_delete
