@@ -713,6 +713,11 @@ def on_meshtastic_message2(packet):
         dbcursor = dbconnection.cursor()
         if text_from != '':
             result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
+            if result is None:
+                # Maybe we have it's Hex ID ?
+                result = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (text_from,)).fetchone()
+                print("Fallback, no result from node ID trying Hex ID: ", result)
+                dbcursor.execute("UPDATE node_info SET node_id = ? WHERE hex_id = ?", (packet["from"], text_from)) # Lets update the node_id to the correct one
 
             if result:
                 if "decoded" in packet and ("CHAT_APP" in packet["decoded"] or "CHAT" in packet["decoded"]):
@@ -756,12 +761,12 @@ def on_meshtastic_message2(packet):
                             MapMarkers[fromraw][1] = False
                             MapMarkers[fromraw][0].change_icon(2)
                     elif result[9] != -8.0 and result[10] != -8.0 and isorange == True:
-                        MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None, None]
-                        MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=fromname, icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                        marker = mapview.set_marker(result[9], result[10], text=fromname, icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                        MapMarkers[fromraw] = [marker, True, tnow, None, None, 0, None, None]
                         MapMarkers[fromraw][0].text_color = '#2bd5ff'
                     elif result[9] != -8.0 and result[10] != -8.0 and isorange == False:
-                        MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None, None]
-                        MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=fromname, icon_index=2, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                        marker = mapview.set_marker(result[9], result[10], text=fromname, icon_index=2, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                        MapMarkers[fromraw] = [marker, False, tnow, None, None, 0, None, None]
                         MapMarkers[fromraw][0].text_color = '#2bd5ff'
 
                 # Lets Work the Msgs
@@ -793,26 +798,43 @@ def on_meshtastic_message2(packet):
                                     MapMarkers[fromraw][0].set_battery_percentage(device_metrics.get('batteryLevel', 101))
                         power_metrics = telemetry.get('powerMetrics', {})
                         if power_metrics:
-                            print(yaml.dump(power_metrics), end='\n\n')
-                            if "ch1_voltage" in power_metrics:
-                                text_raws += '\n' + (' ' * 11) + 'CH1 Voltage: ' + str(power_metrics.get('ch1_voltage', '0.0')) + 'v'
-                                text_raws += ' CH1 Current: ' + str(power_metrics.get('ch1_current', '0.0')) + 'mA'
-                            if "ch2_voltage" in power_metrics:
-                                text_raws += ' CH2 Voltage: ' + str(power_metrics.get('ch2_voltage', '0.0')) + 'v'
-                                text_raws += ' CH2 Current: ' + str(power_metrics.get('ch2_current', '0.0')) + 'mA'
+                            if "ch1Voltage" in power_metrics:
+                                text_raws += '\n           CH1 Voltage: ' + str(power_metrics.get('ch1Voltage', '0.0')) + 'v at ' + str(power_metrics.get('ch1Current', '0.0')) + 'mA'
+                            if "ch2Voltage" in power_metrics:
+                                text_raws += '\n           CH2 Voltage: ' + str(power_metrics.get('ch2Voltage', '0.0')) + 'v at ' + str(power_metrics.get('ch2Current', '0.0')) + 'mA'
+                            if "ch3Voltage" in power_metrics:
+                                text_raws += '\n           CH3 Voltage: ' + str(power_metrics.get('ch3Voltage', '0.0')) + 'v at ' + str(power_metrics.get('ch3Current', '0.0')) + 'mA'
                         environment_metrics = telemetry.get('environmentMetrics', {})
                         if environment_metrics:
                             dbcursor.execute("INSERT INTO environment_metrics (node_hex, node_id, temperature, relative_humidity, barometric_pressure) VALUES (?, ?, ?, ?, ?)", (fromraw, packet["from"], environment_metrics.get('temperature', 0.0), environment_metrics.get('relativeHumidity', 0.0), environment_metrics.get('barometricPressure', 0.0)))
                             # , environment_metrics.get('gasResistance', 0.00) ? no clue yet how metrics reports this
                             # , environment_metrics.get('iaq', 0) ? no clue yet how metrics reports this
                             # But we have in DB for now so all we need do if we do get these is add it to the insert
-                            text_raws += '\n' + (' ' * 11) + 'Temperature: ' + str(round(environment_metrics.get('temperature', 0.0),1)) + '°C'
-                            text_raws += ' Humidity: ' + str(round(environment_metrics.get('relativeHumidity', 0.0),1)) + '%'
-                            text_raws += ' Pressure: ' + str(round(environment_metrics.get('barometricPressure', 0.00),2)) + 'hPa'
+                            text_raws2 = ""
+                            if "temperature" in environment_metrics:
+                                text_raws2 += ' Temperature: ' + str(round(environment_metrics.get('temperature', 0.0),1)) + '°C'
+                                if fromraw in MapMarkers:
+                                    if MapMarkers[fromraw][0] is not None:
+                                        MapMarkers[fromraw][0].set_temperature(round(environment_metrics.get('temperature', 0.0),1))
+                            if "relativeHumidity" in environment_metrics:
+                                text_raws2 += ' Humidity: ' + str(round(environment_metrics.get('relativeHumidity', 0.0),1)) + '%'
+                            if "barometricPressure" in environment_metrics:
+                                text_raws2 += ' Pressure: ' + str(round(environment_metrics.get('barometricPressure', 0.00),2)) + 'hPa'
+                            if "gas_resistance" in environment_metrics:
+                                text_raws2 += ' Gas Res: ' + str(round(environment_metrics.get('gasResistance', 0.00),2)) + 'Ω'
+                            if "iaq" in environment_metrics:
+                                text_raws2 += ' Air Quality: ' + str(environment_metrics.get('iaq', 0)) + "μg/m³"
+                            if "wind_direction" in environment_metrics:
+                                text_raws2 += ' Wind Dir: ' + str(round(environment_metrics.get('wind_direction', 0.0),1)) + '°'
+                            if "wind_speed" in environment_metrics:
+                                text_raws2 += ' Wind Speed: ' + str(round(environment_metrics.get('wind_speed', 0.0),1)) + 'm/s'
+                            if "wind_gust" in environment_metrics:
+                                text_raws2 += ' Wind Gust: ' + str(round(environment_metrics.get('wind_gust', 0.0),1)) + 'm/s'
+                            if "lux" in environment_metrics:
+                                text_raws2 += ' Lux: ' + str(round(environment_metrics.get('lux', 0.0),1)) + 'lx'
 
-                            if fromraw in MapMarkers:
-                                if MapMarkers[fromraw][0] is not None:
-                                    MapMarkers[fromraw][0].set_temperature(round(environment_metrics.get('temperature', 0.0),1))
+                            if text_raws2 != "":
+                                text_raws += '\n' + (' ' * 10) + text_raws2
 
                         localstats_metrics = telemetry.get('localStats', {})
                         if localstats_metrics:
@@ -968,19 +990,23 @@ def on_meshtastic_message2(packet):
                         nbhobs = hopStart + 1
                         for neighbor in text:
                             nodeid = idToHex(neighbor["nodeId"])[1:]
-                            tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ? AND latitude != -8 AND longitude != -8", (nodeid,)).fetchone()
+                            tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (nodeid,)).fetchone()
                             nbNide = '!' + nodeid
                             if tmp is not None:
                                 nbNide = str(tmp[5].encode('ascii', 'xmlcharrefreplace'), 'ascii') # unescape(tmp[5])
                                 if nodeid not in MapMarkers: # and nodeid != MyLora:
-                                    MapMarkers[nodeid] = [None, True, tnow, None, None, 0, None, None]
-                                    MapMarkers[nodeid][0] = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=nodeid, command = click_command)
-                                    dbcursor.execute("UPDATE node_info SET timerec = ?, hopstart = ?, ismqtt = ? WHERE hex_id = ?", (tnow, nbhobs, viaMqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
-                                else:
-                                    dbcursor.execute("UPDATE node_info SET timerec = ? WHERE hex_id = ?", (tnow, nodeid))
+                                    if tmp[9] != -8.0 and tmp[10] != -8.0:
+                                        marker = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=nodeid, command = click_command)
+                                        MapMarkers[nodeid] = [marker, True, tnow, None, None, 0, None, None]
+                                    # dbcursor.execute("UPDATE node_info SET timerec = ?, hopstart = ?, ismqtt = ? WHERE hex_id = ?", (tnow, nbhobs, viaMqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
+                                # else:
+                                dbcursor.execute("UPDATE node_info SET timerec = ? WHERE hex_id = ?", (tnow, nodeid))
                                 nodeid = tmp[5]
                             else:
-                                nodeid = '!' + nodeid
+                                tmpsn = str(nodeid[-4:])
+                                tmpln = "Meshtastic " + tmpsn
+                                dbcursor.execute("INSERT INTO node_info (timerec, hex_id, long_name, short_name, timefirst, hopstart) VALUES (?, ?, ?, ?, ?, ?)", (tnow, nodeid, tmpln, tmpsn, tnow, hopStart))
+                                nodeid = tmpsn + ' (!' + nodeid + ')'
 
                             text_raws += '\n' + (' ' * 11) + nodeid
                             if "snr" in neighbor:
@@ -1828,6 +1854,7 @@ if __name__ == "__main__":
         global ok2Send, telemetry_thread, position_thread, trace_thread, MyLora_SN, MyLora_LN
         text_from = MyLora_SN + " (" + MyLora_LN + ")"
         if ok2Send == 0:
+            close_overlay()
             ok2Send = 15
             node_id = '!' + str(nodeid)
             if info == 'ReqInfo':
@@ -2554,9 +2581,20 @@ if __name__ == "__main__":
             ).fetchall()
 
             updated = 0
+            updated_nodes = ""
             for node_id, hex_id in missing_nodes:
-                # hex_id in DB is already canonical (no '!', lower, leading zeros as needed)
-                json_node = json_lookup.get(hex_id.lower())
+                json_node = None
+
+                json_node = json_lookup.get(node_id)  # Try direct match with node_id
+                if not json_node:
+                    hex_id_lower = hex_id.lower()
+                    json_node = json_lookup.get(hex_id_lower) # Try match with hex_id
+                
+                    if not json_node and hex_id_lower.startswith('0'):
+                        hex_id_no_zero = hex_id_lower.lstrip('0')
+                        if hex_id_no_zero:
+                            json_node = json_lookup.get(hex_id_no_zero) # Try match with hex_id without leading zeros
+
                 if json_node:
                     lat = json_node.get("latitude")
                     lon = json_node.get("longitude")
@@ -2567,14 +2605,17 @@ if __name__ == "__main__":
                         shortname = str(json_node.get("short_name").encode('ascii', 'xmlcharrefreplace'), 'ascii')
                         if lat_f != 0.0 and lon_f != 0.0:
                             cursor.execute(
-                                "UPDATE node_info SET short_name = ?, long_name = ?, latitude = ?, longitude = ? WHERE node_id = ?",
-                                (shortname, longname, lat_f, lon_f, node_id)
+                                "UPDATE node_info SET node_id = ?, short_name = ?, long_name = ?, latitude = ?, longitude = ? WHERE hex_id = ?",
+                                (node_id, shortname, longname, lat_f, lon_f, hex_id)
                             )
                             updated += 1
+                            updated_nodes += f"           {node_id} ({shortname}) at {lat_f}, {lon_f}\n"
             cursor.close()
             logging.warning(f"Updated {updated} nodes with lat/lon from JSON.")
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] ", "#d1d1d1")
             insert_colored_text(text_box2, f"Updated {updated} nodes with lat/lon from JSON.\n", "#2bd5ff")
+            if updated_nodes:
+                insert_colored_text(text_box2, updated_nodes, "#2bd5ff")
 
     def update_paths_nodes():
         global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion, DBTotal
