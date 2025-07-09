@@ -2624,8 +2624,16 @@ if __name__ == "__main__":
                 if node_id in MapMarkers:
                     node_time = MapMarkers[node_id][2]
                     if MapMarkers[node_id][6] != None and (tnow - node_time) >= 3:
-                        MapMarkers[node_id][6].change_icon(7)
-
+                        # Ensure altitude is always an integer, even if row[21] is "N\A" or None
+                        try:
+                            altitude = int(row[11]) if row[11] is not None and row[11] != "N\\A" else 0
+                        except (ValueError, TypeError):
+                            altitude = 0
+                        
+                        if altitude >= 300:
+                            MapMarkers[node_id][6].change_icon(8)
+                        else:    
+                            MapMarkers[node_id][6].change_icon(7)
                     if MapMarkers[node_id][4] != None and MapMarkers[node_id][5] <= 0:
                         MapMarkers[node_id][4].delete()
                         MapMarkers[node_id][4] = None
