@@ -146,24 +146,21 @@ class CanvasPositionMarker:
         return self.temperature
 
     def get_temperature_color(self, temperature: float) -> str:
-        if temperature <= 0:
-            return "#2bd5ff"  # Light blue for 0 and below
-        elif temperature >= 40:
-            return "#de6933"  # Orange-red for 40 and above
+        # Pastel gradient: Pastel Blue → Coral
+        # Using softer, more pastel colors without white or gray tones
+        # Range: 5°C to 30°C for better visual distinction
+        
+        if temperature <= 5:
+            return "#7bb3ff"  # Pastel blue for 5°C and below
+        elif temperature >= 30:
+            return "#ff7b7b"  # Pastel coral for 30°C and above
         else:
-            # Three-color gradient: #2bd5ff -> #c9a500 -> #de6933
-            # Split the range: 0-20 (blue to yellow), 20-40 (yellow to orange)
+            # Two-color gradient: pastel blue → coral
+            ratio = (temperature - 5) / 25.0  # 25°C range (30 - 5)
             
-            if temperature <= 20:
-                # Interpolate between blue (#2bd5ff) and yellow (#c9a500)
-                ratio = temperature / 20.0
-                start_r, start_g, start_b = 43, 213, 255    # #2bd5ff
-                end_r, end_g, end_b = 201, 165, 0          # #c9a500
-            else:
-                # Interpolate between yellow (#c9a500) and orange (#de6933)
-                ratio = (temperature - 20) / 20.0
-                start_r, start_g, start_b = 201, 165, 0     # #c9a500
-                end_r, end_g, end_b = 222, 105, 51         # #de6933
+            # Pastel blue (#7bb3ff) to coral (#ff7b7b)
+            start_r, start_g, start_b = 123, 179, 255    # #7bb3ff (pastel blue)
+            end_r, end_g, end_b = 255, 123, 123          # #ff7b7b (coral)
             
             # Interpolate between the colors
             red = int(start_r + (end_r - start_r) * ratio)
