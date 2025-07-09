@@ -395,7 +395,7 @@ def connect_meshtastic(force_connect=False):
     if config.get('meshtastic', 'interface') != 'tcp':
         cnto = com_port
     logging.debug("Connecting to meshtastic on " + cnto + "...")
-
+    insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
     insert_colored_text(text_box1, " Connecting to meshtastic on " + cnto + "...\n", "#00c983")
     while not successful and attempts <= retry_limit:
         try:
@@ -408,17 +408,17 @@ def connect_meshtastic(force_connect=False):
         except Exception as e:
             attempts += 1
             if attempts <= retry_limit:
-                insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
-                insert_colored_text(text_box1, " Connect re-try:" + str(e), "#db6544")
+                insert_colored_text(text_box1, (' ' * 11) + "Connect re-try: " + str(e), "#db6544")
                 logging.error("Connect re-try: " + str(e))
                 time.sleep(12)
             else:
+                insert_colored_text(text_box1, (' ' * 11) + "Could not connect: " + str(e), "#db6544")
                 logging.error("Could not connect: " + str(e))
                 isLora = False
                 return None
     nodeInfo = meshtastic_client.getMyNodeInfo()
     logging.error("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
-    insert_colored_text(text_box1, " Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
+    insert_colored_text(text_box1, (' ' * 11) + "Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
     MyLoraID = nodeInfo['num']
     MyLora = (nodeInfo['user']['id'])[1:]
     MyLora_SN = nodeInfo['user']['shortName']
@@ -465,9 +465,7 @@ def connect_meshtastic(force_connect=False):
                 # Need add to tabs for each channel
                 if mylorachan[channel.index] != '' and addtotab:
                     if mylorachan[channel.index] not in text_boxes: # Reconnected ?
-
-                        insert_colored_text(text_box1, " Joined Lora Channel " + str(channel.index) + " " + mylorachan[channel.index] + " using Key " + psk_base64 + "\n", "#00c983")
-
+                        insert_colored_text(text_box1, (' ' * 11) + "Joined Lora Channel " + str(channel.index) + " " + mylorachan[channel.index] + " using Key\n" + (' ' * 12) + psk_base64 + "\n", "#00c983")
                         tab = Frame(tabControl, background="#121212", padx=0, pady=0, borderwidth=0) # ttk.Frame(tabControl, style='TFrame', padding=0, borderwidth=0)
                         tab.grid_rowconfigure(0, weight=1)
                         tab.grid_columnconfigure(0, weight=1)
@@ -2131,15 +2129,7 @@ if __name__ == "__main__":
         tnow = int(time.time())
 
         drawoldnodes = mapview.draw_oldnodes
-        # the value for map_oldnode is 10080 * 60 seconds = 7 days
-        # we need check oldnodes_filter in mapview ?
-        if mapview.oldnodes_filter == "all":
-            map_oldnode =  31536000  # 1 year
-        elif mapview.oldnodes_filter == "30 days":
-            map_oldnode = 2592000  # 30 days
-        else:
-            map_oldnode = 604800 # 7 days
-            # map_oldnode = int(config.get('meshtastic', 'map_oldnode_time')) * 60 # or use the config value
+        map_oldnode = mapview.get_oldnodes_filter()
 
         if ok2Send != 0:
             ok2Send -= 1

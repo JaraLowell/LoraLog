@@ -186,7 +186,7 @@ class TkinterMapView(tkinter.Frame):
         else:
             self.canvas.bind("<Button-3>", self.mouse_right_click)
 
-        self.draw_rounded_corners()
+        # self.draw_rounded_corners()
 
     def destroy(self):
         self.running = False
@@ -224,7 +224,7 @@ class TkinterMapView(tkinter.Frame):
 
             self.set_zoom(self.zoom)  # call zoom to set the position vertices right
             self.draw_move()  # call move to draw new tiles or delete tiles
-            self.draw_rounded_corners()
+            # self.draw_rounded_corners()
 
     def add_right_click_menu_command(self, label: str, command: Callable, pass_coords: bool = False) -> None:
         self.right_click_menu_commands.append({"label": label, "command": command, "pass_coords": pass_coords})
@@ -723,7 +723,7 @@ class TkinterMapView(tkinter.Frame):
         # This function calls itself every 10 ms with tk.after() so that the image updates come
         # from the main GUI thread, because tkinter can only be updated from the main thread.
         if self.running:
-            self.after(10, self.update_canvas_tile_images)
+            self.after(100, self.update_canvas_tile_images)
 
     def insert_row(self, insert: int, y_name_position: int):
 
@@ -969,9 +969,9 @@ class TkinterMapView(tkinter.Frame):
                 # get decimal coords of current mouse position
                 coordinate_mouse_pos = self.convert_canvas_coords_to_decimal_coords(event.x, event.y)
                 self.map_click_callback(coordinate_mouse_pos)
-        else:
-            # mouse was moved, start fading animation
-            self.after(1, self.fading_move)
+        # else:
+        #     # mouse was moved, start fading animation
+        #     self.after(1, self.fading_move)
 
     def fading_move(self):
         delta_t = time.time() - self.last_move_time
@@ -1118,11 +1118,15 @@ class TkinterMapView(tkinter.Frame):
 
     def get_oldnodes_filter(self):
         """Get the current oldnodes filter setting"""
-        return self.oldnodes_filter
+        if self.oldnodes_filter == "7days":
+            return 604800  # 7 days in seconds
+        elif self.oldnodes_filter == "1month":
+            return 2592000  # 1 month in seconds
+        else:
+            return 31536000  # all equals one year in seconds
 
     def set_oldnodes_filter(self, filter_type):
         """Set the oldnodes filter type and update radio button states"""
-
         self.oldnodes_filter = filter_type
         self.update_oldnodes_radio_buttons()
         self.draw_move()
