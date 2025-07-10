@@ -2107,9 +2107,13 @@ if __name__ == "__main__":
     peekmem = 0
     def checknode(node_id, icon, color, lat, lon, nodesn, drawme=True):
         global MapMarkers, mapview
+
+        if node_id not in MapMarkers and (lat == -8.0 or lon == -8.0):
+            return
+
         tmp = False
         if icon == 2: tmp = True
-        
+
         if node_id in MapMarkers:
             tmp = MapMarkers[node_id][1]
             if (drawme == False and icon != 4) or drawme == True:
@@ -2192,7 +2196,6 @@ if __name__ == "__main__":
             cursor = dbconnection.cursor()
             if DBChange == True:
                 result = cursor.execute("SELECT * FROM node_info WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode + 60)).fetchall()
-                cursor.close()
                 if aprsondash:
                     for nodes, data in AprsMarkers.items():
                         if nodes != MyAPRSCall:
@@ -2251,9 +2254,7 @@ if __name__ == "__main__":
                         node_dist = "%.1f" % row[24] + "km"
                     elif row[9] != -8.0 and row[10] != -8.0:
                         node_dist = round(calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon), 2)
-                        cursor = dbconnection.cursor()
                         cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
-                        cursor.close()
                         node_dist = "%.1f" % node_dist + "km"
                     if row[25] == True:
                         insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
@@ -2294,6 +2295,7 @@ if __name__ == "__main__":
                             insert_colored_text(text_box_middle, f"{row[23]} Hops\n".rjust(11), "#c9a500")
                             if node_id not in MapMarkers:
                                 checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+            cursor.close()    
         except Exception as e:
             logging.error(f"Error updating active nodes: {e}")
 
@@ -2316,9 +2318,8 @@ if __name__ == "__main__":
 
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
-        if time1 >= 1000.0:
-            time1 = 999.0
-        root.after(1000 - int(time1), update_paths_nodes)
+
+        root.after(900 - int(time1), update_paths_nodes)
     ### end
 
     # Function to unbind tags for a specific range
