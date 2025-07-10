@@ -1949,15 +1949,16 @@ if __name__ == "__main__":
         close_button.pack(side='left', padx=2)
 
     def update_position_and_height(nodeid, lat = -8.0, lon = -8.0, alt = 0.0):
-        # Under construction !
-
         nodelat = round(float(lat),7)
         nodelon = round(float(lon),7)
 
         if lat != -8.0 and lon != -8.0:
-            global dbconnection, MapMarkers
+            global dbconnection, MapMarkers, MyLora_Lat, MyLora_Lon
+            # Recalc distance to home
+            if nodelat == -8.0 or nodelon == -8.0 and MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
+                node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
             dbcursor = dbconnection.cursor()
-            dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ? WHERE hex_id = ?", (nodelat, nodelon, int(alt), nodeid))
+            dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, distance = ? WHERE hex_id = ?", (nodelat, nodelon, int(alt), node_dist, nodeid))
             # Need add update pos to mapview
             dbconnection.commit()
             dbcursor.close()
@@ -2225,12 +2226,13 @@ if __name__ == "__main__":
 
             # Batch delete nodes
             for node_id in nodes_to_delete:
-                MapMarkerDelete(node_id)
-                if MapMarkers[node_id][0] is not None:
-                    MapMarkers[node_id][0].delete()
-                    MapMarkers[node_id][0] = None
-                del MapMarkers[node_id]
-                redrawnaibors(node_id)
+                if node_id in MapMarkers:
+                    MapMarkerDelete(node_id)
+                    if MapMarkers[node_id][0] is not None:
+                        MapMarkers[node_id][0].delete()
+                        MapMarkers[node_id][0] = None
+                    del MapMarkers[node_id]
+                    redrawnaibors(node_id)
 
             # Batch update nodes
             for node_id, node_time, row in nodes_to_update:
@@ -2242,8 +2244,7 @@ if __name__ == "__main__":
                 if len(node_name) == 1 and is_full_width(node_name):
                     nameadj = 10;
 
-                node_time = row[1]
-                if tnow - row[1] >= map_delete:
+                if tnow - node_time >= map_delete:
                     if node_id in MapMarkers and drawoldnodes == False:
                         MapMarkerDelete(node_id)
                     checknode(node_id, 4, '#aaaaaa', row[9], row[10], node_name, drawoldnodes)
@@ -2252,10 +2253,10 @@ if __name__ == "__main__":
                     node_dist = ' '
                     if row[24] != 0.0:
                         node_dist = "%.1f" % row[24] + "km"
-                    elif row[9] != -8.0 and row[10] != -8.0:
-                        node_dist = round(calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon), 2)
-                        cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
-                        node_dist = "%.1f" % node_dist + "km"
+                    # elif row[9] != -8.0 and row[10] != -8.0:
+                    #     node_dist = round(calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon), 2)
+                    #     cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
+                    #     node_dist = "%.1f" % node_dist + "km"
                     if row[25] == True:
                         insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
                         insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#a1a1ff")
@@ -2308,7 +2309,8 @@ if __name__ == "__main__":
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms')
 
         time1 = Process(os.getpid()).memory_full_info()[-1] / 1024 ** 2 # Process(os.getpid()).memory_info().rss / 1024 ** 2
-        if peekmem < time1: peekmem = time1
+        if peekmem < time1:
+            peekmem = time1
         insert_colored_text(text_box_middle, f"\n Mem     : {time1:.1f}MB\n")
         insert_colored_text(text_box_middle, f" Mem Max : {peekmem:.1f}MB\n\n")
 
@@ -2319,7 +2321,7 @@ if __name__ == "__main__":
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
 
-        root.after(900 - int(time1), update_paths_nodes)
+        root.after(900, update_paths_nodes)
     ### end
 
     # Function to unbind tags for a specific range
