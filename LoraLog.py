@@ -261,6 +261,10 @@ dbcursor.execute(create_tmp)
 create_tmp = """CREATE TABLE IF NOT EXISTS movement_log ("node_hex" text, "node_id" integer, "timerec" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "from_latitude" real DEFAULT -8.0, "from_longitude" real DEFAULT -8.0, "from_altitude" integer DEFAULT 0, "to_latitude" real DEFAULT -8.0, "to_longitude" real DEFAULT -8.0, "to_altitude" integer DEFAULT 0);"""
 dbcursor.execute(create_tmp)
 
+# Add these indexes to improve query performance
+dbcursor.execute("CREATE INDEX IF NOT EXISTS idx_node_info_timerec ON node_info(timerec)")
+dbcursor.execute("CREATE INDEX IF NOT EXISTS idx_node_info_hex_id ON node_info(hex_id)")
+
 try:
     create_tmp = """ALTER TABLE node_info ADD isaprs integer DEFAULT 0"""
     dbcursor.execute(create_tmp)
@@ -2161,7 +2165,10 @@ if __name__ == "__main__":
         tnow = int(time.time())
 
         drawoldnodes = mapview.draw_oldnodes
-        map_oldnode = mapview.get_oldnodes_filter()
+        if drawoldnodes:
+            map_oldnode = mapview.get_oldnodes_filter()
+        else:
+            map_oldnode = 7200
 
         if ok2Send != 0:
             ok2Send -= 1
@@ -2240,6 +2247,9 @@ if __name__ == "__main__":
 
                 # Adjust the name length for full width characters (Emojie)
                 node_name = unescape(row[5]).strip()
+                node_lat = row[9]
+                node_lon = row[10]
+                node_range = row[24]
                 nameadj = 11
                 if len(node_name) == 1 and is_full_width(node_name):
                     nameadj = 10;
@@ -2247,14 +2257,14 @@ if __name__ == "__main__":
                 if tnow - node_time >= map_delete:
                     if node_id in MapMarkers and drawoldnodes == False:
                         MapMarkerDelete(node_id)
-                    checknode(node_id, 4, '#aaaaaa', row[9], row[10], node_name, drawoldnodes)
+                    checknode(node_id, 4, '#aaaaaa', node_lat, node_lon, node_name, drawoldnodes)
                 else:
                     node_wtime = ez_date(tnow - node_time).rjust(10)
                     node_dist = ' '
-                    if row[24] != 0.0:
-                        node_dist = "%.1f" % row[24] + "km"
-                    # elif row[9] != -8.0 and row[10] != -8.0:
-                    #     node_dist = round(calc_gc(row[9], row[10], MyLora_Lat, MyLora_Lon), 2)
+                    if node_range != 0.0:
+                        node_dist = "%.1f" % node_range + "km"
+                    # elif node_lat != -8.0 and node_lon != -8.0:
+                    #     node_dist = round(calc_gc(node_lat, node_lon, MyLora_Lat, MyLora_Lon), 2)
                     #     cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
                     #     node_dist = "%.1f" % node_dist + "km"
                     if row[25] == True:
@@ -2271,7 +2281,7 @@ if __name__ == "__main__":
                             insert_colored_text(text_box_middle, f" {node_dist.ljust(11)}")
                             insert_colored_text(text_box_middle, f"MQTT\n".rjust(11), "#9d6d00")
                         if node_id not in MapMarkers:
-                            checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                            checknode(node_id, 3, '#2bd5ff', node_lat, node_lon, node_name, drawoldnodes)
                     else:
                         insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
                         if row[23] <= 0:
@@ -2291,11 +2301,11 @@ if __name__ == "__main__":
                                 color = "#de6933"  # red
                             insert_colored_text(text_box_middle, f"{node_sig}\n", color)
                             if node_id not in MapMarkers:
-                                checknode(node_id, 2, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                                checknode(node_id, 2, '#2bd5ff', node_lat, node_lon, node_name, drawoldnodes)
                         else:
                             insert_colored_text(text_box_middle, f"{row[23]} Hops\n".rjust(11), "#c9a500")
                             if node_id not in MapMarkers:
-                                checknode(node_id, 3, '#2bd5ff', row[9], row[10], node_name, drawoldnodes)
+                                checknode(node_id, 3, '#2bd5ff', node_lat, node_lon, node_name, drawoldnodes)
             cursor.close()    
         except Exception as e:
             logging.error(f"Error updating active nodes: {e}")
@@ -2650,8 +2660,6 @@ if __name__ == "__main__":
 
         # Let rework mHeard Lines
         with dbconnection:
-            cursor = dbconnection.cursor()
-
             result = TemmpDB # cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
             for row in result:
                 node_id = row[3]
@@ -2726,6 +2734,7 @@ if __name__ == "__main__":
                         logging.debug("Closing open figures failed?")
 
                 # Delete entries older than metrics_age from each table and then Optimize/Vacuum the database
+                cursor = dbconnection.cursor()
                 tables = ['device_metrics', 'environment_metrics', 'chat_log', 'naibor_info']
                 for table in tables:
                     query = f"DELETE FROM {table} WHERE DATETIME(timerec, 'auto') < DATETIME('now', '-{metrics_age} day');"
@@ -2738,7 +2747,8 @@ if __name__ == "__main__":
 
                 # Return total nodes in database
                 cursor.execute("SELECT COUNT(*) FROM node_info")
-                DBTotal = cursor.fetchone()[0]
+                DBTotal = int(cursor.fetchone()[0])
+                cursor.close()
 
                 if 'APRS' in config:
                     if config.get('APRS', 'aprs_plugin') == 'True':
@@ -2773,8 +2783,7 @@ if __name__ == "__main__":
 
                 gc.collect()
 
-            cursor.close()
-
+        # Update the active nodes
         if root.meshtastic_interface is not None:
             pingcount += 1
             if pingcount > 5:
