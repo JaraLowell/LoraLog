@@ -705,6 +705,8 @@ def on_meshtastic_message2(packet):
     elif "viaMqtt" not in packet and fromraw != MyLora:
         # Apparently chat for some odd  reason does not have viaMqtt, but return no snr either
         viaMqtt = True
+        if fromraw in MapMarkers:
+            viaMqtt = MapMarkers[fromraw][1] # Last known value
         # print(yaml.dump(packet), end='\n\n')
 
     hopStart = -1
@@ -756,6 +758,7 @@ def on_meshtastic_message2(packet):
                 isorange = False
                 if viaMqtt or hopStart > 0:
                     isorange = True
+
                 if fromraw != MyLora:
                     if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
                         if MapMarkers[fromraw][1] == False and isorange == True:
@@ -993,30 +996,30 @@ def on_meshtastic_message2(packet):
                         text = data["neighborinfo"]["neighbors"]
                         nbhobs = hopStart + 1
                         for neighbor in text:
-                            nodeid = idToHex(neighbor["nodeId"])[1:]
-                            tmp = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (nodeid,)).fetchone()
-                            nbNide = '!' + nodeid
+                            nbnodeid = neighbor["nodeId"]
+                            nodehex = idToHex(nbnodeid)[1:]
+                            tmp = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (nbnodeid,)).fetchone()
+                            nbNide = '!' + nodehex
                             if tmp is not None:
                                 nbNide = str(tmp[5].encode('ascii', 'xmlcharrefreplace'), 'ascii') # unescape(tmp[5])
-                                if nodeid not in MapMarkers: # and nodeid != MyLora:
+                                if nodehex not in MapMarkers: # and nodeid != MyLora:
                                     if tmp[9] != -8.0 and tmp[10] != -8.0:
-                                        marker = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=nodeid, command = click_command)
-                                        MapMarkers[nodeid] = [marker, True, tnow, None, None, 0, None, None]
+                                        marker = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=nodehex, command = click_command)
+                                        MapMarkers[nodehex] = [marker, True, tnow, None, None, 0, None, None]
                                     # dbcursor.execute("UPDATE node_info SET timerec = ?, hopstart = ?, ismqtt = ? WHERE hex_id = ?", (tnow, nbhobs, viaMqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
                                 # else:
-                                dbcursor.execute("UPDATE node_info SET timerec = ? WHERE hex_id = ?", (tnow, nodeid))
-                                nodeid = tmp[5]
+                                dbcursor.execute("UPDATE node_info SET timerec = ? WHERE node_id = ?", (tnow, nbnodeid))
                             else:
-                                tmpsn = str(nodeid[-4:])
+                                tmpsn = str(nodehex[-4:])
                                 tmpln = "Meshtastic " + tmpsn
-                                dbcursor.execute("INSERT INTO node_info (timerec, hex_id, long_name, short_name, timefirst, hopstart) VALUES (?, ?, ?, ?, ?, ?)", (tnow, nodeid, tmpln, tmpsn, tnow, hopStart))
-                                nodeid = tmpsn + ' (!' + nodeid + ')'
+                                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, long_name, short_name, timefirst, hopstart) VALUES (?, ?, ?, ?, ?, ?)", (nbnodeid, tnow, nodehex, tmpln, tmpsn, tnow, hopStart))
+                                nbNide = tmpsn + ' (!' + nodehex + ')'
 
-                            text_raws += '\n' + (' ' * 11) + nodeid
+                            text_raws += '\n' + (' ' * 11) + nbNide
                             if "snr" in neighbor:
                                 text_raws += ' (' + str(neighbor["snr"]) + 'dB)'
 
-                            logheard(packet["from"], neighbor["nodeId"], neighbor.get('snr', 0.00), nbNide)
+                            logheard(packet["from"], nbnodeid, neighbor.get('snr', 0.00), nbNide)
                     else:
                         text_raws += ' No Data'
                 elif data["portnum"] == "RANGE_TEST_APP":
@@ -1240,14 +1243,15 @@ def updatesnodes():
         cursor.close()
 
 #-------------------------------------------------------------- Side Functions ---------------------------------------------------------------------------
-
+units = [(31536000, "year"), (2419200, "month"), (604800, "week"), (86400, "day"), (3600, "hour"), (60, "minute")]
 def ez_date(d):
-    units = [(31536000, "year"), (2419200, "month"), (604800, "week"), (86400, "day"), (3600, "hour"), (60, "minute")]
+    # Early return for very small values
+    if d < 60: return "Just now"
+    # units = [(31536000, "year"), (2419200, "month"), (604800, "week"), (86400, "day"), (3600, "hour"), (60, "minute")]
     for unit_seconds, unit_name in units:
         if d >= unit_seconds:
             temp = int(d / unit_seconds)
             return f"{temp} {unit_name}{'s' if temp > 1 else ''}"
-    return "Just now"
 
 def uptimmehuman(uptime, lastseentime):
     tnow = int(time.time())
@@ -2618,11 +2622,11 @@ if __name__ == "__main__":
                         shortname = str(json_node.get("short_name").encode('ascii', 'xmlcharrefreplace'), 'ascii')
                         if lat_f != 0.0 and lon_f != 0.0:
                             cursor.execute(
-                                "UPDATE node_info SET node_id = ?, short_name = ?, long_name = ?, latitude = ?, longitude = ? WHERE hex_id = ?",
-                                (node_id, shortname, longname, lat_f, lon_f, hex_id)
+                                "UPDATE node_info SET short_name = ?, long_name = ?, latitude = ?, longitude = ? WHERE hex_id = ?",
+                                (shortname, longname, lat_f, lon_f, hex_id)
                             )
                             updated += 1
-                            updated_nodes += f"           {node_id} ({shortname}) at {lat_f}, {lon_f}\n"
+                            updated_nodes += f"           !{hex_id} ({shortname}) at {lat_f}, {lon_f}\n"
             cursor.close()
             logging.warning(f"Updated {updated} nodes with lat/lon from JSON.")
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] ", "#d1d1d1")
@@ -2668,14 +2672,15 @@ if __name__ == "__main__":
                     if MapMarkers[node_id][6] != None and (tnow - node_time) >= 3:
                         # Ensure altitude is always an integer, even if row[21] is "N\A" or None
                         try:
-                            altitude = int(row[11]) if row[11] is not None and row[11] != "N\\A" else 0
+                            altitude = int(row[11])
                         except (ValueError, TypeError):
                             altitude = 0
-                        
+
                         if altitude >= 300:
                             MapMarkers[node_id][6].change_icon(8)
                         else:    
                             MapMarkers[node_id][6].change_icon(7)
+
                     if MapMarkers[node_id][4] != None and MapMarkers[node_id][5] <= 0:
                         MapMarkers[node_id][4].delete()
                         MapMarkers[node_id][4] = None
