@@ -2669,7 +2669,7 @@ if __name__ == "__main__":
                 node_id = row[3]
                 if node_id in MapMarkers:
                     node_time = MapMarkers[node_id][2]
-                    if MapMarkers[node_id][6] != None and (tnow - node_time) >= 3:
+                    if MapMarkers[node_id][6] != None and ((tnow - node_time) >= 3 or node_time <= 0):
                         # Ensure altitude is always an integer, even if row[21] is "N\A" or None
                         try:
                             altitude = int(row[11])
