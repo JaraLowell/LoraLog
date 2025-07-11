@@ -3099,12 +3099,32 @@ if __name__ == "__main__":
     root.tk_setPalette(background="#242424", foreground="#d9d9d9")
 
     if config.has_option('meshtastic', 'font'):
-        ThisFont = (config.get('meshtastic', 'font'), int(10))
-        logging.warning(f"Using font: {ThisFont}")
+        font_family = config.get('meshtastic', 'font')
+        font_size = config.getint('meshtastic', 'fontsize', fallback=10)
+        ThisFont = (font_family, font_size)
+    else:
+        # Default to a TrueType font for better anti-aliasing
+        ThisFont = ('Fixedsys', 10)
+    logging.warning(f"Using font: {ThisFont}")
 
     # load the window size and position, then if somting is stored use that, else use the screen size
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
+    target_ratio = 1.77777777778
+    actual_width = root.winfo_screenwidth()
+    actual_height = root.winfo_screenheight()
+    desired_width = int(actual_width * 0.6)
+    desired_height = int(actual_height * 0.6)
+    current_ratio = desired_width / desired_height
+    if current_ratio > target_ratio:
+        # Too wide, reduce width
+        screen_width = int(desired_height * target_ratio)
+        screen_height = desired_height
+    else:
+        # Too tall, reduce height
+        screen_width = desired_width
+        screen_height = int(desired_width / target_ratio)
+    screen_width = max(screen_width, 1280)  # Minimum width
+    screen_height = max(screen_height, 720)  # Minimum height (maintains 16:9)
+
     overlay = None
     if os.path.exists('LoraLog.ini'):
         try:
@@ -3113,22 +3133,9 @@ if __name__ == "__main__":
                 overlay = 1
         except Exception as e:
             logging.error(f"Error loading window size: {e}")
-
-    if overlay == None and screen_width > 1920 and screen_height > 1080:
-        width_scale = (screen_width - 300) / 1920
-        height_scale = (screen_height - 300) / 1080
-        scale_factor = min(width_scale, height_scale)
-        new_width = int(1920 * scale_factor)
-        new_height = int(1080 * scale_factor)
-        root.geometry(f'{new_width}x{new_height}+35+35')
-        root.call('tk', 'scaling', scale_factor)
-        logging.warning(f"Screen {screen_width}x{screen_height}, Geometry {new_width}x{new_height}, Font Scaling: {int(12 * scale_factor)}")
-        ThisFont = (ThisFont[0], int(14 * scale_factor))
-    elif overlay == None:
-        root.geometry(f'{screen_width - 70}x{screen_height - 70}+35+35')
-        ThisFont = (ThisFont[0], int(10))
-
-    overlay = None
+            root.geometry(f"{screen_width}x{screen_height}+10+10")  # Default to full screen if error occurs
+    else:
+        root.geometry(f"{screen_width}x{screen_height}+10+10")
 
     # Map Marker Images
     btn_img = ImageTk.PhotoImage(Image.open('Data' + os.path.sep + 'ui_button.png'))
