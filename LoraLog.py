@@ -624,7 +624,7 @@ def logheard(sourseIDx, nodeIDx, dbdata, nodesname):
             listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position() ]
             # dbdata contains the signal strength as float, so can later on add it to path
             signal_strength_text = f"{dbdata:.2f}"
-            heard_entry[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text)
+            heard_entry[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text, font=ThisFont)
         elif heard_entry[2] is not None:
             # Update existing path with new signal strength
             signal_strength_text = f"{dbdata:.2f}"
@@ -643,7 +643,7 @@ def redrawnaibors(sourceIDx):
                 listmaps = [MapMarkers[sourseID][0].get_position(), MapMarkers[nodeID][0].get_position()]
                 # value[1] contains the signal strength (dbdata)
                 signal_strength_text = f"{value[1]:.2f}"
-                value[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text)
+                value[2] = mapview.set_path(listmaps, color="#006642", width=2, name=sourseID, signal_strength=signal_strength_text, font=ThisFont)
 
 def deloldheard(deltime):
     global HeardDB, MapMarkers, mapview
@@ -768,11 +768,11 @@ def on_meshtastic_message2(packet):
                             MapMarkers[fromraw][1] = False
                             MapMarkers[fromraw][0].change_icon(2)
                     elif result[9] != -8.0 and result[10] != -8.0 and isorange == True:
-                        marker = mapview.set_marker(result[9], result[10], text=fromname, icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                        marker = mapview.set_marker(result[9], result[10], text=fromname, icon_index=3, text_color = '#2bd5ff', font = ThisFont, data=fromraw, command = click_command)
                         MapMarkers[fromraw] = [marker, True, tnow, None, None, 0, None, None]
                         MapMarkers[fromraw][0].text_color = '#2bd5ff'
                     elif result[9] != -8.0 and result[10] != -8.0 and isorange == False:
-                        marker = mapview.set_marker(result[9], result[10], text=fromname, icon_index=2, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                        marker = mapview.set_marker(result[9], result[10], text=fromname, icon_index=2, text_color = '#2bd5ff', font = ThisFont, data=fromraw, command = click_command)
                         MapMarkers[fromraw] = [marker, False, tnow, None, None, 0, None, None]
                         MapMarkers[fromraw][0].text_color = '#2bd5ff'
 
@@ -915,7 +915,7 @@ def on_meshtastic_message2(packet):
                             
                             if MyLora not in MapMarkers:
                                 MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
-                                MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 10), data=MyLora, command = click_command)
+                                MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ThisFont, data=MyLora, command = click_command)
                                 MapMarkers[MyLora][0].text_color = '#e67a7f'
                                 zoomhome += 1
                             elif MapMarkers[MyLora][0] != None:
@@ -990,7 +990,7 @@ def on_meshtastic_message2(packet):
                     if fromraw not in MapMarkers:
                         if result[9] != -8.0 and result[10] != -8.0:
                             MapMarkers[fromraw] = [None, True, tnow, None, None, 0, None]
-                            MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                            MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=3, text_color = '#2bd5ff', font = ThisFont, data=fromraw, command = click_command)
                     '''
                     if "neighborinfo" in data and "neighbors" in data["neighborinfo"]:
                         text = data["neighborinfo"]["neighbors"]
@@ -1004,7 +1004,7 @@ def on_meshtastic_message2(packet):
                                 nbNide = str(tmp[5].encode('ascii', 'xmlcharrefreplace'), 'ascii') # unescape(tmp[5])
                                 if nodehex not in MapMarkers: # and nodeid != MyLora:
                                     if tmp[9] != -8.0 and tmp[10] != -8.0:
-                                        marker = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ('Fixedsys', 10), data=nodehex, command = click_command)
+                                        marker = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ThisFont, data=nodehex, command = click_command)
                                         MapMarkers[nodehex] = [marker, True, tnow, None, None, 0, None, None]
                                     # dbcursor.execute("UPDATE node_info SET timerec = ?, hopstart = ?, ismqtt = ? WHERE hex_id = ?", (tnow, nbhobs, viaMqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
                                 # else:
@@ -1151,7 +1151,7 @@ def on_meshtastic_message2(packet):
             if fromraw not in MapMarkers:
                 if result[9] != -8.0 and result[10] != -8.0:
                     MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None, None]
-                    MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=4, text_color = '#aaaaaa', font = ('Fixedsys', 10), data=fromraw, command = click_command)
+                    MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=4, text_color = '#aaaaaa', font = ThisFont, data=fromraw, command = click_command)
                     MapMarkers[fromraw][0].text_color = '#aaaaaa'
                     MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
             elif fromraw in MapMarkers and MapMarkers[fromraw][6] == None:
@@ -1224,7 +1224,7 @@ def updatesnodes():
 
                                 if MyLora not in MapMarkers:
                                     MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
-                                    MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ('Fixedsys', 10), data=MyLora, command = click_command)
+                                    MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ThisFont, data=MyLora, command = click_command)
                                     MapMarkers[MyLora][0].text_color = '#e67a7f'
                                     zoomhome += 1
                                 elif MapMarkers[MyLora][0] != None:
@@ -2132,16 +2132,16 @@ if __name__ == "__main__":
                             MapMarkerDelete(node_id)
                             MapMarkers[node_id][0].delete()
                             MapMarkers[node_id][0] = None
-                            MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 10), data=node_id, command = click_command)
+                            MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ThisFont, data=node_id, command = click_command)
                             MapMarkers[node_id][0].text_color = color
                     else:
                         MapMarkerDelete(node_id)
                         MapMarkers[node_id][0].delete()
                         MapMarkers[node_id][0] = None
-                        MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 10), data=node_id, command = click_command)
+                        MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ThisFont, data=node_id, command = click_command)
                         MapMarkers[node_id][0].text_color = color
                 else:
-                    MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 10), data=node_id, command = click_command)
+                    MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ThisFont, data=node_id, command = click_command)
                     MapMarkers[node_id][0].text_color = color
                 if MapMarkers[node_id][6] != None:
                     MapMarkers[node_id][6].set_position(lat, lon)
@@ -2155,7 +2155,7 @@ if __name__ == "__main__":
             if lat != -8.0 and lon != -8.0:
                 if (drawme == False and icon != 4) or drawme == True:
                     MapMarkers[node_id] = [None, tmp, int(time.time()), None, None, 0, None, None]
-                    MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ('Fixedsys', 10), data=node_id, command = click_command)
+                    MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ThisFont, data=node_id, command = click_command)
                     MapMarkers[node_id][0].text_color = color
                     MapMarkers[node_id][1] = tmp
 
@@ -2428,7 +2428,7 @@ if __name__ == "__main__":
                             lon = round(float(decoded.get('longitude', '-8.0')), 7)
                             if lat != -8.0 and lon != -8.0:
                                 AprsMarkers[nodeid] = [None, tnow, 0]
-                                AprsMarkers[nodeid][0] = mapview.set_marker(lat, lon, text=nodeid2, icon_index=4, text_color='#a1a1ff', font=('Fixedsys', 10), data=nodeid)
+                                AprsMarkers[nodeid][0] = mapview.set_marker(lat, lon, text=nodeid2, icon_index=4, text_color='#a1a1ff', font=ThisFont, data=nodeid)
                                 AprsMarkers[nodeid][2] = round(calc_gc(lat, lon, MyLora_Lat, MyLora_Lon), 2)
                         else:
                             AprsMarkers[nodeid][1] = tnow
@@ -2695,7 +2695,7 @@ if __name__ == "__main__":
                                     drawline.append(pos)
                                 pos = (row[9], row[10])
                                 drawline.append(pos)
-                                MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2, name=node_id)
+                                MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2, name=node_id, font=ThisFont)
                                 MapMarkers[node_id][5] = 30
                             else:
                                 MapMarkers[node_id][5] -= 1
@@ -3178,7 +3178,7 @@ if __name__ == "__main__":
     style.configure("TNotebook", background="#242424", tabposition='nw', borderwidth=1, highlightcolor="#121212", highlightbackground="#121212")
     style.configure("TNotebook.Tab", background="#242424", foreground="#d1d1d1", borderwidth=1, highlightbackground="#121212", highlightcolor="#121212")
     # style.configure('TFrame', background="#242424", borderwidth=0, highlightthickness=0)
-    style.map("TNotebook.Tab", background=[("selected", "#242424")], foreground=[("selected", "#2bd5ff")], font=[("selected", ('Fixedsys', 10))])
+    style.map("TNotebook.Tab", background=[("selected", "#242424")], foreground=[("selected", "#2bd5ff")], font=[("selected", ThisFont)])
 
     tabControl = ttk.Notebook(frame, style='TNotebook')
     tabControl.grid(row=2, column=0, padx=2, pady=2, sticky='nsew')

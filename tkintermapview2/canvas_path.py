@@ -13,6 +13,7 @@ class CanvasPath:
                  map_widget: "TkinterMapView",
                  position_list: list,
                  color: str = "#3E69CB",
+                 font=None,
                  command=None,
                  name: str = None,
                  signal_strength: str = None,
@@ -35,7 +36,15 @@ class CanvasPath:
 
         self.last_upper_left_tile_pos = None
         self.last_position_list_length = len(self.position_list)
-    
+
+        if font is None:
+            if sys.platform == "darwin":
+                self.font = "Tahoma 8 bold"
+            else:
+                self.font = "Arial 8 bold"
+        else:
+            self.font = (font[0], int(font[1]) -3)
+
     def __del__(self):
         self.delete()
 
@@ -168,10 +177,7 @@ class CanvasPath:
                         canvas_text_pos = self.get_canvas_pos(quarter_pos, widget_tile_width, widget_tile_height)
                         
                         # Create text with background
-                        self.create_text_with_background(
-                            canvas_text_pos[0], canvas_text_pos[1],
-                            self.signal_strength, 8
-                        )
+                        self.create_text_with_background(canvas_text_pos[0], canvas_text_pos[1], self.signal_strength)
             else:
                 for line in self.canvas_lines:
                     self.map_widget.canvas.coords(line, self.canvas_line_positions)
@@ -205,10 +211,7 @@ class CanvasPath:
                                 self.map_widget.canvas.delete(self.canvas_text_bg)
                                 self.canvas_text_bg = None
 
-                            self.create_text_with_background(
-                                canvas_text_pos[0], canvas_text_pos[1],
-                                self.signal_strength, 8
-                            )
+                            self.create_text_with_background(canvas_text_pos[0], canvas_text_pos[1], self.signal_strength)
         else:
             for line in self.canvas_lines:
                 self.map_widget.canvas.delete(line)
@@ -273,10 +276,10 @@ class CanvasPath:
         # Fallback to first position if calculation fails
         return self.position_list[0]
 
-    def create_text_with_background(self, x, y, text, font_size=8):
+    def create_text_with_background(self, x, y, text):
         """Create text with a background rectangle for better readability"""
         # Create temporary text to measure dimensions
-        temp_text = self.map_widget.canvas.create_text(x, y, text=text, font=("Arial", font_size, "bold"))
+        temp_text = self.map_widget.canvas.create_text(x, y, text=text, font=self.font)
         bbox = self.map_widget.canvas.bbox(temp_text)
         self.map_widget.canvas.delete(temp_text)
         
@@ -301,7 +304,7 @@ class CanvasPath:
                 x, y,
                 text=text,
                 fill="#00c983",
-                font=("Arial", font_size, "bold"),
+                font=self.font,
                 tags="signal_text"
             )
         else:
@@ -310,6 +313,6 @@ class CanvasPath:
                 x, y,
                 text=text,
                 fill="#00c983",
-                font=("Arial", font_size, "bold"),
+                font=self.font,
                 tags="signal_text"
             )

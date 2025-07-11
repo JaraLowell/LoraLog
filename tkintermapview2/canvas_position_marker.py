@@ -290,11 +290,11 @@ class CanvasPositionMarker:
                                                                                 image=self.text_background_image,
                                                                                 anchor=tkinter.S,
                                                                                 tag=("marker", "marker_text_bg"))
-                        self.canvas_text = self.map_widget.canvas.create_text(canvas_pos_x, canvas_pos_y + self.text_y_offset,
+                        self.canvas_text = self.map_widget.canvas.create_text(canvas_pos_x, canvas_pos_y + self.text_y_offset + 1,
                                                                               anchor=tkinter.S,
                                                                               text=self.text,
                                                                               fill=self.text_color,
-                                                                              font=self.font,
+                                                                              font=(self.font[0], int(self.font[1]), "bold"),
                                                                               tag=("marker", "marker_text"))
                         if self.command is not None:
                             self.map_widget.canvas.tag_bind(self.canvas_text, "<Enter>", self.mouse_enter)
@@ -302,7 +302,7 @@ class CanvasPositionMarker:
                             self.map_widget.canvas.tag_bind(self.canvas_text, "<Button-1>", self.click)
                     else:
                         self.map_widget.canvas.coords(self.canvas_text_bg, canvas_pos_x, canvas_pos_y + (self.text_y_offset + 1))
-                        self.map_widget.canvas.coords(self.canvas_text, canvas_pos_x, canvas_pos_y + self.text_y_offset)
+                        self.map_widget.canvas.coords(self.canvas_text, canvas_pos_x, canvas_pos_y + self.text_y_offset + 1)
                         self.map_widget.canvas.itemconfig(self.canvas_text, text=self.text)
                 else:
                     if self.canvas_text is not None:
@@ -339,7 +339,7 @@ class CanvasPositionMarker:
                                                                                     anchor=tkinter.S,
                                                                                     text=temp_text,
                                                                                     fill=temp_color,
-                                                                                    font=("Arial", int(8), "bold"),
+                                                                                    font=(self.font[0], int(self.font[1]) -2),
                                                                                     tag=("marker", "marker_temperature"))
                     else:
                         self.map_widget.canvas.coords(self.canvas_temperature, canvas_pos_x, temp_y_pos)
@@ -361,7 +361,7 @@ class CanvasPositionMarker:
                                                                                 anchor=tkinter.N,
                                                                                 text=battery_text,
                                                                                 fill=battery_color,
-                                                                                font=(self.font[0], int(self.font[1]) -2),
+                                                                                font=(self.font[0], int(self.font[1]) -1),
                                                                                 tag=("marker", "marker_battery"))
                     else:
                         self.map_widget.canvas.coords(self.canvas_battery, canvas_pos_x, battery_y_pos)

@@ -723,7 +723,7 @@ class TkinterMapView(tkinter.Frame):
         # This function calls itself every 10 ms with tk.after() so that the image updates come
         # from the main GUI thread, because tkinter can only be updated from the main thread.
         if self.running:
-            self.after(100, self.update_canvas_tile_images)
+            self.after(30, self.update_canvas_tile_images)
 
     def insert_row(self, insert: int, y_name_position: int):
 
