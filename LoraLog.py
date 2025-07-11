@@ -265,12 +265,14 @@ dbcursor.execute(create_tmp)
 dbcursor.execute("CREATE INDEX IF NOT EXISTS idx_node_info_timerec ON node_info(timerec)")
 dbcursor.execute("CREATE INDEX IF NOT EXISTS idx_node_info_hex_id ON node_info(hex_id)")
 
+'''
+# Need this only if one has an old database without the isaprs column
 try:
     create_tmp = """ALTER TABLE node_info ADD isaprs integer DEFAULT 0"""
     dbcursor.execute(create_tmp)
 except Exception as e:
     print("Error adding column to node_info: %s", str(e))
-
+'''
 dbcursor.execute("SELECT COUNT(*) FROM node_info")
 DBTotal = dbcursor.fetchone()[0]
 
@@ -722,7 +724,7 @@ def on_meshtastic_message2(packet):
             if result is None:
                 # Maybe we have it's Hex ID ?
                 result = dbcursor.execute("SELECT * FROM node_info WHERE hex_id = ?", (text_from,)).fetchone()
-                print("Fallback, no result from node ID trying Hex ID: ", result)
+                logging.error(f"Fallback, no result from node ID {text_from}, trying Hex ID: {result}")
                 dbcursor.execute("UPDATE node_info SET node_id = ? WHERE hex_id = ?", (packet["from"], text_from)) # Lets update the node_id to the correct one
 
             if result:
@@ -801,7 +803,7 @@ def on_meshtastic_message2(packet):
                                 if device_metrics.get('voltage', 0.00) > 0.00: MyLoraText1 += (' Power').ljust(15) + str(round(device_metrics.get('voltage', 0.00),2)).rjust(6) + 'v\n' 
                                 if device_metrics.get('batteryLevel', 0) > 0: MyLoraText1 += (' Battery').ljust(15) + str(device_metrics.get('batteryLevel', 0)).rjust(6) + '%\n'
                             if fromraw in MapMarkers:
-                                if MapMarkers[fromraw][0] is not None:
+                                if MapMarkers[fromraw][0] is not None and "batteryLevel" in device_metrics:
                                     MapMarkers[fromraw][0].set_battery_percentage(device_metrics.get('batteryLevel', 101))
                         power_metrics = telemetry.get('powerMetrics', {})
                         if power_metrics:
@@ -969,10 +971,10 @@ def on_meshtastic_message2(packet):
                                 tmp = result[4]
                         lora_ln = str(tmp.encode('ascii', 'xmlcharrefreplace'), 'ascii')
                         lora_mc = node_info.get('macaddr', 'N/A')
-                        lora_mo = node_info.get('hwModel', 'N/A')
+                        lora_mo = node_info.get('hwModel', 'Unknown')
                         if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
                             MapMarkers[fromraw][0].set_text(unescape(lora_sn).strip())
-                        text_raws = "Node Info using hardware " + lora_mo
+                        text_raws = f"Node Info for {lora_sn} using hardware {lora_mo}"
                         nodelicense = False
                         if 'isLicensed' in packet:
                             text_raws += " (Licensed)"
