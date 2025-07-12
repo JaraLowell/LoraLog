@@ -2202,7 +2202,7 @@ if __name__ == "__main__":
             nodes_to_update = []
             yeet = map_oldnode if drawoldnodes else (300 + map_delete)
             cursor = dbconnection.cursor()
-            if DBChange == True:
+            if DBChange == True or TemmpDB is None:
                 result = cursor.execute("SELECT * FROM node_info WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, yeet)).fetchall()
                 if aprsondash:
                     for nodes, data in AprsMarkers.items():
