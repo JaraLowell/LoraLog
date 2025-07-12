@@ -2650,45 +2650,47 @@ if __name__ == "__main__":
 
         # Let rework mHeard Lines
         with dbconnection:
-            result = TemmpDB # cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
-            for row in result:
-                node_id = row[3]
-                if node_id in MapMarkers:
-                    node_time = MapMarkers[node_id][2]
-                    if MapMarkers[node_id][6] != None and ((tnow - node_time) >= 3 or node_time <= 0):
-                        # Ensure altitude is always an integer, even if row[21] is "N\A" or None
-                        try:
-                            altitude = int(row[11])
-                        except (ValueError, TypeError):
-                            altitude = 0
+            # Crashes here for users ?
+            if TemmpDB is not None:
+                result = TemmpDB # cursor.execute("SELECT * FROM node_info  WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode)).fetchall()
+                for row in result:
+                    node_id = row[3]
+                    if node_id in MapMarkers:
+                        node_time = MapMarkers[node_id][2]
+                        if MapMarkers[node_id][6] != None and ((tnow - node_time) >= 3 or node_time <= 0):
+                            # Ensure altitude is always an integer, even if row[21] is "N\A" or None
+                            try:
+                                altitude = int(row[11])
+                            except (ValueError, TypeError):
+                                altitude = 0
 
-                        if altitude >= 300:
-                            MapMarkers[node_id][6].change_icon(8)
-                        else:    
-                            MapMarkers[node_id][6].change_icon(7)
+                            if altitude >= 300:
+                                MapMarkers[node_id][6].change_icon(8)
+                            else:    
+                                MapMarkers[node_id][6].change_icon(7)
 
-                    if MapMarkers[node_id][4] != None and MapMarkers[node_id][5] <= 0:
-                        MapMarkers[node_id][4].delete()
-                        MapMarkers[node_id][4] = None
-
-                    if mapview.draw_trail:
-                        positions = get_data_for_node('movement_log', node_id, days=1)
-                        if len(positions) > 1 and tnow - node_time <= map_oldnode:
-                            if MapMarkers[node_id][5] <= 0:
-                                drawline = []
-                                for position in positions:
-                                    pos = (position[6], position[7])
-                                    drawline.append(pos)
-                                pos = (row[9], row[10])
-                                drawline.append(pos)
-                                MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2, name=node_id, font=ThisFont)
-                                MapMarkers[node_id][5] = 30
-                            else:
-                                MapMarkers[node_id][5] -= 1
-                        if tnow - node_time > map_oldnode and MapMarkers[node_id][4] != None:
+                        if MapMarkers[node_id][4] != None and MapMarkers[node_id][5] <= 0:
                             MapMarkers[node_id][4].delete()
                             MapMarkers[node_id][4] = None
-                            MapMarkers[node_id][5] = 0
+
+                        if mapview.draw_trail:
+                            positions = get_data_for_node('movement_log', node_id, days=1)
+                            if len(positions) > 1 and tnow - node_time <= map_oldnode:
+                                if MapMarkers[node_id][5] <= 0:
+                                    drawline = []
+                                    for position in positions:
+                                        pos = (position[6], position[7])
+                                        drawline.append(pos)
+                                    pos = (row[9], row[10])
+                                    drawline.append(pos)
+                                    MapMarkers[node_id][4] = mapview.set_path(drawline, color="#751919", width=2, name=node_id, font=ThisFont)
+                                    MapMarkers[node_id][5] = 30
+                                else:
+                                    MapMarkers[node_id][5] -= 1
+                            if tnow - node_time > map_oldnode and MapMarkers[node_id][4] != None:
+                                MapMarkers[node_id][4].delete()
+                                MapMarkers[node_id][4] = None
+                                MapMarkers[node_id][5] = 0
 
             if tnow > tlast + 900:
                 tlast = tnow
