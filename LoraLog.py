@@ -912,7 +912,6 @@ def on_meshtastic_message2(packet):
                         if fromraw == MyLora:
                             MyLora_Lat = nodelat
                             MyLora_Lon = nodelon
-                            
                             if MyLora not in MapMarkers:
                                 MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
                                 MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ThisFont, data=MyLora, command = click_command)
@@ -920,10 +919,11 @@ def on_meshtastic_message2(packet):
                             elif MapMarkers[MyLora][0] != None:
                                 MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
                                 MapMarkers[MyLora][0].change_icon(1)
-                            if MapMarkers[MyLora][6] != None:
-                                MapMarkers[MyLora][6].set_position(MyLora_Lat, MyLora_Lon)
+                                if MapMarkers[MyLora][6] != None:
+                                    MapMarkers[MyLora][6].set_position(MyLora_Lat, MyLora_Lon)
                         else:
                             node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
+
                         dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, precision_bits = ?, last_sats = ?, distance = ? WHERE node_id = ?", (nodelat, nodelon, position.get('altitude', 0), position.get('precisionBits', 0), position.get('satsInView', 0), node_dist, packet["from"]))
 
                         text_msgs += 'latitude ' + str(round(nodelat,4)) + ' '
@@ -979,7 +979,9 @@ def on_meshtastic_message2(packet):
                         if 'role' in packet:
                             text_raws +=  " Role: " + node_info.get('role', 'N/A')
                         text_from = lora_sn + " (" + lora_ln + ")"
-
+                        if MyLora == fromraw:
+                            MyLora_SN = lora_sn
+                            MyLora_LN = lora_ln
                         dbcursor.execute("UPDATE node_info SET mac_id = ?, long_name = ?, short_name = ?, hw_model_id = ?, is_licensed = ?, role = ? WHERE node_id = ?", (lora_mc, lora_ln, lora_sn, lora_mo, nodelicense, node_info.get('role', 'N/A'), packet["from"]))
                     else:
                         text_raws = 'Node Info No Data'
