@@ -24,7 +24,8 @@ class CanvasPositionMarker:
             PhotoImage(file='Data' + os.path.sep + 'signal.png'),
             PhotoImage(file='Data' + os.path.sep + 'txbck.png'),
             PhotoImage(file='Data' + os.path.sep + 'blank.png'),
-            PhotoImage(file='Data' + os.path.sep + 'inair.png')
+            PhotoImage(file='Data' + os.path.sep + 'inair.png'),
+            PhotoImage(file='Data' + os.path.sep + 'marker-purple.png')
         ]
 
     text_background_image = None  # Class variable

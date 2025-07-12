@@ -889,6 +889,11 @@ def on_meshtastic_message2(packet):
                         playsound('Data' + os.path.sep + 'NewChat.mp3')
                     else:
                         text_raws = 'Node Chat Encrypted'
+                    # Lets check this again!
+                    if "viaMqtt" not in packet and nodesnr == 0.00:
+                        viaMqtt = True
+                        if fromraw in MapMarkers:
+                            viaMqtt = MapMarkers[fromraw][1] # Last known value
                 elif data["portnum"] == "POSITION_APP":
                     position = data["position"]
                     nodelat = round(position.get('latitude', -8.0),7)
@@ -914,7 +919,6 @@ def on_meshtastic_message2(packet):
                             elif MapMarkers[MyLora][0] != None:
                                 MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
                                 MapMarkers[MyLora][0].change_icon(1)
-
                         else:
                             node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
                         dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, precision_bits = ?, last_sats = ?, distance = ? WHERE node_id = ?", (nodelat, nodelon, position.get('altitude', 0), position.get('precisionBits', 0), position.get('satsInView', 0), node_dist, packet["from"]))
@@ -999,12 +1003,15 @@ def on_meshtastic_message2(packet):
                                         marker = mapview.set_marker(tmp[9], tmp[10], text=unescape(nbNide), icon_index=3, text_color = '#2bd5ff', font = ThisFont, data=nodehex, command = click_command)
                                         MapMarkers[nodehex] = [marker, True, tnow, None, None, 0, None, None]
                                     # dbcursor.execute("UPDATE node_info SET timerec = ?, hopstart = ?, ismqtt = ? WHERE hex_id = ?", (tnow, nbhobs, viaMqtt, nodeid)) # We dont need to update this as we only update if we hear it our self
-                                # else:
+                                else:
+                                    if MapMarkers[nodehex][0].get_color() != '#2bd5ff' and nodehex != MyLora:
+                                        MapMarkers[nodehex][0].set_color('#2bd5ff')
+                                        MapMarkers[nodehex][0].change_icon(3)
                                 dbcursor.execute("UPDATE node_info SET timerec = ? WHERE node_id = ?", (tnow, nbnodeid))
                             else:
                                 tmpsn = str(nodehex[-4:])
                                 tmpln = "Meshtastic " + tmpsn
-                                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, long_name, short_name, timefirst, hopstart) VALUES (?, ?, ?, ?, ?, ?)", (nbnodeid, tnow, nodehex, tmpln, tmpsn, tnow, hopStart))
+                                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, long_name, short_name, timefirst, hopstart) VALUES (?, ?, ?, ?, ?, ?, ?)", (nbnodeid, tnow, nodehex, tmpln, tmpsn, tnow, hopStart))
                                 nbNide = tmpsn + ' (!' + nodehex + ')'
 
                             text_raws += '\n' + (' ' * 11) + nbNide
@@ -2407,7 +2414,7 @@ if __name__ == "__main__":
                             lon = round(float(decoded.get('longitude', '-8.0')), 7)
                             if lat != -8.0 and lon != -8.0:
                                 AprsMarkers[nodeid] = [None, tnow, 0]
-                                AprsMarkers[nodeid][0] = mapview.set_marker(lat, lon, text=nodeid2, icon_index=4, text_color='#a1a1ff', font=ThisFont, data=nodeid)
+                                AprsMarkers[nodeid][0] = mapview.set_marker(lat, lon, text=nodeid2, icon_index=9, text_color='#a1a1ff', font=ThisFont, data=nodeid)
                                 AprsMarkers[nodeid][2] = round(calc_gc(lat, lon, MyLora_Lat, MyLora_Lon), 2)
                         else:
                             AprsMarkers[nodeid][1] = tnow
