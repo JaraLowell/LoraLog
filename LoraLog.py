@@ -1169,7 +1169,7 @@ def updatesnodes():
     with dbconnection:
         cursor = dbconnection.cursor()
         for nodes, info in meshtastic_client.nodes.items():
-
+            print(yaml.dump(info), end='\n')
             nodeID = str(info['user']['id'])[1:]
             if nodeID == '': nodeID = idToHex(info["num"])[1:]
             result = cursor.execute("SELECT * FROM node_info WHERE node_id = ?", (info["num"],)).fetchone()
@@ -1179,7 +1179,8 @@ def updatesnodes():
                 insert_colored_text(text_box1, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] New Node Logged\n", "#d1d1d1")
                 insert_colored_text(text_box1, (' ' * 11) + "Node ID !" + nodeID + "\n", "#e8643f", tag=nodeID)
                 result = cursor.execute("SELECT * FROM node_info WHERE node_id = ?", (info["num"],)).fetchone()
-
+            if "lastHeard" in info:
+                cursor.execute("UPDATE node_info SET timerec = ? WHERE node_id = ?", (info["lastHeard"], info["num"]))
             if "user" in info:
                 tmp = info['user']
                 nodelat = -8.0
