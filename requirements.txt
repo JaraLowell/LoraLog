@@ -1,7 +1,7 @@
 aprslib==0.7.2
 customtkinter==5.2.2
 geocoder==1.38.1
-logging>=0.4.9
+# logging>=0.4.9
 matplotlib==3.10.1
 meshtastic>=2.5.12
 pandas==2.2.3
