@@ -920,6 +920,8 @@ def on_meshtastic_message2(packet):
                             elif MapMarkers[MyLora][0] != None:
                                 MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
                                 MapMarkers[MyLora][0].change_icon(1)
+                            if MapMarkers[MyLora][6] != None:
+                                MapMarkers[MyLora][6].set_position(MyLora_Lat, MyLora_Lon)
                         else:
                             node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
                         dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, precision_bits = ?, last_sats = ?, distance = ? WHERE node_id = ?", (nodelat, nodelon, position.get('altitude', 0), position.get('precisionBits', 0), position.get('satsInView', 0), node_dist, packet["from"]))
