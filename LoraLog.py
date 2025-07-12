@@ -242,7 +242,8 @@ create_tmp = """CREATE TABLE IF NOT EXISTS node_info (
                             "ChUtil" real DEFAULT 0.0,
                             "AirUtilTX" real DEFAULT 0.0,
                             "hopstart" integer DEFAULT 0,
-                            "distance" real DEFAULT 0.0
+                            "distance" real DEFAULT 0.0,
+                            "isaprs" integer DEFAULT 0
                         );"""
 dbcursor.execute(create_tmp)
 
