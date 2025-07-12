@@ -297,8 +297,6 @@ config['meshtastic'] = {
     'interface': 'tcp',
     'host': '127.0.0.1',
     'serial_port': 'COM1',
-    'map_delete_time': '60',
-    'map_oldnode_time': '10080',
     'map_trail_age': '12',
     'metrics_age': '7',
     'max_lines': '1000',
@@ -316,13 +314,14 @@ if not os.path.exists('config.ini'):
 
 try:
     config.read('config.ini')
-    map_delete = int(config.get('meshtastic', 'map_delete_time')) * 60
-    map_oldnode = int(config.get('meshtastic', 'map_oldnode_time')) * 60
     map_trail_age = int(config.get('meshtastic', 'map_trail_age')) # In Hours !
     metrics_age = int(config.get('meshtastic', 'metrics_age')) # In Days !
     max_lines = int(config.get('meshtastic', 'max_lines')) # Max lines in log box 1 and 2
 except Exception as e :
     logging.error("Error loading databases: %s", str(e))
+
+map_delete = 3600  # 1 Hour
+map_oldnode = 5400 # 90 Minutes
 
 # Import the necessary module based on the interface type
 if config.get('meshtastic', 'interface') == 'tcp':
@@ -763,20 +762,13 @@ def on_meshtastic_message2(packet):
 
                 if fromraw != MyLora:
                     if fromraw in MapMarkers and MapMarkers[fromraw][0] != None:
-                        if MapMarkers[fromraw][1] == False and isorange == True:
-                            MapMarkers[fromraw][1] = True
-                            MapMarkers[fromraw][0].change_icon(3)
-                        elif MapMarkers[fromraw][1] == True and isorange == False:
-                            MapMarkers[fromraw][1] = False
-                            MapMarkers[fromraw][0].change_icon(2)
-                    elif result[9] != -8.0 and result[10] != -8.0 and isorange == True:
-                        marker = mapview.set_marker(result[9], result[10], text=fromname, icon_index=3, text_color = '#2bd5ff', font = ThisFont, data=fromraw, command = click_command)
-                        MapMarkers[fromraw] = [marker, True, tnow, None, None, 0, None, None]
-                        MapMarkers[fromraw][0].text_color = '#2bd5ff'
-                    elif result[9] != -8.0 and result[10] != -8.0 and isorange == False:
-                        marker = mapview.set_marker(result[9], result[10], text=fromname, icon_index=2, text_color = '#2bd5ff', font = ThisFont, data=fromraw, command = click_command)
-                        MapMarkers[fromraw] = [marker, False, tnow, None, None, 0, None, None]
-                        MapMarkers[fromraw][0].text_color = '#2bd5ff'
+                        if MapMarkers[fromraw][0].get_color() != '#2bd5ff':
+                            MapMarkers[fromraw][0].set_color('#2bd5ff')
+                        MapMarkers[fromraw][1] = isorange
+                        MapMarkers[fromraw][0].change_icon(3 if isorange else 2)
+                    elif result[9] != -8.0 and result[10] != -8.0:
+                        marker = mapview.set_marker(result[9], result[10], text=fromname, icon_index=(3 if isorange else 2), text_color = '#2bd5ff', font = ThisFont, data=fromraw, command = click_command)
+                        MapMarkers[fromraw] = [marker, isorange, tnow, None, None, 0, None, None]
 
                 # Lets Work the Msgs
                 if data["portnum"] == "ADMIN_APP":
@@ -918,7 +910,6 @@ def on_meshtastic_message2(packet):
                             if MyLora not in MapMarkers:
                                 MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
                                 MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ThisFont, data=MyLora, command = click_command)
-                                MapMarkers[MyLora][0].text_color = '#e67a7f'
                                 zoomhome += 1
                             elif MapMarkers[MyLora][0] != None:
                                 MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
@@ -934,10 +925,9 @@ def on_meshtastic_message2(packet):
 
                         if MyLora != fromraw and nodelat != -8.0 and nodelon != -8.0:
                             text_msgs += "Distance: ±" + str(node_dist) + "km "
-                        if fromraw in MapMarkers:
+                        if fromraw in MapMarkers and MapMarkers[fromraw][0].get_position() != (nodelat, nodelon):
                             if MapMarkers[fromraw][0] != None:
                                 MapMarkers[fromraw][0].set_position(nodelat, nodelon)
-                                # MapMarkers[fromraw][0].set_text(fromname)
                             if MapMarkers[fromraw][6] != None:
                                 MapMarkers[fromraw][6].set_position(nodelat, nodelon)
                         text_msgs += extra
@@ -1154,7 +1144,6 @@ def on_meshtastic_message2(packet):
                 if result[9] != -8.0 and result[10] != -8.0:
                     MapMarkers[fromraw] = [None, False, tnow, None, None, 0, None, None]
                     MapMarkers[fromraw][0] = mapview.set_marker(result[9], result[10], text=unescape(result[5]), icon_index=4, text_color = '#aaaaaa', font = ThisFont, data=fromraw, command = click_command)
-                    MapMarkers[fromraw][0].text_color = '#aaaaaa'
                     MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
             elif fromraw in MapMarkers and MapMarkers[fromraw][6] == None:
                 MapMarkers[fromraw][6] = mapview.set_marker(result[9], result[10], icon_index=5, data=fromraw, command = click_command)
@@ -1227,7 +1216,6 @@ def updatesnodes():
                                 if MyLora not in MapMarkers:
                                     MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
                                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ThisFont, data=MyLora, command = click_command)
-                                    MapMarkers[MyLora][0].text_color = '#e67a7f'
                                     zoomhome += 1
                                 elif MapMarkers[MyLora][0] != None:
                                     MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
@@ -1959,13 +1947,13 @@ if __name__ == "__main__":
         close_button.pack(side='left', padx=2)
 
     def update_position_and_height(nodeid, lat = -8.0, lon = -8.0, alt = 0.0):
-        nodelat = round(float(lat),7)
-        nodelon = round(float(lon),7)
-
         if lat != -8.0 and lon != -8.0:
             global dbconnection, MapMarkers, MyLora_Lat, MyLora_Lon
+            nodelat = round(float(lat),7)
+            nodelon = round(float(lon),7)
+            node_dist = 0.0
             # Recalc distance to home
-            if nodelat == -8.0 or nodelon == -8.0 and MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
+            if MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
                 node_dist = calc_gc(nodelat, nodelon, MyLora_Lat, MyLora_Lon)
             dbcursor = dbconnection.cursor()
             dbcursor.execute("UPDATE node_info SET latitude = ?, longitude = ?, altitude = ?, distance = ? WHERE hex_id = ?", (nodelat, nodelon, int(alt), node_dist, nodeid))
@@ -2116,7 +2104,7 @@ if __name__ == "__main__":
 
     # Function to update the middle frame with the last 30 active nodes
     peekmem = 0
-    def checknode(node_id, icon, color, lat, lon, nodesn, drawme=True):
+    def checknode(node_id, icon, color, lat, lon, nodesn, drawme=True, nptime=None):
         global MapMarkers, mapview
 
         if node_id not in MapMarkers and (lat == -8.0 or lon == -8.0):
@@ -2124,29 +2112,23 @@ if __name__ == "__main__":
 
         tmp = False
         if icon == 2: tmp = True
+        if icon == 4: tmp = None
+        if nptime is None:
+            nptime = int(time.time())
 
         if node_id in MapMarkers:
-            tmp = MapMarkers[node_id][1]
             if (drawme == False and icon != 4) or drawme == True:
                 if MapMarkers[node_id][0] != None:
-                    if hasattr(MapMarkers[node_id][0], 'text_color'):
-                        if MapMarkers[node_id][0].text_color != color:
-                            MapMarkerDelete(node_id)
-                            MapMarkers[node_id][0].delete()
-                            MapMarkers[node_id][0] = None
-                            MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ThisFont, data=node_id, command = click_command)
-                            MapMarkers[node_id][0].text_color = color
-                    else:
-                        MapMarkerDelete(node_id)
-                        MapMarkers[node_id][0].delete()
-                        MapMarkers[node_id][0] = None
-                        MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ThisFont, data=node_id, command = click_command)
-                        MapMarkers[node_id][0].text_color = color
+                    if MapMarkers[node_id][0].get_color() != color:
+                        MapMarkers[node_id][0].set_color(color)
+                        MapMarkers[node_id][0].change_icon(icon)
                 else:
                     MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ThisFont, data=node_id, command = click_command)
-                    MapMarkers[node_id][0].text_color = color
-                if MapMarkers[node_id][6] != None:
-                    MapMarkers[node_id][6].set_position(lat, lon)
+                
+                if MapMarkers[node_id][0].get_position() != (lat, lon):
+                    MapMarkers[node_id][0].set_position(lat, lon)
+                    if MapMarkers[node_id][6] != None:
+                        MapMarkers[node_id][6].set_position(lat, lon)
             else:
                 MapMarkerDelete(node_id)
                 if MapMarkers[node_id][0] is not None:
@@ -2154,19 +2136,19 @@ if __name__ == "__main__":
                     MapMarkers[node_id][0] = None
                 del MapMarkers[node_id]
         else:
-            if lat != -8.0 and lon != -8.0:
-                if (drawme == False and icon != 4) or drawme == True:
-                    MapMarkers[node_id] = [None, tmp, int(time.time()), None, None, 0, None, None]
-                    MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ThisFont, data=node_id, command = click_command)
-                    MapMarkers[node_id][0].text_color = color
-                    MapMarkers[node_id][1] = tmp
+            if (drawme == False and icon != 4) or drawme == True:
+                MapMarkers[node_id] = [None, tmp, nptime, None, None, 0, None, None]
+                MapMarkers[node_id][0] = mapview.set_marker(lat, lon, text=nodesn, icon_index=icon, text_color = color, font = ThisFont, data=node_id, command = click_command)
+                MapMarkers[node_id][1] = tmp
 
     def is_full_width(char):
         return east_asian_width(char) in ('F', 'W', 'A')
 
+    timetagclean = int(time.time())
+
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, AprsMarkers, MyAPRSCall, tlast
-        global TemmpDB, DBChange, aprsondash, mqttdash, config, DBTotal
+        global TemmpDB, DBChange, aprsondash, mqttdash, config, DBTotal, timetagclean
         start = time.perf_counter()
         tnow = int(time.time())
 
@@ -2174,7 +2156,7 @@ if __name__ == "__main__":
         if drawoldnodes:
             map_oldnode = mapview.get_oldnodes_filter()
         else:
-            map_oldnode = 7200
+            map_oldnode = 5400
 
         if ok2Send != 0:
             ok2Send -= 1
@@ -2184,7 +2166,9 @@ if __name__ == "__main__":
         current_view = text_box_middle.yview()
 
         text_box_middle.delete("1.0", 'end')
-        if DBChange == True and tnow % 4:
+        # Cleat tags that are not needed anymore every 15 minutes
+        if (tnow - timetagclean) > 900:
+            timetagclean = tnow
             for tag in text_box_middle.tag_names():
                 if tag != 'sel' and tag != MyLora and tag != '#e67a7f' and tag != '#414141':
                     text_box_middle.tag_delete(tag)
@@ -2207,9 +2191,12 @@ if __name__ == "__main__":
             insert_colored_text(text_box_middle, MyLoraText2)
 
         try:
+            nodes_to_delete = []
+            nodes_to_update = []
+            yeet = map_oldnode if drawoldnodes else (300 + map_delete)
             cursor = dbconnection.cursor()
             if DBChange == True:
-                result = cursor.execute("SELECT * FROM node_info WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, map_oldnode + 60)).fetchall()
+                result = cursor.execute("SELECT * FROM node_info WHERE (? - timerec) <= ? ORDER BY timerec DESC", (tnow, yeet)).fetchall()
                 if aprsondash:
                     for nodes, data in AprsMarkers.items():
                         if nodes != MyAPRSCall:
@@ -2217,62 +2204,52 @@ if __name__ == "__main__":
                     result.sort(key=lambda x: x[1], reverse=True)
                 TemmpDB = result
                 DBChange = False
+
+                for node_id, marker_data in MapMarkers.items():
+                    if node_id != MyLora:
+                        node_time = marker_data[2]
+                        timeoffset = tnow - node_time
+                        if timeoffset >= yeet:
+                            nodes_to_delete.append(node_id)
+
+                # Batch delete nodes
+                for node_id in nodes_to_delete:
+                    if node_id in MapMarkers:
+                        MapMarkerDelete(node_id)
+                        if MapMarkers[node_id][0] is not None:
+                            MapMarkers[node_id][0].delete()
+                            MapMarkers[node_id][0] = None
+                        del MapMarkers[node_id]
+                        redrawnaibors(node_id)
             else:
                 result = TemmpDB
-
-            nodes_to_delete = []
-            nodes_to_update = []
-            yeet = map_delete
-            if drawoldnodes:
-                yeet = map_oldnode
 
             for row in result:
                 node_id = row[3]
                 node_time = row[1]
                 timeoffset = tnow - node_time
-
-                if timeoffset >= yeet and node_id != MyLora:
-                    if node_id in MapMarkers:
-                        nodes_to_delete.append(node_id)
-                elif timeoffset < yeet and node_id != MyLora:
+                if timeoffset < yeet and node_id != MyLora:
                     nodes_to_update.append((node_id, node_time, row))
-
-            # Batch delete nodes
-            for node_id in nodes_to_delete:
-                if node_id in MapMarkers:
-                    MapMarkerDelete(node_id)
-                    if MapMarkers[node_id][0] is not None:
-                        MapMarkers[node_id][0].delete()
-                        MapMarkers[node_id][0] = None
-                    del MapMarkers[node_id]
-                    redrawnaibors(node_id)
 
             # Batch update nodes
             for node_id, node_time, row in nodes_to_update:
                 node_id = row[3]
-
-                # Adjust the name length for full width characters (Emojie)
                 node_name = unescape(row[5]).strip()
                 node_lat = row[9]
                 node_lon = row[10]
                 node_range = row[24]
                 nameadj = 11
-                if len(node_name) == 1 and is_full_width(node_name):
-                    nameadj = 10;
+                if len(node_name) == 1:
+                    if is_full_width(node_name): nameadj = 10;
 
                 if tnow - node_time >= map_delete:
-                    if node_id in MapMarkers and drawoldnodes == False:
-                        MapMarkerDelete(node_id)
-                    checknode(node_id, 4, '#aaaaaa', node_lat, node_lon, node_name, drawoldnodes)
+                    if row[25] == False:
+                        checknode(node_id, 4, '#aaaaaa', node_lat, node_lon, node_name, True, node_time)
                 else:
                     node_wtime = ez_date(tnow - node_time).rjust(10)
                     node_dist = ' '
                     if node_range != 0.0:
                         node_dist = "%.1f" % node_range + "km"
-                    # elif node_lat != -8.0 and node_lon != -8.0:
-                    #     node_dist = round(calc_gc(node_lat, node_lon, MyLora_Lat, MyLora_Lon), 2)
-                    #     cursor.execute("UPDATE node_info SET distance = ? WHERE hex_id = ?", (node_dist, node_id))
-                    #     node_dist = "%.1f" % node_dist + "km"
                     if row[25] == True:
                         insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
                         insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#a1a1ff")

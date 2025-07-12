@@ -132,6 +132,13 @@ class CanvasPositionMarker:
         self.text = text
         self.draw()
 
+    def set_color(self, color):
+        self.text_color = color
+        self.draw()
+
+    def get_color(self):
+        return self.text_color
+
     def set_temperature(self, temperature: float, unit: str = "°C"):
         self.temperature = temperature
         self.temperature_unit = unit
@@ -303,7 +310,7 @@ class CanvasPositionMarker:
                     else:
                         self.map_widget.canvas.coords(self.canvas_text_bg, canvas_pos_x, canvas_pos_y + (self.text_y_offset + 1))
                         self.map_widget.canvas.coords(self.canvas_text, canvas_pos_x, canvas_pos_y + self.text_y_offset + 1)
-                        self.map_widget.canvas.itemconfig(self.canvas_text, text=self.text)
+                        self.map_widget.canvas.itemconfig(self.canvas_text, text=self.text, fill=self.text_color)
                 else:
                     if self.canvas_text is not None:
                         self.map_widget.canvas.tag_unbind(self.canvas_text, "<Enter>")

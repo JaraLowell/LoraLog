@@ -93,7 +93,7 @@ class CanvasButton:
                                                               anchor=tkinter.CENTER,
                                                               text=self.text,
                                                               fill=self.fg,
-                                                              font="Tahoma 12" if self.width < 35 else "Tahoma 16",
+                                                              font="Tahoma 10" if self.width < 35 else "Tahoma 14",
                                                               tag="button")
 
         self.map_widget.canvas.tag_bind(self.canvas_rect, "<Button-1>", self.click)
