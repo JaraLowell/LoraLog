@@ -11,7 +11,13 @@ import math
 from configparser import ConfigParser
 from html import unescape
 from unicodedata import east_asian_width
+'''
+import warnings
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated", category=UserWarning)
 from pygame import mixer
+# Filter out the pkg_resources deprecation warning from pygame
+'''
+from playsound3 import playsound as play_sound
 # import threading
 import threading
 import sqlite3
@@ -338,6 +344,7 @@ if 'APRS' in config:
 #----------------------------------------------------------- Meshtastic Lora Con ------------------------------------------------------------------------    
 meshtastic_client = None
 
+'''
 mixer.init()
 sound_cache = {}
 def playsound(soundfile):
@@ -345,6 +352,12 @@ def playsound(soundfile):
         sound_cache[soundfile] = mixer.Sound(soundfile)
         sound_cache[soundfile].set_volume(0.5)
     sound_cache[soundfile].play()
+'''
+def playsound(soundfile):
+    try:
+        play_sound(soundfile, block=False)
+    except Exception as e:
+        print(f"Error playing sound {soundfile}: {e}") 
 
 def value_to_graph(value, min_value=-19, max_value=1, graph_length=12):
     value = max(min_value, min(max_value, value))
@@ -377,12 +390,10 @@ def connect_meshtastic(force_connect=False):
 
     # Initialize the event loop
     try:
-        loop = asyncio.get_event_loop()
-        # loop.run_forever()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        # Check if there's already a running loop
+        loop = asyncio.get_running_loop()
     except RuntimeError:
+        # No running loop, create and set a new one
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -3158,8 +3169,8 @@ if __name__ == "__main__":
 
     # Left Top Window
     text_box1 = create_text(frame, 0, 0, 25, 90)
-    insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \| '__/ _` |  / /  / _ \ / _` |/ _` |/ _ \ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \____/\___/|_|  \__,_| \____/\___/ \__, |\__, |\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
-    insert_colored_text(text_box1, "//\ESHT/\ST/C\n", "#00c983")
+    insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \\| '__/ _` |  / /  / _ \\ / _` |/ _` |/ _ \\ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \\____/\\___/|_|  \\__,_| \\____/\\___/ \\__, |\\__, |\\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
+    insert_colored_text(text_box1, "//\\ESHT/\\ST/C\n", "#00c983")
     insert_colored_text(text_box1, "\n Meshtastic Lora Logger v" + myversion + " (July 2025) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.insert("end", "─" * 60 + "\n", '#414141')
