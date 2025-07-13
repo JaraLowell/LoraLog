@@ -23,7 +23,7 @@ import threading
 import sqlite3
 # import ast
 # DEBUG
-# import yaml
+import yaml
 # import serial
 from aprslib import IS as aprsIS
 
@@ -41,6 +41,7 @@ from base64 import b64encode
 from pubsub import pub
 import meshtastic.remote_hardware
 import meshtastic.version
+from meshtastic.protobuf import portnums_pb2, telemetry_pb2, mesh_pb2
 from copy import deepcopy
 from json import load as json_load
 
@@ -436,6 +437,7 @@ def connect_meshtastic(force_connect=False):
     nodeInfo = meshtastic_client.getMyNodeInfo()
     logging.error("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
     insert_colored_text(text_box1, (' ' * 11) + "Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
+
     MyLoraID = nodeInfo['num']
     MyLora = (nodeInfo['user']['id'])[1:]
     MyLora_SN = nodeInfo['user']['shortName']
@@ -445,6 +447,19 @@ def connect_meshtastic(force_connect=False):
 
     print("MyLora: " + MyLora)
     root.wm_title("Meshtastic Lora Logger - !" + str(MyLora).upper() + " - " + unescape(MyLora_SN))
+
+    synctime = False
+    if 'lastHeard' in nodeInfo:
+        node_time = nodeInfo['lastHeard']
+        current_time = int(time.time())
+        time_diff = abs(current_time - node_time)
+        if node_time == 0 or time_diff > 600:  # If the node time is zero or off by more than 10 minutes
+            node_time_formatted = time.strftime("%H:%M:%S", time.localtime(node_time)) if node_time > 0 else "Unknown"
+            current_time_formatted = time.strftime("%H:%M:%S", time.localtime(current_time))
+            insert_colored_text(text_box1, (' ' * 11) + f"Node time off by {str(time_diff)} seconds, local time is {current_time_formatted} and node time is {node_time_formatted}.\n", "#db6544")
+            synctime = True
+    else:
+        synctime = True
 
     # logLora((nodeInfo['user']['id'])[1:], ['NODEINFO_APP', nodeInfo['user']['shortName'], nodeInfo['user']['longName'], nodeInfo['user']["macaddr"],nodeInfo['user']['hwModel']])
     ## NEED AD MY SELF TO LOG 1ST TIME
@@ -456,6 +471,11 @@ def connect_meshtastic(force_connect=False):
 
     nodeInfo = meshtastic_client.getNode('^local')
     ourNode = nodeInfo
+
+    if synctime:
+        ourNode.setTime(int(time.time()))
+        insert_colored_text(text_box1, (' ' * 11) + "Node time synchronized with local time.\n", "#c9a500")
+        time.sleep(1)
 
     # Lets get the Local Node's channels
     lora_config = nodeInfo.localConfig.lora
@@ -1023,6 +1043,7 @@ def on_meshtastic_message2(packet):
                                     if MapMarkers[nodehex][0].get_color() != '#2bd5ff' and nodehex != MyLora:
                                         MapMarkers[nodehex][0].set_color('#2bd5ff')
                                         MapMarkers[nodehex][0].change_icon(3)
+                                    MapMarkers[nodehex][2] = tnow
                                 dbcursor.execute("UPDATE node_info SET timerec = ? WHERE node_id = ?", (tnow, nbnodeid))
                             else:
                                 tmpsn = str(nodehex[-4:])
@@ -2169,10 +2190,11 @@ if __name__ == "__main__":
         return east_asian_width(char) in ('F', 'W', 'A')
 
     timetagclean = int(time.time())
+    buttons_changed = []
 
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, AprsMarkers, MyAPRSCall, tlast
-        global TemmpDB, DBChange, aprsondash, mqttdash, config, DBTotal, timetagclean
+        global TemmpDB, DBChange, aprsondash, mqttdash, config, DBTotal, timetagclean, buttons_changed
         start = time.perf_counter()
         tnow = int(time.time())
 
@@ -2182,13 +2204,18 @@ if __name__ == "__main__":
         else:
             map_oldnode = 5400
 
+        # Check if values changed and update buttons_changed list
+        current_values = [drawoldnodes, map_oldnode]
+        if current_values != buttons_changed:
+            buttons_changed = current_values
+            DBChange = True
+
         if ok2Send != 0:
             ok2Send -= 1
             if ok2Send < 0: ok2Send = 0
 
         text_box_middle.configure(state="normal")
         current_view = text_box_middle.yview()
-
         text_box_middle.delete("1.0", 'end')
         # Cleat tags that are not needed anymore every 15 minutes
         if (tnow - timetagclean) > 900:
@@ -2814,7 +2841,6 @@ if __name__ == "__main__":
     # A Litle Fun with Weather, using the json file from a weather station and sending it to mesh
     if config.get('meshtastic', 'weatherbeacon') == 'True':
         from urllib.request import urlopen
-        from meshtastic.protobuf import portnums_pb2, telemetry_pb2, mesh_pb2
 
     # Under construction, not sure yet if this be correct; needs testing!
     # option to manually send NeighborInfo
