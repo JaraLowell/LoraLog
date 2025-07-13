@@ -17,7 +17,7 @@ import threading
 import sqlite3
 # import ast
 # DEBUG
-import yaml
+# import yaml
 # import serial
 from aprslib import IS as aprsIS
 
@@ -1173,7 +1173,7 @@ def updatesnodes():
     with dbconnection:
         cursor = dbconnection.cursor()
         for nodes, info in meshtastic_client.nodes.items():
-            print(yaml.dump(info), end='\n')
+            # print(yaml.dump(info), end='\n')
             nodeID = str(info['user']['id'])[1:]
             if nodeID == '': nodeID = idToHex(info["num"])[1:]
             result = cursor.execute("SELECT * FROM node_info WHERE node_id = ?", (info["num"],)).fetchone()
