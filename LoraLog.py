@@ -100,7 +100,6 @@ pingcount = 0
 incoming_uptime = 0
 package_received_time = 0
 zoomhome = 0
-ourNode = None
 NIenabled = False
 ThisFont = ('Fixedsys', int(10))
 aprs_interface = None
@@ -394,7 +393,7 @@ def format_number(n):
         return f'{n:,}'
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_Alt, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode, startup_complete, config, wereset
+    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_Alt, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, startup_complete, config, wereset
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -3089,7 +3088,7 @@ if __name__ == "__main__":
 
     # The Node Configuration Frame still a work in progress, for now the LoRa settings seem to be working; more to come
     def create_config_frame():
-        global config_frame, meshtastic_client, ourNode, MyLora_LN, MyLora_SN, NIenabled, ThisFont
+        global config_frame, meshtastic_client, MyLora_LN, MyLora_SN, NIenabled, ThisFont
         if meshtastic_client is None:
             return
         style = ttk.Style()
@@ -3118,6 +3117,7 @@ if __name__ == "__main__":
         # framePos = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         # config.notebook.add(framePos, text='Position')
         # print(ourNode.localConfig.position)
+        ourNode = meshtastic_client.localNode
 
         frameLora = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
         config.notebook.add(frameLora, text='LoRa')
@@ -3195,6 +3195,7 @@ if __name__ == "__main__":
         meshtastic_client.localNode.resetNodeDb()
 
     def save_mqtt_config(config):
+        ourNode = meshtastic_client.localNode
         prev = deepcopy(ourNode.moduleConfig.mqtt)
         ourNode.moduleConfig.mqtt.enabled = config.mqttenabled.get()
         ourNode.moduleConfig.mqtt.address = config.mqttaddress.get()
@@ -3208,6 +3209,7 @@ if __name__ == "__main__":
         toggle_frames()
 
     def save_neighbor_config(config):
+        ourNode = meshtastic_client.localNode
         prev = deepcopy(ourNode.moduleConfig.neighbor_info)
         ourNode.moduleConfig.neighbor_info.enabled = config.nbenabled.get()
         ourNode.moduleConfig.neighbor_info.update_interval = config.nbinterval.get()
@@ -3218,7 +3220,8 @@ if __name__ == "__main__":
         toggle_frames()
 
     def save_user_config(config):
-        global config_frame, meshtastic_client, ourNode
+        global config_frame, meshtastic_client
+        ourNode = meshtastic_client.localNode
         if config.longName.get() != '' and config.shortName.get() != '' and (config.longName.get() != MyLora_LN or config.shortName.get() != MyLora_SN):
             MyLora_LN = config.longName.get()
             MyLora_SN = config.shortName.get()[:4]
@@ -3228,7 +3231,8 @@ if __name__ == "__main__":
         toggle_frames()
 
     def save_lora_config(config):
-        global config_frame, meshtastic_client, ourNode
+        global config_frame, meshtastic_client
+        ourNode = meshtastic_client.localNode
         prev = deepcopy(ourNode.localConfig.lora)
         ourNode.localConfig.lora.hop_limit = config.hop_limit.get()
         ourNode.localConfig.lora.override_duty_cycle = config.override_duty_cycle.get()
