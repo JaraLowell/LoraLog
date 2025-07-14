@@ -113,6 +113,7 @@ aprsondash = False
 mqttdash = False
 myversion = "1.4.6"
 wereset = False
+updatetime = time.perf_counter()
 
 def showLink(event):
     try:
@@ -393,7 +394,7 @@ def format_number(n):
         return f'{n:,}'
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_Alt, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode, startup_complete, config
+    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_Alt, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode, startup_complete, config, wereset
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -2069,7 +2070,7 @@ if __name__ == "__main__":
 
     def update_position_and_height(nodeid, lat = -8.0, lon = -8.0, alt = 0):
         if lat != -8.0 and lon != -8.0:
-            global dbconnection, MapMarkers, MyLora_Lat, MyLora_Lon, MyLora_Alt, meshtastic_client, MyLora
+            global dbconnection, MapMarkers, MyLora_Lat, MyLora_Lon, MyLora_Alt, meshtastic_client, MyLora, zoomhome
             nodelat = round(float(lat),7)
             nodelon = round(float(lon),7)
             node_dist = 0.0
@@ -2089,7 +2090,7 @@ if __name__ == "__main__":
                 if MyLora not in MapMarkers:
                     MapMarkers[MyLora] = [None, False, int(time.time()), None, None, 0, None, None]
                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ThisFont, data=MyLora, command = click_command)
-                    zoomhome += 1
+                    zoomhome = 2
                 elif MapMarkers[MyLora][0] != None:
                     MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
                     MapMarkers[MyLora][0].change_icon(1)
@@ -2288,7 +2289,7 @@ if __name__ == "__main__":
     def update_active_nodes():
         global MyLora, MyLoraText1, MyLoraText2, tlast, MapMarkers, ok2Send, peekmem, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, AprsMarkers, MyAPRSCall, tlast
         global TemmpDB, DBChange, aprsondash, mqttdash, config, DBTotal, timetagclean, buttons_changed
-        start = time.perf_counter()
+        updatetime = time.perf_counter()
         tnow = int(time.time())
 
         drawoldnodes = mapview.draw_oldnodes
@@ -2382,18 +2383,23 @@ if __name__ == "__main__":
                 node_lat = row[9]
                 node_lon = row[10]
                 node_range = row[24]
+                node_dist = ' '
+                if node_range != 0.0: node_dist = "%.1f" % node_range + "km"
                 nameadj = 11
                 if len(node_name) == 1:
                     if is_full_width(node_name): nameadj = 10;
 
                 if tnow - node_time >= map_delete:
                     if row[25] == False:
+                        if mqttdash or row[15] == False:
+                            node_wtime = ez_date(tnow - node_time).rjust(10)
+                            insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
+                            insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#aaaaaa", tag=str(node_id))
+                            insert_colored_text(text_box_middle, f"{node_wtime}\n")
+                            insert_colored_text(text_box_middle, f" {node_dist}\n")
                         checknode(node_id, 4, '#aaaaaa', node_lat, node_lon, node_name, True, node_time)
                 else:
                     node_wtime = ez_date(tnow - node_time).rjust(10)
-                    node_dist = ' '
-                    if node_range != 0.0:
-                        node_dist = "%.1f" % node_range + "km"
                     if row[25] == True:
                         insert_colored_text(text_box_middle, ('-' * 23) + '\n', "#414141")
                         insert_colored_text(text_box_middle, f" {node_name.ljust(nameadj)}", "#a1a1ff")
@@ -2442,7 +2448,7 @@ if __name__ == "__main__":
         insert_colored_text(text_box_middle, f'\n On Map  : {str(len(MapMarkers))}')
         if DBTotal != 0:
             insert_colored_text(text_box_middle, f'/{str(DBTotal)}')
-        time1 = (time.perf_counter() - start) * 1000
+        time1 = ((time.perf_counter() - updatetime) * 1000) - 1.0
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms')
 
         time1 = Process(os.getpid()).memory_full_info()[-1] / 1024 ** 2 # Process(os.getpid()).memory_info().rss / 1024 ** 2
@@ -2458,7 +2464,7 @@ if __name__ == "__main__":
         text_box_middle.yview_moveto(current_view[0])
         text_box_middle.configure(state="disabled")
 
-        root.after(900, update_paths_nodes)
+        root.after(500, update_paths_nodes)
     ### end
 
     # Function to unbind tags for a specific range
@@ -2758,7 +2764,8 @@ if __name__ == "__main__":
                 insert_colored_text(text_box2, updated_nodes, "#2bd5ff")
 
     def update_paths_nodes():
-        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion, DBTotal
+        global MyLora, MapMarkers, tlast, pingcount, overlay, dbconnection, mapview, map_oldnode, metrics_age, map_delete, max_lines, map_trail_age, root, MyLora_Lat, MyLora_Lon, zoomhome, aprs_interface, config, text_boxes, listener_thread, aprsbeacon, MyLoraText1, MyAPRSCall, TemmpDB, myversion, DBTotal, updatetime
+        updatetime = time.perf_counter()
         tnow = int(time.time())
 
         if MyLora_Lat != -8.0 and MyLora_Lon != -8.0 and zoomhome != 0 and zoomhome <= 3:
@@ -2929,7 +2936,7 @@ if __name__ == "__main__":
                     except Exception as reconnect_error:
                         logging.error(f"Error handling lost connection: {reconnect_error}")
 
-        root.after(1000, update_active_nodes)
+        root.after(500, update_active_nodes)
 
     # A Litle Fun with Weather, using the json file from a weather station and sending it to mesh
     if config.get('meshtastic', 'weatherbeacon') == 'True':
@@ -3078,7 +3085,7 @@ if __name__ == "__main__":
             # mmtext ='“Have you ever noticed that anybody driving slower than you is an idiot, and anyone going faster than you is a maniac?”'
             get_messages()
             # add_message(text_box3, MyLora, mmtext, int(time.time()), private=False, msend=True)
-            root.after(1000, update_active_nodes)  # Schedule the next update in 30 seconds
+            root.after(500, update_active_nodes)  # Schedule the next update in 30 seconds
 
     # The Node Configuration Frame still a work in progress, for now the LoRa settings seem to be working; more to come
     def create_config_frame():
@@ -3293,10 +3300,10 @@ if __name__ == "__main__":
     aprsondash = ui_config['display']['aprs_dashboard']
 
     if os.path.exists('LoraLog.ini'):
-        print(f"Geometry set to {ui_config['window']['geometry']}")
         root.geometry(str(ui_config['window']['geometry']))
         if ui_config['window']['fullscreen']:
             root.attributes("-fullscreen", True)
+        zoomhome = 10
     else:
         root.geometry(f"{screen_width}x{screen_height}+10+10")
 
@@ -3444,6 +3451,10 @@ if __name__ == "__main__":
     if hasattr(mapview, 'draw_oldnodes'):
         mapview.draw_oldnodes = not ui_config['map']['draw_oldnodes']
         mapview.toggle_oldnodes()
+
+    # ui_config done we can clean and delete the global variable
+    ui_config = None
+    del ui_config
 
     # Config Window
     config_frame = None
