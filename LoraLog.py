@@ -2387,7 +2387,7 @@ if __name__ == "__main__":
                 if node_range != 0.0: node_dist = "%.1f" % node_range + "km"
                 nameadj = 11
                 if len(node_name) == 1:
-                    if is_full_width(node_name): nameadj = 10;
+                    if is_full_width(node_name): nameadj = 10
 
                 if tnow - node_time >= map_delete:
                     if row[25] == False:
