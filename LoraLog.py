@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import time
+import platform
 from datetime import datetime, timedelta, timezone
 from sys import exit
 import asyncio
@@ -45,6 +46,13 @@ from meshtastic.protobuf import portnums_pb2, telemetry_pb2, mesh_pb2
 from copy import deepcopy
 from json import load as json_load
 
+'''
+reboot node       : meshtastic_client.localNode.reboot()
+remove node       : meshtastic_client.localNode.removeNode(nodeid)
+reset node db     : meshtastic_client.localNode.resetNodeDb()
+request pos       : meshtastic_client.sendPosition(destinationId=args.dest, wantResponse=True, channelIndex=channelIndex)
+request telemetry : meshtastic_client.sendTelemetry(destinationId=args.dest, wantResponse=True, channelIndex=channelIndex)
+'''
 import queue
 message_queue = queue.Queue()
 startup_complete = False
@@ -461,6 +469,11 @@ def connect_meshtastic(force_connect=False):
     else:
         synctime = True
 
+    if synctime:
+        meshtastic_client.localNode.setTime(int(time.time()))
+        insert_colored_text(text_box1, (' ' * 11) + "Node time synchronized with local time.\n", "#c9a500")
+        time.sleep(1)
+
     # logLora((nodeInfo['user']['id'])[1:], ['NODEINFO_APP', nodeInfo['user']['shortName'], nodeInfo['user']['longName'], nodeInfo['user']["macaddr"],nodeInfo['user']['hwModel']])
     ## NEED AD MY SELF TO LOG 1ST TIME
 
@@ -471,11 +484,6 @@ def connect_meshtastic(force_connect=False):
 
     nodeInfo = meshtastic_client.getNode('^local')
     ourNode = nodeInfo
-
-    if synctime:
-        ourNode.setTime(int(time.time()))
-        insert_colored_text(text_box1, (' ' * 11) + "Node time synchronized with local time.\n", "#c9a500")
-        time.sleep(1)
 
     # Lets get the Local Node's channels
     lora_config = nodeInfo.localConfig.lora
@@ -589,7 +597,7 @@ def on_lost_meshtastic_connection(interface):
         logging.error("Error closing connection: %s", str(e))
     time.sleep(12)
     root.meshtastic_interface = connect_meshtastic(force_connect=True)
- 
+
 def on_meshtastic_connection(interface, topic=pub.AUTO_TOPIC):
     print("Connected to meshtastic")
 
@@ -690,7 +698,8 @@ def deloldheard(deltime):
         del HeardDB[key]
 
 def adjust_rx_time(rx_time):
-    rx_datetime = datetime.fromtimestamp(rx_time)
+    # Convert UTC timestamp to local datetime
+    rx_datetime = datetime.fromtimestamp(rx_time, tz=timezone.utc).astimezone()
     current_local_time = datetime.now()
     # if bigger then 6 hours or 0 then set to current time
     if rx_time == 0 or abs((current_local_time - rx_datetime).total_seconds()) > 21600:
@@ -746,7 +755,10 @@ def on_meshtastic_message2(packet):
     if "hopStart" in packet:
         hopStart = packet.get('hopStart', 0) - packet.get('hopLimit', 0) # packet.get('hopStart', -1)
 
-    adjusted_time = adjust_rx_time(packet.get('rx_time', 0)).strftime("%H:%M:%S")
+    if "rx_time" in packet and (packet['rx_time'] is not None or packet['rx_time'] != 0):
+        adjusted_time = datetime.fromtimestamp(packet['rx_time']).strftime("%H:%M:%S")
+    else:
+        adjusted_time = time.strftime("%H:%M:%S", time.localtime(tnow))
 
     with dbconnection:
         dbcursor = dbconnection.cursor()
@@ -1993,7 +2005,7 @@ if __name__ == "__main__":
 
     def update_position_and_height(nodeid, lat = -8.0, lon = -8.0, alt = 0.0):
         if lat != -8.0 and lon != -8.0:
-            global dbconnection, MapMarkers, MyLora_Lat, MyLora_Lon
+            global dbconnection, MapMarkers, MyLora_Lat, MyLora_Lon, meshtastic_client, MyLora
             nodelat = round(float(lat),7)
             nodelon = round(float(lon),7)
             node_dist = 0.0
@@ -2006,12 +2018,28 @@ if __name__ == "__main__":
             dbconnection.commit()
             dbcursor.close()
 
-            if nodeid in MapMarkers:
+            if nodeid == MyLora:
+                MyLora_Lat = nodelat
+                MyLora_Lon = nodelon
+                if MyLora not in MapMarkers:
+                    MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
+                    MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ThisFont, data=MyLora, command = click_command)
+                    zoomhome += 1
+                elif MapMarkers[MyLora][0] != None:
+                    MapMarkers[MyLora][0].set_position(MyLora_Lat, MyLora_Lon)
+                    MapMarkers[MyLora][0].change_icon(1)
+                    if MapMarkers[MyLora][6] != None:
+                        MapMarkers[MyLora][6].set_position(MyLora_Lat, MyLora_Lon)
+                    redrawnaibors(nodeid)
+                # Need update our own meshtastic node to this position (posibly causes a reset of the node)
+                meshtastic_client.localNode.setFixedPosition(nodelat, nodelon, int(alt))
+            elif nodeid in MapMarkers:
                 if MapMarkers[nodeid][0] != None:
                     MapMarkers[nodeid][0].set_position(nodelat, nodelon)
                     # MapMarkers[fromraw][0].set_text(fromname)
                 if MapMarkers[nodeid][6] != None:
                     MapMarkers[nodeid][6].set_position(nodelat, nodelon)
+                redrawnaibors(nodeid)
 
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] ", "#d1d1d1")
             insert_colored_text(text_box2, f"Updating !{nodeid} position : {lat}/{lon}, {alt}m\n", "#2bd5ff")
