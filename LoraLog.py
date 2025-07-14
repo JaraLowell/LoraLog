@@ -45,7 +45,8 @@ import meshtastic.version
 from meshtastic.protobuf import portnums_pb2, telemetry_pb2, mesh_pb2
 from copy import deepcopy
 from json import load as json_load
-
+from json import dump as json_dump
+from json import loads as json_loads
 '''
 reboot node       : meshtastic_client.localNode.reboot()
 remove node       : meshtastic_client.localNode.removeNode(nodeid)
@@ -305,9 +306,6 @@ def get_data_for_node(database, nodeID, days=3):
     result = cursor.execute(query, (nodeID,)).fetchall()
     cursor.close()
     return result
-
-def safedatabase():
-     logging.error("Database saved!")
 
 #----------------------------------------------------------- Config File Handle ------------------------------------------------------------------------
 config = ConfigParser()
@@ -1742,15 +1740,63 @@ if __name__ == "__main__":
     gc.enable()
     isLora = True
 
+    def load_ui_config():
+        default_config = {
+            'window': {'geometry': f"1280x720+10+10", 'fullscreen': False},
+            'display': {'mqtt_dashboard': False, 'aprs_dashboard': False},
+            'map': {'draw_trail': False, 'draw_heard': True, 'draw_range': False, 'draw_oldnodes': False, 'oldnodes_filter': '24hours', 'zoom': 1, 'position': (48.860381, 2.338594)},
+        }
+        if not os.path.exists('LoraLog.ini'):
+            return default_config
+        try:
+            with open("LoraLog.ini", "r") as ini_file:
+                content = ini_file.read()
+                ui_config = json_loads(content)
+                for section in default_config:
+                    if section not in ui_config:
+                        ui_config[section] = default_config[section]
+                    else:
+                        for key in default_config[section]:
+                            if key not in ui_config[section]:
+                                ui_config[section][key] = default_config[section][key]
+                return ui_config
+        except Exception as e:
+            logging.error(f"Error loading UI config: {e}")
+            return default_config
+
+    def save_ui_config():
+        """Save UI configuration to file"""
+        global root, mqttdash, aprsondash, mapview, MyLora_Lat, MyLora_Lon
+        ui_config = {
+            'window': {
+                'geometry': root.geometry(),
+                'fullscreen': root.attributes('-fullscreen') if hasattr(root, 'attributes') else False
+            },
+            'display': {
+                'mqtt_dashboard': mqttdash,
+                'aprs_dashboard': aprsondash
+            },
+            'map': {
+                'draw_trail': mapview.draw_trail if hasattr(mapview, 'draw_trail') else False,
+                'draw_heard': mapview.draw_heard if hasattr(mapview, 'draw_heard') else True,
+                'draw_range': mapview.draw_range if hasattr(mapview, 'draw_range') else False,
+                'draw_oldnodes': mapview.draw_oldnodes if hasattr(mapview, 'draw_oldnodes') else True,
+                'oldnodes_filter': mapview.oldnodes_filter if hasattr(mapview, 'oldnodes_filter') else "24hours",
+                'zoom': mapview.zoom,
+                'position': mapview.get_position() if MyLora_Lat != -8.0 and MyLora_Lon != -8.0 else (48.860381, 2.338594)
+            },
+        }
+        try:
+            with open("LoraLog.ini", 'w') as ini_file:
+                json_dump(ui_config, ini_file, indent=2)
+        except Exception as e:
+            logging.error(f"Error saving UI config: {e}")
+
     def on_closing():
         global isLora, meshtastic_client, mapview, root, dbconnection, aprs_interface, listener_thread
         isLora = False
         # Store window size and location in a file, to load on restart
-        try:
-            with open("LoraLog.ini", 'w') as ini_file:
-                ini_file.write(root.geometry())
-        except Exception as e:
-            logging.error("Error saving window size: ", str(e))
+        save_ui_config()
 
         if aprs_interface is not None:
             aprs_interface.close()
@@ -3167,9 +3213,11 @@ if __name__ == "__main__":
     def save_user_config(config):
         global config_frame, meshtastic_client, ourNode
         if config.longName.get() != '' and config.shortName.get() != '' and (config.longName.get() != MyLora_LN or config.shortName.get() != MyLora_SN):
-            ourNode.setOwner(long_name=config.longName.get(), short_name=config.shortName.get()[:4], is_licensed=False)
+            MyLora_LN = config.longName.get()
+            MyLora_SN = config.shortName.get()[:4]
             insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "]", "#d1d1d1")
             insert_colored_text(text_box2, " Sending user config to node...\n", "#db6544")
+            ourNode.setOwner(long_name=MyLora_LN, short_name=MyLora_SN, is_licensed=False)
         toggle_frames()
 
     def save_lora_config(config):
@@ -3204,6 +3252,7 @@ if __name__ == "__main__":
 
     # Migt boost visuals a bit, but this might also be internet gosib, so not sure yet
     windll.shcore.SetProcessDpiAwareness(1)
+    ui_config = load_ui_config()
 
     root = CTk()
     root.title("Meshtastic Lora Logger")
@@ -3240,14 +3289,14 @@ if __name__ == "__main__":
     screen_height = max(screen_height, 720)  # Minimum height (maintains 16:9)
 
     overlay = None
+    mqttdash = ui_config['display']['mqtt_dashboard']
+    aprsondash = ui_config['display']['aprs_dashboard']
+
     if os.path.exists('LoraLog.ini'):
-        try:
-            with open("LoraLog.ini", "r") as conf: 
-                root.geometry(conf.read())
-                overlay = 1
-        except Exception as e:
-            logging.error(f"Error loading window size: {e}")
-            root.geometry(f"{screen_width}x{screen_height}+10+10")  # Default to full screen if error occurs
+        print(f"Geometry set to {ui_config['window']['geometry']}")
+        root.geometry(str(ui_config['window']['geometry']))
+        if ui_config['window']['fullscreen']:
+            root.attributes("-fullscreen", True)
     else:
         root.geometry(f"{screen_width}x{screen_height}+10+10")
 
@@ -3335,8 +3384,8 @@ if __name__ == "__main__":
     mapview = TkinterMapView(frame_right, padx=0, pady=0, bg_color='#242424', corner_radius=0, database_path=database_path, use_filter=myfilter)
     mapview.pack(fill='both', expand=True) # grid(row=0, column=0, sticky='nsew')
     mapview.set_tile_server(config.get('meshtastic', 'map_tileserver'), max_zoom=20)
-    mapview.set_position(48.860381, 2.338594)
-    mapview.set_zoom(1)
+    mapview.set_position(*ui_config['map']['position'])
+    mapview.set_zoom(ui_config['map']['zoom'])
 
     is_mapfullwindow = False
     def toggle_map(event=None):
@@ -3380,6 +3429,21 @@ if __name__ == "__main__":
 
     # we grab this file from https://meshtastic.liamcottle.net/api/v1/nodes
     root.bind('<F9>', lambda event: update_missing_latlon_from_json(r"nodes.json"))
+
+    if hasattr(mapview, 'draw_trail'):
+        mapview.draw_trail = not ui_config['map']['draw_trail']
+        mapview.toggle_trail()
+    if hasattr(mapview, 'draw_heard'):
+        mapview.draw_heard = not ui_config['map']['draw_heard']
+        mapview.toggle_heard()
+    if hasattr(mapview, 'draw_range'):
+        mapview.draw_range = not ui_config['map']['draw_range']
+        mapview.toggle_range()
+    if hasattr(mapview, 'set_oldnodes_filter'):
+        mapview.set_oldnodes_filter(ui_config['map']['oldnodes_filter'])
+    if hasattr(mapview, 'draw_oldnodes'):
+        mapview.draw_oldnodes = not ui_config['map']['draw_oldnodes']
+        mapview.toggle_oldnodes()
 
     # Config Window
     config_frame = None
@@ -3498,6 +3562,5 @@ if __name__ == "__main__":
     try:
         root.mainloop()
     except Exception as e:
-        safedatabase()
         logging.error("Error : ", str(e))
         exit()

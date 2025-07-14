@@ -49,7 +49,7 @@ class TkinterMapView(tkinter.Frame):
 
         self.draw_trail = False
         self.draw_range = False
-        self.draw_heard = True
+        self.draw_heard = False
         self.draw_oldnodes = False
         self.oldnodes_filter = "24hours"  # Options: "7days", "1month", "all"
 
@@ -101,7 +101,7 @@ class TkinterMapView(tkinter.Frame):
 
         # Canvas Buttons Extra
         self.btoggle_trail  = CanvasButton(self, (20, 120), text="☈", command=self.toggle_trail)
-        self.btoggle_heard  = CanvasButton(self, (20, 160), text="⇢", command=self.toggle_heard, fg="#00c27e")
+        self.btoggle_heard  = CanvasButton(self, (20, 160), text="⇢", command=self.toggle_heard)
         self.btoggle_range  = CanvasButton(self, (20, 200), text="⚆", command=self.toggle_range)
         self.btoggle_oldnodes = CanvasButton(self, (20, 240), text="☠", command=self.toggle_oldnodes)
 
