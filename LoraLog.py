@@ -2658,7 +2658,7 @@ if __name__ == "__main__":
                 text_widget = text_boxes['APRS Message']
                 insert_colored_text(text_widget, banner, '#ffa1a1', center=False, tag=None)
                 logging.warning(f"Connected to APRS-IS: {host}:{port} > {banner}")
-                mypass = aprs_passcode(config.get('APRS', 'passcode'))
+                mypass = config.get('APRS', 'passcode')
                 if mypass.capitalize() == 'AUTO':
                     mypass = aprs_passcode(config.get('APRS', 'callsign')) # Crerate a passcode for callsign
                     logging.warning(f"Auto generated passcode for {config.get('APRS', 'callsign')} is {mypass}")
