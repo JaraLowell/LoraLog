@@ -11,3 +11,4 @@ venv/
 *.log
 *.ini
 version_info.txt
+nodes.json

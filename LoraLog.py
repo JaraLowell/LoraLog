@@ -88,6 +88,7 @@ MyLora_SN = ''
 MyLora_LN = ''
 MyLora_Lat = -8.0
 MyLora_Lon = -8.0
+MyLora_Alt = 0
 MyLoraText1 = ''
 MyLoraText2 = ''
 MyAPRSCall = ''
@@ -109,7 +110,8 @@ TemmpDB = None
 DBChange = True
 aprsondash = False
 mqttdash = False
-myversion = "1.4.5"
+myversion = "1.4.6"
+wereset = False
 
 def showLink(event):
     try:
@@ -393,7 +395,7 @@ def format_number(n):
         return f'{n:,}'
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode, startup_complete, config
+    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_Alt, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, ourNode, startup_complete, config
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -442,6 +444,10 @@ def connect_meshtastic(force_connect=False):
                 logging.error("Could not connect: " + str(e))
                 isLora = False
                 return None
+    
+    if config.get('meshtastic', 'interface') != 'tcp':
+        insert_colored_text(text_box1, (' ' * 11) + "Due a bug in Mestastic CLI, You might have to close and re-open program if stuck in reset loop", "#db6544")
+
     nodeInfo = meshtastic_client.getMyNodeInfo()
     logging.error("Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'])
     insert_colored_text(text_box1, (' ' * 11) + "Connected to " + nodeInfo['user']['id'] + " > "  + nodeInfo['user']['shortName'] + " / " + nodeInfo['user']['longName'] + " using a " + nodeInfo['user']['hwModel'] + "\n", "#00c983")
@@ -480,7 +486,16 @@ def connect_meshtastic(force_connect=False):
     if 'position' in nodeInfo and 'latitude' in nodeInfo['position']:
         MyLora_Lat = round(nodeInfo['position']['latitude'],7)
         MyLora_Lon = round(nodeInfo['position']['longitude'],7)
+        MyLora_Alt = nodeInfo['position'].get('altitude', 0)
+        insert_colored_text(text_box1, (' ' * 11) + "Node position: Lat: " + str(MyLora_Lat) + ", Lon: " + str(MyLora_Lon) + ", Alt: " + str(MyLora_Alt) + "\n", "#00c983")
         zoomhome += 1
+    elif wereset:
+        if MyLora_Lat == -8.0 and MyLora_Lon == -8.0:
+             insert_colored_text(text_box1, (' ' * 11) + "NodeDB Reset position loss, resending previous Lat/Lon!\n", "#db6544")
+             meshtastic_client.localNode.setFixedPosition(MyLora_Lat, MyLora_Lon, MyLora_Alt)
+        wereset = False
+    else:
+        insert_colored_text(text_box1, (' ' * 11) + "No position data available for this node!\n", "#db6544")
 
     nodeInfo = meshtastic_client.getNode('^local')
     ourNode = nodeInfo
@@ -721,7 +736,7 @@ def on_meshtastic_message(packet, interface, loop=None):
 
 def on_meshtastic_message2(packet):
     # print(yaml.dump(packet), end='\n\n')
-    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, incoming_uptime, package_received_time, DBChange, zoomhome
+    global MyLora, MyLoraText1, MyLoraText2, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, MyLora_Alt, incoming_uptime, package_received_time, DBChange, zoomhome
     if MyLora == '':
         print('*** MyLora is empty ***\n')
         # return
@@ -955,6 +970,7 @@ def on_meshtastic_message2(packet):
                         if fromraw == MyLora:
                             MyLora_Lat = nodelat
                             MyLora_Lon = nodelon
+                            MyLora_Alt = nodealt
                             if MyLora not in MapMarkers:
                                 MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
                                 MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ThisFont, data=MyLora, command = click_command)
@@ -1211,7 +1227,7 @@ def on_meshtastic_message2(packet):
         dbcursor.close()
 
 def updatesnodes():
-    global MyLora, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, MyLora_SN, MyLora_LN, zoomhome
+    global MyLora, MapMarkers, dbconnection, MyLora_Lat, MyLora_Lon, MyLora_Alt, MyLora_SN, MyLora_LN, zoomhome
     info = ''
     tnow = int(time.time())
     with dbconnection:
@@ -1266,9 +1282,11 @@ def updatesnodes():
                                 if nodelat != -8.0 and nodelon != -8.0 and result[9] == -8.0 and result[10] == -8.0:
                                     MyLora_Lat = nodelat
                                     MyLora_Lon = nodelon
+                                    MyLora_Alt = nodealt
                                 else:
                                     MyLora_Lat = result[9]
                                     MyLora_Lon = result[10]
+                                    MyLora_Alt = result[11]
 
                                 if MyLora not in MapMarkers:
                                     MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
@@ -2003,9 +2021,9 @@ if __name__ == "__main__":
         close_button = Button(button_frame, image=btn_img, command=lambda: close_overlay(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Close Chat", compound="center", fg='#d1d1d1', font=ThisFont)
         close_button.pack(side='left', padx=2)
 
-    def update_position_and_height(nodeid, lat = -8.0, lon = -8.0, alt = 0.0):
+    def update_position_and_height(nodeid, lat = -8.0, lon = -8.0, alt = 0):
         if lat != -8.0 and lon != -8.0:
-            global dbconnection, MapMarkers, MyLora_Lat, MyLora_Lon, meshtastic_client, MyLora
+            global dbconnection, MapMarkers, MyLora_Lat, MyLora_Lon, MyLora_Alt, meshtastic_client, MyLora
             nodelat = round(float(lat),7)
             nodelon = round(float(lon),7)
             node_dist = 0.0
@@ -2021,8 +2039,9 @@ if __name__ == "__main__":
             if nodeid == MyLora:
                 MyLora_Lat = nodelat
                 MyLora_Lon = nodelon
+                MyLora_Alt = int(alt)
                 if MyLora not in MapMarkers:
-                    MapMarkers[MyLora] = [None, False, tnow, None, None, 0, None, None]
+                    MapMarkers[MyLora] = [None, False, int(time.time()), None, None, 0, None, None]
                     MapMarkers[MyLora][0] = mapview.set_marker(MyLora_Lat, MyLora_Lon, text=unescape(MyLora_SN), icon_index=1, text_color = '#e67a7f', font = ThisFont, data=MyLora, command = click_command)
                     zoomhome += 1
                 elif MapMarkers[MyLora][0] != None:
@@ -3018,6 +3037,8 @@ if __name__ == "__main__":
     # The Node Configuration Frame still a work in progress, for now the LoRa settings seem to be working; more to come
     def create_config_frame():
         global config_frame, meshtastic_client, ourNode, MyLora_LN, MyLora_SN, NIenabled, ThisFont
+        if meshtastic_client is None:
+            return
         style = ttk.Style()
         style.configure(".", font=ThisFont)
         style.theme_use('classic')
@@ -3025,7 +3046,8 @@ if __name__ == "__main__":
         style.configure("TEntry", background="#242424", foreground="#000000", borderwidth=0, border=0, highlightthickness=0, font=ThisFont)
         style.configure("TCheckbutton", background="#242424", foreground="#d1d1d1", borderwidth=0, border=0, highlightthickness=0, font=ThisFont)
         style.map('TCheckbutton', indicatorcolor=[('selected', 'green'), ('pressed', 'gray')], background = [('disabled', '#242424'), ('pressed', '!focus', '#242424'), ('active', '#242424')], foreground = [('disabled', '#d1d1d1'), ('pressed', '#d1d1d1'), ('active', '#d1d1d1')])
-        style.configure("TButton", borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", compound="center", foreground='#000000', font=ThisFont)
+        style.configure("TButton", borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", compound="center", foreground='#000000', font=(ThisFont[0], ThisFont[1] + 2, 'bold'))
+        style.map("TButton", background=[('active', '#242424'), ('pressed', '#242424')], foreground=[('active', '#d1d1d1'), ('pressed', '#d1d1d1')], relief=[('pressed', 'sunken'), ('!pressed', 'solid')])
         config.notebook = ttk.Notebook(config_frame, style='TNotebook')
         config.notebook.pack(expand=True, fill='both')
 
@@ -3090,6 +3112,35 @@ if __name__ == "__main__":
         ttk.Entry(frameNeighbor, textvariable=config.nbinterval).pack(pady=(0, 10))
         ttk.Button(frameNeighbor, text="Save", command=lambda: save_neighbor_config(config)).pack(pady=(40, 0))
 
+        frameOther = Frame(config.notebook, bg="#242424", borderwidth=0, highlightthickness=0, highlightcolor="#d1d1d1", highlightbackground="#d1d1d1", padx=2, pady=2)
+        config.notebook.add(frameOther, text='Other')
+        ttk.Label(frameOther, text="Reset the Meshtastic Node:").pack(pady=(20, 0))
+        ttk.Button(frameOther, text="Reboot Node", width=30, command=lambda: rebootnode()).pack(pady=(5, 0))
+        ttk.Label(frameOther, text="Reset the Meshtastic Node internal Datbase:").pack(pady=(20, 0))
+        ttk.Button(frameOther, text="Reset NodeDB", width=30, command=lambda: resetnodedb()).pack(pady=(5, 0))
+        # reboot node       : meshtastic_client.localNode.reboot()
+        # reset node db     : meshtastic_client.localNode.resetNodeDb()
+        # Button(padding_frame, image=btn_img, command=lambda: prechat_chan(), borderwidth=0, border=0, bg='#242424', activebackground='#242424', highlightthickness=0, highlightcolor="#242424", text="Send Message", compound="center", fg='#d1d1d1', font=ThisFont)
+
+    def rebootnode():
+        global meshtastic_client
+        if meshtastic_client is None:
+            return
+        toggle_frames()
+        insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] ", "#d1d1d1")
+        insert_colored_text(text_box2, " Rebooting Node...\n", "#db6544")
+        meshtastic_client.localNode.reboot()
+
+    def resetnodedb():
+        global meshtastic_client, wereset
+        if meshtastic_client is None:
+            return
+        toggle_frames()
+        insert_colored_text(text_box2, "[" + time.strftime("%H:%M:%S", time.localtime()) + "] ", "#d1d1d1")
+        insert_colored_text(text_box2, " Resetting Node Database...\n", "#db6544")
+        wereset = True
+        meshtastic_client.localNode.resetNodeDb()
+
     def save_mqtt_config(config):
         prev = deepcopy(ourNode.moduleConfig.mqtt)
         ourNode.moduleConfig.mqtt.enabled = config.mqttenabled.get()
@@ -3137,6 +3188,10 @@ if __name__ == "__main__":
         toggle_frames()
 
     def toggle_frames():
+        global meshtastic_client
+        if meshtastic_client is None:
+            return
+
         if frame.winfo_viewable():
             frame.grid_remove()
             config_frame.grid()

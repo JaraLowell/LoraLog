@@ -445,7 +445,11 @@ class TkinterMapView(tkinter.Frame):
         self.canvas.lift("signal_text_bg")  # Text background above path lines
         self.canvas.lift("signal_text")     # Text above text background
         self.canvas.lift("signal")
+        self.canvas.lift("marker_text_aprs")
+        self.canvas.lift("marker_text")
+        self.canvas.lift("marker_aprs")     # Ensure APRS marker is below other markers
         self.canvas.lift("marker")
+        self.canvas.lift("marker_home")     # Ensure home marker is always highest marker
         self.canvas.lift("marker_image")
         self.canvas.lift("corner")
         self.canvas.lift("button")

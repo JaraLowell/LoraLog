@@ -243,13 +243,18 @@ class CanvasPositionMarker:
 
         if not self.deleted:
             if 0 - 50 < canvas_pos_x < self.map_widget.width + 50 and 0 < canvas_pos_y < self.map_widget.height + 70:
+                # Set tagdata based on icon_index or color
+                tagdata = "marker"
+                if self.text_color == "#e67a7f":
+                    tagdata = "marker_home"
+                elif self.text_color == "#a1a1ff":
+                    tagdata = "marker_aprs"
+                if self.icon_index > 4:
+                    tagdata = "signal"
 
                 # draw icon image for marker
                 if self.icon is not None:
                     if self.canvas_icon is None:
-                        tagdata = "marker"
-                        if self.icon_index > 4:
-                            tagdata = "signal"
                         self.canvas_icon = self.map_widget.canvas.create_image(canvas_pos_x, canvas_pos_y,
                                                                                anchor=self.icon_anchor,
                                                                                image=self.icon,
@@ -268,7 +273,7 @@ class CanvasPositionMarker:
                                                                              canvas_pos_x, canvas_pos_y,
                                                                              canvas_pos_x + 14, canvas_pos_y - 23,
                                                                              fill=self.marker_color_outside, width=2,
-                                                                             outline=self.marker_color_outside, tag="marker")
+                                                                             outline=self.marker_color_outside, tag=tagdata)
                         if self.command is not None:
                             self.map_widget.canvas.tag_bind(self.polygon, "<Enter>", self.mouse_enter)
                             self.map_widget.canvas.tag_bind(self.polygon, "<Leave>", self.mouse_leave)
@@ -282,7 +287,7 @@ class CanvasPositionMarker:
                         self.big_circle = self.map_widget.canvas.create_oval(canvas_pos_x - 14, canvas_pos_y - 45,
                                                                              canvas_pos_x + 14, canvas_pos_y - 17,
                                                                              fill=self.marker_color_circle, width=6,
-                                                                             outline=self.marker_color_outside, tag="marker")
+                                                                             outline=self.marker_color_outside, tag=tagdata)
                         if self.command is not None:
                             self.map_widget.canvas.tag_bind(self.big_circle, "<Enter>", self.mouse_enter)
                             self.map_widget.canvas.tag_bind(self.big_circle, "<Leave>", self.mouse_leave)
@@ -294,16 +299,20 @@ class CanvasPositionMarker:
 
                 if self.text is not None:
                     if self.canvas_text is None:
+                        if self.text_color == "#a1a1ff":
+                            tagdata = "marker_text_aprs"
+                        else:
+                            tagdata = "marker_text"
                         self.canvas_text_bg = self.map_widget.canvas.create_image(canvas_pos_x, canvas_pos_y + (self.text_y_offset + 1),
                                                                                 image=self.text_background_image,
                                                                                 anchor=tkinter.S,
-                                                                                tag=("marker", "marker_text_bg"))
+                                                                                tag=tagdata)
                         self.canvas_text = self.map_widget.canvas.create_text(canvas_pos_x, canvas_pos_y + self.text_y_offset + 1,
                                                                               anchor=tkinter.S,
                                                                               text=self.text,
                                                                               fill=self.text_color,
                                                                               font=(self.font[0], int(self.font[1]), "bold"),
-                                                                              tag=("marker", "marker_text"))
+                                                                              tag=tagdata)
                         if self.command is not None:
                             self.map_widget.canvas.tag_bind(self.canvas_text, "<Enter>", self.mouse_enter)
                             self.map_widget.canvas.tag_bind(self.canvas_text, "<Leave>", self.mouse_leave)
