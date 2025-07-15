@@ -1306,11 +1306,9 @@ def updatesnodes():
         cursor.close()
 
 #-------------------------------------------------------------- Side Functions ---------------------------------------------------------------------------
-units = [(31536000, "year"), (2419200, "month"), (604800, "week"), (86400, "day"), (3600, "hour"), (60, "minute")]
+units = [(60, "minute"), (3600, "hour"), (86400, "day"), (604800, "week"), (2419200, "month"), (31536000, "year")]
 def ez_date(d):
-    # Early return for very small values
     if d < 60: return "Just now"
-    # units = [(31536000, "year"), (2419200, "month"), (604800, "week"), (86400, "day"), (3600, "hour"), (60, "minute")]
     for unit_seconds, unit_name in units:
         if d >= unit_seconds:
             temp = int(d / unit_seconds)
