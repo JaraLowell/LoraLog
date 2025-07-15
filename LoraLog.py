@@ -1306,15 +1306,26 @@ def updatesnodes():
         cursor.close()
 
 #-------------------------------------------------------------- Side Functions ---------------------------------------------------------------------------
-units = [(31536000, "year"), (2419200, "month"), (604800, "week"), (86400, "day"), (3600, "hour"), (60, "minute")]
 def ez_date(d):
     if d < 60: return "Just now"
-    # Check from largest to smallest to find the biggest appropriate unit
-    for unit_seconds, unit_name in units:
-        if d >= unit_seconds:
-            temp = int(d / unit_seconds)
-            return f"{temp} {unit_name}{'s' if temp > 1 else ''}"
-    return "∞"
+    elif d < 3600: 
+        temp = d // 60
+        return f"{temp} minute{'s' if temp > 1 else ''}"
+    elif d < 86400:
+        temp = d // 3600
+        return f"{temp} hour{'s' if temp > 1 else ''}"
+    elif d < 604800:
+        temp = d // 86400
+        return f"{temp} day{'s' if temp > 1 else ''}"
+    elif d < 2419200:
+        temp = d // 604800
+        return f"{temp} week{'s' if temp > 1 else ''}"
+    elif d < 31536000:
+        temp = d // 2419200
+        return f"{temp} month{'s' if temp > 1 else ''}"
+    else:
+        temp = d // 31536000
+        return f"{temp} year{'s' if temp > 1 else ''}"
 
 def uptimmehuman(uptime, lastseentime):
     tnow = int(time.time())
