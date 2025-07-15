@@ -2458,7 +2458,7 @@ if __name__ == "__main__":
         insert_colored_text(text_box_middle, f'\n On Map  : {str(len(MapMarkers))}')
         if DBTotal != 0:
             insert_colored_text(text_box_middle, f'/{str(DBTotal)}')
-        time1 = ((time.perf_counter() - updatetime) * 1000) - 1.0
+        time1 = max(((time.perf_counter() - updatetime) * 1000) - 1.0, 0.0) + 0.01
         insert_colored_text(text_box_middle, f'\n Update  : {time1:.2f}ms')
 
         time1 = Process(os.getpid()).memory_full_info()[-1] / 1024 ** 2 # Process(os.getpid()).memory_info().rss / 1024 ** 2
