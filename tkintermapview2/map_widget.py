@@ -15,6 +15,7 @@ from PIL import Image, ImageTk, ImageEnhance, ImageOps, ImageChops
 from typing import Callable, List, Dict, Union, Tuple
 from functools import partial
 import colorsys
+import datetime
 
 from .canvas_position_marker import CanvasPositionMarker
 from .canvas_tile import CanvasTile
@@ -95,24 +96,36 @@ class TkinterMapView(tkinter.Frame):
                                      height=self.height)
         self.canvas.grid(row=0, column=0, sticky="nsew")
 
-        # zoom buttons
-        self.button_zoom_in = CanvasButton(self, (20, 20), text="+", command=self.button_zoom_in)
-        self.button_zoom_out = CanvasButton(self, (20, 60), text="-", command=self.button_zoom_out)
+        # zoom buttons (moved below clock)
+        self.button_zoom_in = CanvasButton(self, (20, 140), text="+", command=self.button_zoom_in)
+        self.button_zoom_out = CanvasButton(self, (20, 180), text="-", command=self.button_zoom_out)
 
         # Canvas Buttons Extra
-        self.btoggle_trail  = CanvasButton(self, (20, 120), text="☈", command=self.toggle_trail)
-        self.btoggle_heard  = CanvasButton(self, (20, 160), text="⇢", command=self.toggle_heard)
-        self.btoggle_range  = CanvasButton(self, (20, 200), text="⚆", command=self.toggle_range)
-        self.btoggle_oldnodes = CanvasButton(self, (20, 240), text="☠", command=self.toggle_oldnodes)
+        self.btoggle_trail  = CanvasButton(self, (20, 220), text="☈", command=self.toggle_trail)
+        self.btoggle_heard  = CanvasButton(self, (20, 260), text="⇢", command=self.toggle_heard)
+        self.btoggle_range  = CanvasButton(self, (20, 300), text="⚆", command=self.toggle_range)
+        self.btoggle_oldnodes = CanvasButton(self, (20, 340), text="☠", command=self.toggle_oldnodes)
 
         # Radio buttons for oldnodes filter (initially hidden)
-        self.bradio_24hours = CanvasButton(self, (20, 275), text="24h", command=lambda: self.set_oldnodes_filter("24hours"), width=30, height=20)
-        self.bradio_7days = CanvasButton(self, (20, 297), text="7d", command=lambda: self.set_oldnodes_filter("7days"), width=30, height=20)
-        self.bradio_1month = CanvasButton(self, (20, 319), text="1m", command=lambda: self.set_oldnodes_filter("1month"), width=30, height=20)
-        self.bradio_all = CanvasButton(self, (20, 341), text="All", command=lambda: self.set_oldnodes_filter("all"), width=30, height=20)
+        self.bradio_24hours = CanvasButton(self, (20, 375), text="24h", command=lambda: self.set_oldnodes_filter("24hours"), width=30, height=20)
+        self.bradio_7days = CanvasButton(self, (20, 397), text="7d", command=lambda: self.set_oldnodes_filter("7days"), width=30, height=20)
+        self.bradio_1month = CanvasButton(self, (20, 419), text="1m", command=lambda: self.set_oldnodes_filter("1month"), width=30, height=20)
+        self.bradio_all = CanvasButton(self, (20, 441), text="All", command=lambda: self.set_oldnodes_filter("all"), width=30, height=20)
         
         # Initially hide the radio buttons
         self.update_oldnodes_radio_buttons()
+
+        # Analog clock setup (positioned to the right of zoom buttons, moved down and right)
+        self.clock_center_x = 80  # zoom button x + button width + 50px spacing (moved right)
+        self.clock_center_y = 70  # zoom button y + half button height + 30px down (moved down)  
+        self.clock_radius = 60
+        self.clock_face = None
+        self.clock_hour_hand = None
+        self.clock_minute_hand = None
+        self.clock_second_hand = None
+        self.clock_center_dot = None
+        self.clock_numbers = []
+        self.draw_clock_face()
 
         # bind events for mouse button pressed, mouse movement, and scrolling
         self.canvas.bind("<B1-Motion>", self.mouse_move)
@@ -453,6 +466,7 @@ class TkinterMapView(tkinter.Frame):
         self.canvas.lift("marker_image")
         self.canvas.lift("corner")
         self.canvas.lift("button")
+        self.canvas.lift("clock")  # Ensure clock is always visible
 
     # Lets see if we can reduce the memory footprint by removing the tile_image_cache that we are not using
     def is_within_viewport(self, x, y):
@@ -725,6 +739,10 @@ class TkinterMapView(tkinter.Frame):
                 self.pausecount = menow
                 self.update_cache()
 
+        # Update clock hands every cycle
+        if self.running:
+            self.update_clock_hands()
+
         # This function calls itself every 10 ms with tk.after() so that the image updates come
         # from the main GUI thread, because tkinter can only be updated from the main thread.
         if self.running:
@@ -792,7 +810,7 @@ class TkinterMapView(tkinter.Frame):
 
                 image = self.get_tile_image_from_cache(round(self.zoom), *tile_name_position)
                 if image is False:
-                    # image is not in image cache, load blank tile and append position to image_load_queue
+                    # image is not in cache, load blank tile and append position to load queue
                     canvas_tile = CanvasTile(self, self.not_loaded_tile_image, tile_name_position)
                     self.image_load_queue_tasks.append(((round(self.zoom), *tile_name_position), canvas_tile))
                 else:
@@ -815,6 +833,9 @@ class TkinterMapView(tkinter.Frame):
             path.draw()
         for polygon in self.canvas_polygon_list:
             polygon.draw()
+
+        # draw clock
+        self.draw_clock_face()
 
         # update pre-cache position
         self.pre_cache_position = (round((self.upper_left_tile_pos[0] + self.lower_right_tile_pos[0]) / 2),
@@ -891,6 +912,9 @@ class TkinterMapView(tkinter.Frame):
             for polygon in self.canvas_polygon_list:
                 polygon.draw(move=not called_after_zoom)
 
+            # redraw clock
+            self.draw_clock_face()
+
             # update pre-cache position
             self.pre_cache_position = (round((self.upper_left_tile_pos[0] + self.lower_right_tile_pos[0]) / 2),
                                        round((self.upper_left_tile_pos[1] + self.lower_right_tile_pos[1]) / 2))
@@ -920,6 +944,9 @@ class TkinterMapView(tkinter.Frame):
 
             self.pre_cache_position = (round((self.upper_left_tile_pos[0] + self.lower_right_tile_pos[0]) / 2),
                                        round((self.upper_left_tile_pos[1] + self.lower_right_tile_pos[1]) / 2))
+
+            # redraw clock after zoom
+            self.draw_clock_face()
 
             self.draw_move(called_after_zoom=True)
 
@@ -1174,3 +1201,111 @@ class TkinterMapView(tkinter.Frame):
             self.bradio_7days.hide()
             self.bradio_1month.hide()
             self.bradio_all.hide()
+
+    def draw_clock_face(self):
+        """Draw the clock face with numbers and tick marks"""
+        # Clear previous clock elements
+        self.canvas.delete("clock")
+        
+        # Draw clock face circle
+        self.clock_face = self.canvas.create_oval(
+            self.clock_center_x - self.clock_radius,
+            self.clock_center_y - self.clock_radius,
+            self.clock_center_x + self.clock_radius,
+            self.clock_center_y + self.clock_radius,
+            fill="", outline="#4A4A4A", width=2, tags="clock"
+        )
+        
+        # Draw hour markers and numbers
+        for i in range(12):
+            angle = math.radians(i * 30 - 90)  # -90 to start at 12 o'clock
+            
+            # Hour markers (longer lines)
+            outer_x = self.clock_center_x + (self.clock_radius - 3) * math.cos(angle)
+            outer_y = self.clock_center_y + (self.clock_radius - 3) * math.sin(angle)
+            inner_x = self.clock_center_x + (self.clock_radius - 8) * math.cos(angle)
+            inner_y = self.clock_center_y + (self.clock_radius - 8) * math.sin(angle)
+            
+            self.canvas.create_line(
+                outer_x, outer_y, inner_x, inner_y,
+                fill="#d1d1d1", width=2, tags="clock"
+            )
+            
+            # Numbers (only 12, 3, 6, 9 for clarity in small clock)
+            if i in [0, 3, 6, 9]:
+                number = 12 if i == 0 else i
+                num_x = self.clock_center_x + (self.clock_radius - 12) * math.cos(angle)
+                num_y = self.clock_center_y + (self.clock_radius - 12) * math.sin(angle)
+                self.canvas.create_text(
+                    num_x, num_y, text=str(number),
+                    fill="#d1d1d1", font=("Arial", 8, "bold"), tags="clock"
+                )
+        
+        # Draw minute markers (shorter lines)
+        for i in range(60):
+            if i % 5 != 0:  # Skip hour positions
+                angle = math.radians(i * 6 - 90)
+                outer_x = self.clock_center_x + (self.clock_radius - 3) * math.cos(angle)
+                outer_y = self.clock_center_y + (self.clock_radius - 3) * math.sin(angle)
+                inner_x = self.clock_center_x + (self.clock_radius - 6) * math.cos(angle)
+                inner_y = self.clock_center_y + (self.clock_radius - 6) * math.sin(angle)
+                
+                self.canvas.create_line(
+                    outer_x, outer_y, inner_x, inner_y,
+                    fill="#666666", width=1, tags="clock"
+                )
+        
+        # Draw center dot
+        self.clock_center_dot = self.canvas.create_oval(
+            self.clock_center_x - 2, self.clock_center_y - 2,
+            self.clock_center_x + 2, self.clock_center_y + 2,
+            fill="#2A2A2A", outline="#4A4A4A", tags="clock"
+        )
+        
+        # Initial hand drawing
+        self.update_clock_hands()
+
+    def update_clock_hands(self):
+        """Update the clock hands based on current time"""
+        # Delete existing hands
+        if self.clock_hour_hand:
+            self.canvas.delete(self.clock_hour_hand)
+        if self.clock_minute_hand:
+            self.canvas.delete(self.clock_minute_hand)
+        if self.clock_second_hand:
+            self.canvas.delete(self.clock_second_hand)
+        
+        # Get current time
+        now = datetime.datetime.now()
+        
+        # Calculate angles (in radians, -90 to start at 12 o'clock)
+        second_angle = math.radians(now.second * 6 - 90)
+        minute_angle = math.radians(now.minute * 6 + now.second * 0.1 - 90)
+        hour_angle = math.radians((now.hour % 12) * 30 + now.minute * 0.5 - 90)
+        
+        # Hour hand (shortest, thickest)
+        hour_length = self.clock_radius * 0.5
+        hour_x = self.clock_center_x + hour_length * math.cos(hour_angle)
+        hour_y = self.clock_center_y + hour_length * math.sin(hour_angle)
+        self.clock_hour_hand = self.canvas.create_line(
+            self.clock_center_x, self.clock_center_y, hour_x, hour_y,
+            fill="#d1d1d1", width=3, tags="clock", capstyle="round"
+        )
+        
+        # Minute hand (medium length, medium thickness)
+        minute_length = self.clock_radius * 0.7
+        minute_x = self.clock_center_x + minute_length * math.cos(minute_angle)
+        minute_y = self.clock_center_y + minute_length * math.sin(minute_angle)
+        self.clock_minute_hand = self.canvas.create_line(
+            self.clock_center_x, self.clock_center_y, minute_x, minute_y,
+            fill="#d1d1d1", width=2, tags="clock", capstyle="round"
+        )
+        
+        # Second hand (longest, thinnest, red)
+        second_length = self.clock_radius * 0.8
+        second_x = self.clock_center_x + second_length * math.cos(second_angle)
+        second_y = self.clock_center_y + second_length * math.sin(second_angle)
+        self.clock_second_hand = self.canvas.create_line(
+            self.clock_center_x, self.clock_center_y, second_x, second_y,
+            fill="#de6933", width=1, tags="clock", capstyle="round"
+        )
