@@ -2508,6 +2508,8 @@ if __name__ == "__main__":
                     # aprs_interface.sendall(decoded['raw'].encode('utf-8'))
             # Lets only handle packets that send to APLxxx used by mmost APrs-Lora Devices
             if decoded is not None and ('to' in decoded and decoded['to'].startswith('APL')):
+                # Might also contain 'NOGATE' or 'RFONLY'
+                # NOALL>APLRG1{,BEACONPATH}:}
                 # print(decoded)
                 nodeid = decoded['from']
                 nodeto = decoded['addresse'] if 'addresse' in decoded else decoded['to']

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 class CanvasButton:
-    def __init__(self, map_widget: "TkinterMapView", canvas_position, text="", command=None, fg="grey", width=None, height=None, bg="gray20"):
+    def __init__(self, map_widget: "TkinterMapView", canvas_position, text="", command=None, fg="grey", width=None, height=None, bg=""):
         self.map_widget = map_widget
         self.canvas_position = canvas_position
 
@@ -61,7 +61,7 @@ class CanvasButton:
 
     def hover_on(self, event):
         if self.canvas_rect is not None:
-            self.map_widget.canvas.itemconfig(self.canvas_rect, fill="gray50", outline="gray10")
+            self.map_widget.canvas.itemconfig(self.canvas_rect, fill="gray50", outline="#2b2b2b")
             self.map_widget.canvas.itemconfig(self.canvas_text, fill="grey10")
 
             if sys.platform == "darwin":
@@ -73,7 +73,7 @@ class CanvasButton:
 
     def hover_off(self, event):
         if self.canvas_rect is not None:
-            self.map_widget.canvas.itemconfig(self.canvas_rect, fill=self.bg, outline="gray10")
+            self.map_widget.canvas.itemconfig(self.canvas_rect, fill=self.bg, outline="#4A4A4A")
             self.map_widget.canvas.itemconfig(self.canvas_text, fill=self.fg)
         
         self.map_widget.canvas.config(cursor="arrow")
@@ -85,7 +85,7 @@ class CanvasButton:
                                                                  self.canvas_position[1] + self.height,
                                                                  self.canvas_position[0], self.canvas_position[1] + self.height,
                                                                  width=self.border_width,
-                                                                 fill=self.bg, outline="gray10",
+                                                                 fill=self.bg, outline="#4A4A4A",
                                                                  tag="button")
 
         self.canvas_text = self.map_widget.canvas.create_text(math.floor(self.canvas_position[0] + self.width / 2),
@@ -93,7 +93,7 @@ class CanvasButton:
                                                               anchor=tkinter.CENTER,
                                                               text=self.text,
                                                               fill=self.fg,
-                                                              font="Tahoma 10" if self.width < 35 else "Tahoma 14",
+                                                              font="Tahoma 16 bold" if self.height > 21 else "Tahoma 10",
                                                               tag="button")
 
         self.map_widget.canvas.tag_bind(self.canvas_rect, "<Button-1>", self.click)
