@@ -93,6 +93,7 @@ MyLora_Alt = 0
 MyLoraText1 = ''
 MyLoraText2 = ''
 MyAPRSCall = ''
+MyLastNode = None
 mylorachan = {}
 tlast = int(time.time())
 loop = None
@@ -393,7 +394,7 @@ def format_number(n):
         return f'{n:,}'
 
 def connect_meshtastic(force_connect=False):
-    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_Alt, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, startup_complete, config, wereset
+    global meshtastic_client, MyLora, loop, isLora, MyLora_Lat, MyLora_Lon, MyLora_Alt, MyLora_SN, MyLora_LN, mylorachan, chan2send, MyLoraID, zoomhome, startup_complete, config, wereset, MyLastNode
     if meshtastic_client and not force_connect:
         return meshtastic_client
 
@@ -456,6 +457,10 @@ def connect_meshtastic(force_connect=False):
     if MyLora_SN == '':
         MyLora_SN = str(MyLora)[-4:]
     MyLora_LN = nodeInfo['user']['longName']
+
+    if MyLastNode is not None and MyLastNode != MyLora:
+        if zoomhome >= 10:
+            zoomhome -=10
 
     print("MyLora: " + MyLora)
     root.wm_title("Meshtastic Lora Logger - !" + str(MyLora).upper() + " - " + unescape(MyLora_SN))
@@ -791,7 +796,7 @@ def on_meshtastic_message2(packet):
             if result is None:
                 sn = str(fromraw[-4:])
                 ln = "Meshtastic " + sn
-                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name, hopstart) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], packet.get('rx_time', tnow), text_from, viaMqtt, nodesnr, packet.get('rxRssi', 0), tnow, sn, ln, hopStart))
+                dbcursor.execute("INSERT INTO node_info (node_id, timerec, hex_id, ismqtt, last_snr, last_rssi, timefirst, short_name, long_name, hopstart) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (packet["from"], tnow, text_from, viaMqtt, nodesnr, packet.get('rxRssi', 0), tnow, sn, ln, hopStart))
                 result = dbcursor.execute("SELECT * FROM node_info WHERE node_id = ?", (packet["from"],)).fetchone()
                 insert_colored_text(text_box1, "[" + adjusted_time + "] New Node Logged\n", "#d1d1d1")
                 insert_colored_text(text_box1, (' ' * 11) + "Node ID !" + fromraw + " (" + text_from + ")\n", "#e8643f", tag=fromraw)
@@ -1777,7 +1782,7 @@ if __name__ == "__main__":
 
     def save_ui_config():
         """Save UI configuration to file"""
-        global root, mqttdash, aprsondash, mapview, MyLora_Lat, MyLora_Lon
+        global root, mqttdash, aprsondash, mapview, MyLora_Lat, MyLora_Lon, MyLora
         ui_config = {
             'window': {
                 'geometry': root.geometry(),
@@ -1795,6 +1800,11 @@ if __name__ == "__main__":
                 'oldnodes_filter': mapview.oldnodes_filter if hasattr(mapview, 'oldnodes_filter') else "24hours",
                 'zoom': mapview.zoom,
                 'position': mapview.get_position() if MyLora_Lat != -8.0 and MyLora_Lon != -8.0 else (48.860381, 2.338594)
+            },
+            'last_used': {
+                'node_id': MyLora if MyLora != '' else None,
+                'lat': MyLora_Lat if MyLora_Lat != -8.0 else None,
+                'lon': MyLora_Lon if MyLora_Lon != -8.0 else None
             },
         }
         try:
@@ -2891,6 +2901,11 @@ if __name__ == "__main__":
                 query = f"DELETE FROM movement_log WHERE DATETIME(timerec, 'auto') < DATETIME('now', '-1 day');"
                 cursor.execute(query)
 
+                old_nodes_deleted = cursor.execute("DELETE FROM node_info WHERE timerec IS NULL OR DATETIME(timerec, 'auto') < DATETIME('now', '-1 year');").rowcount
+                if old_nodes_deleted > 0:
+                    logging.warning(f"Deleted {old_nodes_deleted} old nodes from database")
+                    print(f"Deleted {old_nodes_deleted} old nodes from database")
+
                 # Send weather update
                 weather_update()
 
@@ -3278,6 +3293,9 @@ if __name__ == "__main__":
     windll.shcore.SetProcessDpiAwareness(1)
     ui_config = load_ui_config()
 
+    if 'last_used' in ui_config:
+        MyLastNode = ui_config['last_used']['node_id'] if 'node_id' in ui_config['last_used'] else None
+
     root = CTk()
     root.title("Meshtastic Lora Logger")
     root.resizable(True, True)
@@ -3320,7 +3338,7 @@ if __name__ == "__main__":
         root.geometry(str(ui_config['window']['geometry']))
         if ui_config['window']['fullscreen']:
             root.attributes("-fullscreen", True)
-        zoomhome = 10
+        zoomhome += 10
     else:
         root.geometry(f"{screen_width}x{screen_height}+10+10")
 
