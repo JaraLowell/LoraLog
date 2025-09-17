@@ -111,7 +111,7 @@ TemmpDB = None
 DBChange = True
 aprsondash = False
 mqttdash = False
-myversion = "1.4.6"
+myversion = "1.4.7"
 wereset = False
 updatetime = time.perf_counter()
 
@@ -493,7 +493,7 @@ def connect_meshtastic(force_connect=False):
         insert_colored_text(text_box1, (' ' * 11) + "Node position: Lat: " + str(MyLora_Lat) + ", Lon: " + str(MyLora_Lon) + ", Alt: " + str(MyLora_Alt) + "\n", "#00c983")
         zoomhome += 1
     elif wereset:
-        if MyLora_Lat == -8.0 and MyLora_Lon == -8.0:
+        if MyLora_Lat != -8.0 and MyLora_Lon != -8.0:
              insert_colored_text(text_box1, (' ' * 11) + "NodeDB Reset position loss, resending previous Lat/Lon!\n", "#db6544")
              meshtastic_client.localNode.setFixedPosition(MyLora_Lat, MyLora_Lon, MyLora_Alt)
         wereset = False
@@ -2744,6 +2744,7 @@ if __name__ == "__main__":
         with dbconnection:
             cursor = dbconnection.cursor()
             # Find all nodes with missing lat/lon
+            #  OR (short_name = SUBSTR(hex_id, -4))
             missing_nodes = cursor.execute(
                 "SELECT node_id, hex_id FROM node_info WHERE latitude = -8.0 AND longitude = -8.0"
             ).fetchall()
@@ -3371,7 +3372,7 @@ if __name__ == "__main__":
     text_box1 = create_text(frame, 0, 0, 25, 90)
     insert_colored_text(text_box1, "    __                     __\n   / /  ___  _ __ __ _    / /  ___   __ _  __ _  ___ _ __\n  / /  / _ \\| '__/ _` |  / /  / _ \\ / _` |/ _` |/ _ \\ '__|\n / /__| (_) | | | (_| | / /__| (_) | (_| | (_| |  __/ |\n \\____/\\___/|_|  \\__,_| \\____/\\___/ \\__, |\\__, |\\___|_|\n                                    |___/ |___/ ", "#2bd5ff")
     insert_colored_text(text_box1, "//\\ESHT/\\ST/C\n", "#00c983")
-    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v" + myversion + " (July 2025) By Jara Lowell\n", "#2bd5ff")
+    insert_colored_text(text_box1, "\n Meshtastic Lora Logger v" + myversion + " (September 2025) By Jara Lowell\n", "#2bd5ff")
     insert_colored_text(text_box1, " Meshtastic Python CLI : v" + meshtastic.version.get_active_version() + '\n', "#2bd5ff")
     text_box1.insert("end", "─" * 60 + "\n", '#414141')
     text_box1.tag_configure('#414141', foreground='#414141')
